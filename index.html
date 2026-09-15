@@ -462,7 +462,7 @@ If they left the prompt out, do not mention that it is missing.`);
 }
 
 /* ---------- navigation ---------- */
-const TITLE=['Sign in','Set up','Insight scan','Where you stand','Practice','Level up','Your progress','Privacy and legal','Portfolio'];
+const TITLE=['Sign in','Set up','Insight scan','Where you stand','Practice','Level up','Your progress','Privacy and legal','Portfolio','Your account'];
 function go(n){
   if(n===7){S.back7=S.stage;}
   if(n===8)V.pf=null;
@@ -474,7 +474,7 @@ function back(){
   if(V.ru){V.ru=null;render();return;}
   if(S.stage===8&&V.pf){V.pf=null;render();return;}
   if(S.stage===7)return go(S.back7!=null?S.back7:(S.signed?6:0));
-  const map={1:0,2:3,3:2,4:3,5:4,6:3,7:(S.signed?6:0),8:6};
+  const map={1:9,2:3,3:2,4:3,5:4,6:9,7:(S.signed?6:0),8:6};
   if(S.stage===2&&!scanned())return go(1);
   if(S.stage===3&&!scanned())return go(2);
   go(map[S.stage]!=null?map[S.stage]:0);
@@ -486,6 +486,13 @@ function shell(inner,opts){
       <div class="crumb">${esc(o.crumb||TITLE[S.stage])}</div></div>
     ${o.pct!=null?`<div class="track"><i style="width:${o.pct}%"></i></div>`:''}`;
   return `<div class="app"><div class="top">${bar}</div>${badgeBanner()}${inner}</div>`;
+}
+/* Enter the scan from the account page. First run needs consent and setup.
+   A returning user with both goes straight to where they left off. */
+function goScan(){
+  if(!S.consent) return go(1);
+  if(!(Object.keys(S.targets).length>0)) return go(1);
+  return go(2);
 }
 
 /* ---------- 0. access ---------- */
@@ -1327,6 +1334,42 @@ function exportLog(){
   const b=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),u=URL.createObjectURL(b);
   const a=document.createElement('a');a.href=u;a.download='brigvanti-portfolio.csv';a.click();URL.revokeObjectURL(u);
 }
+/* ---------- 9. account ---------- */
+function vAccount(){
+  const doneCount=DK.filter(d=>domDone(d)).length, total=DK.length, anyDone=doneCount>0;
+  const nm=S.name?esc(S.name):'';
+  if(!anyDone){
+    return shell(`<h1>Welcome${nm?', '+nm:''}</h1>
+    <p class="lede">This is your account page. Everything about you will live here.</p>
+    <div class="card"><h3>First, the scan</h3>
+      <p class="muted" style="margin:6px 0 0">Let us start with a short scan. After your first area, you can come back here and edit your account details.</p></div>
+    <div class="row"><button class="btn go full" onclick="goScan()">Go to the scan</button></div>
+    <div class="row"><button class="btn sec full" onclick="go(7)">Privacy and legal</button></div>
+    <div class="row"><button class="btn sec full" onclick="signOutUser()">Log out</button></div>`,
+    {crumb:'Your account',noBack:true});
+  }
+  const rows=DK.map(d=>{
+    if(domDone(d))return `<div class="opt" style="opacity:.55"><b>${esc(DATA.doms[d])}</b><span class="sub">Assessed</span></div>`;
+    return `<button class="opt" onclick="scanDom('${d}')"><b>${esc(DATA.doms[d])}</b><span class="sub">Assess this area</span></button>`;
+  }).join('');
+  return shell(`<h1>Welcome back${nm?', '+nm:''}</h1>
+  <p class="lede">You have assessed ${doneCount} of ${total} areas.</p>
+
+  <div class="card"><label class="fl" for="anm">What should your coach call you?</label>
+    <input id="anm" placeholder="Your first name" value="${esc(S.name)}" oninput="S.name=this.value" onchange="save()">
+    ${S.email?`<p class="muted" style="margin:10px 0 0">Signed in as ${esc(S.email)}.</p>`:''}
+    <div class="row" style="margin-top:12px"><button class="btn sec full" onclick="go(1)">Change your setup</button></div></div>
+
+  <div class="card"><h3>Your areas</h3>
+    <p class="muted" style="margin:6px 0 14px">Pick an area to assess, or continue where you left off.</p>
+    ${rows}</div>
+
+  ${doneCount<total?`<div class="row"><button class="btn go full" onclick="goScan()">Continue the scan</button></div>`:`<p class="muted">You have assessed every area. You can practise from Your progress.</p>`}
+  <div class="row"><button class="btn sec full" onclick="go(6)">Your progress and data</button></div>
+  <div class="row"><button class="btn sec full" onclick="go(7)">Privacy and legal</button></div>
+  <div class="row"><button class="btn sec full" onclick="signOutUser()">Log out</button></div>`,
+  {crumb:'Your account',noBack:true});
+}
 /* ---------- render ---------- */
 function render(){
   if(window.__brigAuthPending){
@@ -1335,7 +1378,7 @@ function render(){
     window.__brigRendered=true;return;
   }
   if(!S.signed&&S.stage!==7)S.stage=0;
-  const v=[vAccess,vStart,vScan,vStand,vPractice,vRung,vProgress,vLegal,vPortfolio][S.stage]||vAccess;
+  const v=[vAccess,vStart,vScan,vStand,vPractice,vRung,vProgress,vLegal,vPortfolio,vAccount][S.stage]||vAccess;
   const y=window.scrollY;
   document.getElementById('app').innerHTML=v();
   if(S.stage!==LAST){window.scrollTo(0,0);LAST=S.stage;}
@@ -1348,7 +1391,7 @@ window.brigvantiApp={
     await load();
     S.signed=true;
     if(user&&user.email&&!S.email)S.email=user.email;
-    if(S.stage===0)S.stage=1;
+    S.stage=9;
     LAST=-1;render();
   },
   onSignedOut(){
