@@ -1,0 +1,26 @@
+rules_version = '2';
+
+// Brigvanti B2C. Owner-only access to any stored artefacts.
+//
+// Path assumption:
+//   Files for an account live under users/{userId}/... in the bucket.
+//   {userId} MUST equal the signed-in user's Firebase Auth uid.
+//
+// Include this only if you store artefacts in Cloud Storage, for example
+// exported portfolios or uploaded files. If the portfolio export is
+// generated client-side and never written to the bucket, you may not
+// need Storage rules at all. Adapt the path if you store files elsewhere.
+//
+// Anything not matched here is denied by default.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    match /users/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId;
+    }
+
+    // No other path grants access.
+  }
+}

@@ -1,0 +1,29 @@
+rules_version = '2';
+
+// Brigvanti B2C. Owner-only access to every user record.
+//
+// Data model assumption:
+//   Each account has one document at /users/{userId}.
+//   {userId} MUST equal the signed-in user's Firebase Auth uid.
+//   Progress, badges, scan state and portfolio entries live in that
+//   document or in subcollections beneath it.
+//
+// If your real model keys records by email or a random id instead of
+// the auth uid, the owner check below will not match and must be adapted.
+//
+// Recursive wildcard {documents=**} matches the user document itself
+// (zero segments) and everything nested under it. rules_version '2' is
+// required for this. Anything not matched here is denied by default.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{userId}/{documents=**} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId;
+    }
+
+    // No other path grants access. Default-deny covers the rest,
+    // so there is no public read and no cross-user access.
+  }
+}
