@@ -1370,7 +1370,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/fireba
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup,
          signInWithEmailAndPassword, createUserWithEmailAndPassword,
          signOut, deleteUser } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { initializeFirestore, doc, getDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAh70QZBMIycuK1hMkKD9mp7S7ubiPJF4A",
@@ -1384,7 +1384,7 @@ const firebaseConfig = {
 
 const app=initializeApp(firebaseConfig);
 const auth=getAuth(app);
-const db=getFirestore(app);
+const db=initializeFirestore(app,{ experimentalAutoDetectLongPolling:true });
 
 let uid=null;
 function cacheKey(key){ return key+':'+(uid||'anon'); }
@@ -1396,7 +1396,10 @@ window.storage={
   async get(key){
     if(!uid) return null;
     try{
-      const snap=await getDoc(doc(db,'users',uid));
+      const snap=await Promise.race([
+        getDoc(doc(db,'users',uid)),
+        new Promise(function(_,rej){ setTimeout(function(){ rej(new Error('timeout')); },10000); })
+      ]);
       if(snap.exists()&&typeof snap.data().blob==='string'){
         const v=snap.data().blob;
         try{ localStorage.setItem(cacheKey(key),v); }catch(e){}
