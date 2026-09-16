@@ -133,6 +133,18 @@ label.fl{display:block;font-size:15px;font-weight:600;margin:0 0 6px}
 .tile b{display:block;font-size:28px;font-weight:700;line-height:1.1;letter-spacing:-.02em}
 .tile span{font-size:12.5px;color:var(--ink3)}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.mtiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}
+.mtile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 12px;text-align:center;cursor:pointer;font:inherit;color:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:100px;transition:background .15s ease,border-color .15s ease,transform .06s ease}
+.mtile:hover{background:var(--teal-l);border-color:var(--teal)}
+.mtile:active{transform:scale(.97)}
+.mtile .mi{font-size:23px;line-height:1}
+.mtile b{font-size:13.5px;font-weight:700;line-height:1.25}
+.mtile.warn:hover{background:var(--amber-l);border-color:var(--amber)}
+.fold{border:1px solid var(--line);border-radius:var(--r);background:var(--card);margin:14px 0;overflow:hidden}
+.fold>summary{list-style:none;cursor:pointer;padding:17px 18px;display:flex;align-items:center;justify-content:space-between;font-weight:700;font-size:17px}
+.fold>summary::-webkit-details-marker{display:none}
+.fold>summary .fx{color:var(--ink3);font-size:13px;font-weight:600}
+.fold .fb{padding:0 18px 18px}
 .line{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--line2)}
 .line:last-child{border-bottom:0}
 .line .nm{flex:1;font-size:15px;font-weight:500;line-height:1.35}
@@ -852,6 +864,7 @@ function vPortfolio(){
   <div class="card flat" style="background:var(--indigo-l)">
     <h3>This is yours</h3>
     <p class="muted" style="margin:6px 0 0">Nobody reviews it and nobody scores it. It is here so you can find your work again, see your own progress, and show it if you ever want to.</p></div>
+  <div class="row"><button class="btn go full" onclick="exportPortfolioDoc()">Download all my work</button></div>
   ${cards}`,{crumb:'Portfolio'});
 }
 function vPortfolioSkill(){
@@ -1272,8 +1285,9 @@ function vProgress(){
     <span class="sub">${S.reps.length?`${S.reps.length} piece${S.reps.length>1?'s':''} of your own work, kept in order.`:'Your work appears here once you hand something in.'}</span>
     <span class="sub" style="color:var(--indigo);font-weight:700;margin-top:6px">Tap to open your portfolio &#8250;</span></button>
   <div class="card"><h3>Your skills</h3><div style="margin-top:6px">${rows||'<p class="muted">Nothing placed yet.</p>'}</div></div>
-  <div class="card"><h3>Your badges</h3>
-    <p class="muted" style="margin:6px 0 14px">${earnedCount()} of ${BADGES.length} earned. Every one of them is for doing something real.</p>
+  <details class="fold">
+    <summary>Your badges <span class="fx">${earnedCount()} of ${BADGES.length} earned &#9662;</span></summary>
+    <div class="fb"><p class="muted" style="margin:0 0 14px">Every one of them is for doing something real.</p>
     ${FAMS.map(f=>`<div style="margin-bottom:16px">
       <div class="eyebrow">${f}</div>
       <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px">
@@ -1283,14 +1297,18 @@ function vProgress(){
           <div style="font-size:26px;filter:${got?'none':'grayscale(1)'}">${b.i}</div>
           <b style="display:block;font-size:13.5px;margin-top:6px">${b.n}</b>
           <span class="muted" style="font-size:12px;line-height:1.35;display:block;margin-top:3px">${b.d}</span></div>`;}).join('')}
-      </div></div>`).join('')}</div>
-  <div class="row"><button class="btn sec full" onclick="exportLog()">Download my portfolio and record</button></div>
+      </div></div>`).join('')}</div></details>
+  <div class="mtiles">
+    <button class="mtile" onclick="practiseDom('')"><span class="mi">&#128221;</span><b>Assignments</b></button>
+    <button class="mtile" onclick="exportPortfolioDoc()"><span class="mi">&#11015;</span><b>Download my work</b></button>
+    <button class="mtile" onclick="exportLog()"><span class="mi">&#128203;</span><b>Download record</b></button>
+    <button class="mtile" onclick="go(7)"><span class="mi">&#128274;</span><b>Privacy &amp; legal</b></button>
+    <button class="mtile" onclick="signOutUser()"><span class="mi">&#128682;</span><b>Log out</b></button>
+    <button class="mtile warn" onclick="V.reset=true;render()"><span class="mi">&#128465;</span><b>Reset pilot</b></button>
+  </div>
   <div class="row"><button class="btn sec full" onclick="V.ops=!V.ops;render()">
     ${V.ops?'Hide':'Show'} pilot check for the Brigvanti team</button></div>
   ${V.ops?vOps():''}
-  <div class="row"><button class="btn sec full" onclick="go(7)">Privacy and legal</button></div>
-  <div class="row"><button class="btn sec full" onclick="signOutUser()">Sign out</button></div>
-  <div class="row"><button class="btn sec full" onclick="V.reset=true;render()">Reset this pilot</button></div>
   ${V.reset?`<div class="card"><h3>Erase everything?</h3>
     <p class="muted" style="margin:6px 0 0">This deletes your levels, badges, streak and your whole portfolio, from this device and from our storage. It cannot be undone. Download your record first if you want to keep it.</p>
     <div class="row"><button class="btn full" onclick="wipe()">Erase everything</button>
@@ -1336,6 +1354,61 @@ function exportLog(){
   const b=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),u=URL.createObjectURL(b);
   const a=document.createElement('a');a.href=u;a.download='brigvanti-portfolio.csv';a.click();URL.revokeObjectURL(u);
 }
+/* Branded, print-ready portfolio document. */
+function exportPortfolioDoc(){
+  const nm=S.name||'';
+  const dd=new Date().toISOString().slice(0,10);
+  const pieces=[...S.reps].sort((a,b)=>a.t-b.t);
+  const block=(label,txt)=>txt&&String(txt).trim()?`<div class="fld"><div class="lbl">${label}</div><div class="val">${esc(txt)}</div></div>`:'';
+  const arts=pieces.map(r=>{
+    const c=byId[r.c];
+    const skill=esc(c?c.n:(r.act||'Assignment'));
+    const area=esc(c?DATA.doms[c.d]:'');
+    const lvl=esc(LV[r.tgt]||'');
+    const date=new Date(r.t).toISOString().slice(0,10);
+    return `<article class="piece">
+      <div class="ph"><h2>${skill}</h2><span class="lv">${lvl}</span></div>
+      <div class="meta">${area?area+' &middot; ':''}${date}</div>
+      ${block('The task you set',r.sit)}
+      ${block('The assignment',r.act)}
+      ${block('Your prompt',r.prompt)}
+      ${block('What the tool gave back',r.back)}
+      ${block('What you did',r.did)}
+      ${block('Your coach said',r.coach)}
+      ${block('Your reflection',r.reflect)}
+    </article>`;}).join('');
+  const css=`:root{--teal:#0E8C7F;--indigo:#4B4DB5;--ink:#14202B;--ink2:#4A5C6B;--ink3:#7A8B98;--bg:#F6F4F0;--card:#fff;--line:#E3E8EC;--teal-l:#E2F4F1;--indigo-l:#ECEDFB}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.55}
+.wrap{max-width:760px;margin:0 auto;padding:40px 22px 64px}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:26px}
+.mark{width:44px;height:44px;border-radius:12px;background:var(--teal);color:#fff;font-weight:800;font-size:24px;display:flex;align-items:center;justify-content:center}
+.bt{font-weight:800;font-size:20px;letter-spacing:-.01em}
+h1{font-size:30px;letter-spacing:-.02em;margin:0 0 6px}
+.sub{color:var(--ink2);margin:0 0 4px}
+.note{background:var(--indigo-l);border-radius:16px;padding:16px 18px;margin:22px 0 28px;color:var(--ink2);font-size:14.5px}
+.piece{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;margin:0 0 18px}
+.ph{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.ph h2{font-size:19px;margin:0}
+.lv{background:var(--teal-l);color:var(--teal);font-weight:700;font-size:13px;padding:5px 12px;border-radius:99px;white-space:nowrap}
+.meta{color:var(--ink3);font-size:13px;margin:4px 0 14px}
+.fld{margin:0 0 13px}
+.lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--teal);margin-bottom:4px}
+.val{white-space:pre-wrap;font-size:15px}
+footer{color:var(--ink3);font-size:12.5px;margin-top:30px;text-align:center}
+@media print{body{background:#fff}.piece{break-inside:avoid;border-color:#ccc}}`;
+  const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Brigvanti portfolio${nm?' - '+esc(nm):''}</title><style>${css}</style></head><body><div class="wrap">
+    <div class="brand"><div class="mark">B</div><div class="bt">Brigvanti</div></div>
+    <h1>Your portfolio</h1>
+    <p class="sub">${nm?esc(nm)+'. ':''}Everything you made, kept in order.</p>
+    <p class="sub">Exported ${dd}. ${pieces.length} piece${pieces.length===1?'':'s'}.</p>
+    <div class="note">This is yours. Nobody reviews it and nobody scores it. It records the real work you did and what your coach said.</div>
+    ${arts||'<div class="piece"><div class="val">Nothing handed in yet.</div></div>'}
+    <footer>Brigvanti. Your coach advises, it never scores. This portfolio is not an assessment.</footer>
+  </div></body></html>`;
+  const b=new Blob([html],{type:'text/html;charset=utf-8'}),u=URL.createObjectURL(b);
+  const a=document.createElement('a');a.href=u;a.download='brigvanti-portfolio.html';a.click();URL.revokeObjectURL(u);
+}
 /* ---------- 9. account ---------- */
 function vAccount(){
   const doneCount=DK.filter(d=>domDone(d)).length, total=DK.length, anyDone=doneCount>0;
@@ -1346,8 +1419,10 @@ function vAccount(){
     <div class="card"><h3>First, the scan</h3>
       <p class="muted" style="margin:6px 0 0">Let us start with a short scan. After your first area, you can come back here and edit your account details.</p></div>
     <div class="row"><button class="btn go full" onclick="goScan()">Go to the scan</button></div>
-    <div class="row"><button class="btn sec full" onclick="go(7)">Privacy and legal</button></div>
-    <div class="row"><button class="btn sec full" onclick="signOutUser()">Log out</button></div>`,
+    <div class="mtiles">
+      <button class="mtile" onclick="go(7)"><span class="mi">&#128274;</span><b>Privacy &amp; legal</b></button>
+      <button class="mtile" onclick="signOutUser()"><span class="mi">&#128682;</span><b>Log out</b></button>
+    </div>`,
     {crumb:'Your account',noBack:true});
   }
   const rows=DK.map(d=>{
@@ -1366,10 +1441,13 @@ function vAccount(){
     <p class="muted" style="margin:6px 0 14px">Pick an area to assess, or continue where you left off.</p>
     ${rows}</div>
 
-  ${doneCount<total?`<div class="row"><button class="btn go full" onclick="goScan()">Continue the scan</button></div>`:`<p class="muted">You have assessed every area. You can practise from Your progress.</p>`}
-  <div class="row"><button class="btn sec full" onclick="go(6)">Your progress and data</button></div>
-  <div class="row"><button class="btn sec full" onclick="go(7)">Privacy and legal</button></div>
-  <div class="row"><button class="btn sec full" onclick="signOutUser()">Log out</button></div>`,
+  ${doneCount<total?`<div class="row"><button class="btn go full" onclick="goScan()">Continue the scan</button></div>`:''}
+  <div class="mtiles">
+    <button class="mtile" onclick="practiseDom('')"><span class="mi">&#128221;</span><b>Assignments</b></button>
+    <button class="mtile" onclick="go(6)"><span class="mi">&#128202;</span><b>Progress &amp; data</b></button>
+    <button class="mtile" onclick="go(7)"><span class="mi">&#128274;</span><b>Privacy &amp; legal</b></button>
+    <button class="mtile" onclick="signOutUser()"><span class="mi">&#128682;</span><b>Log out</b></button>
+  </div>`,
   {crumb:'Your account',noBack:true});
 }
 /* ---------- render ---------- */
