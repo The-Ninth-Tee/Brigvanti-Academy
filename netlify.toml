@@ -1,7 +1,8 @@
 # The Firebase web apiKey is a public client identifier, not a secret.
-# It is safe in client code. Access is controlled by the Firestore and
-# Storage security rules, not by hiding this value. This line tells
-# Netlify's secrets scanner to ignore that specific value, while leaving
-# scanning on for everything else.
+# This line tells Netlify's secrets scanner to ignore that specific value.
 [build.environment]
   SECRETS_SCAN_SMART_DETECTION_OMIT_VALUES = "AIzaSyAh70QZBMIycuK1hMkKD9mp7S7ubiPJF4A"
+
+# Server functions live here. The coach proxy is netlify/functions/coach.mjs.
+[functions]
+  directory = "netlify/functions"

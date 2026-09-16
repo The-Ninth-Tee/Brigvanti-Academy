@@ -401,7 +401,7 @@ function badgeBanner(){
 
 /* ---------- live coach ---------- */
 async function claude(system,user,json){
-  const r=await fetch("https://api.anthropic.com/v1/messages",{
+  const r=await fetch("/.netlify/functions/coach",{
     method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,
       system,messages:[{role:"user",content:user}]})});
@@ -511,8 +511,9 @@ function vAccess(){
     <input id="em" type="email" inputmode="email" placeholder="you@example.com"
       value="${esc(S.email)}" oninput="S.email=this.value">
     <label class="fl" for="pw" style="margin-top:10px">Password</label>
-    <input id="pw" type="password" placeholder="At least six characters"
+    <input id="pw" type="${V.showpw?'text':'password'}" placeholder="At least six characters"
       value="${esc(S.pw||'')}" oninput="S.pw=this.value">
+    <button type="button" onclick="V.showpw=!V.showpw;render()" style="background:none;border:none;color:var(--teal);font-weight:600;font-size:13px;padding:6px 0 0;cursor:pointer">${V.showpw?'Hide password':'Show password'}</button>
     ${V.err?`<div class="err">${esc(V.err)}</div>`:''}
     <div class="row"><button class="btn go full" onclick="signIn('email')">${S.authMode==='up'?'Create account':'Sign in'}</button></div>
     <p class="muted" style="margin:12px 0 0">${S.authMode==='up'?'Already have an account? ':'New to Brigvanti? '}<button style="color:var(--teal);font-weight:600;text-decoration:underline" onclick="S.authMode='${S.authMode==='up'?'in':'up'}';V.err='';render()">${S.authMode==='up'?'Sign in':'Create one'}</button></p>
@@ -1268,7 +1269,8 @@ function vProgress(){
   </div>
   <button class="opt" onclick="go(8)" style="background:var(--indigo-l);box-shadow:none">
     <b>Your portfolio</b>
-    <span class="sub">${S.reps.length?`${S.reps.length} piece${S.reps.length>1?'s':''} of your own work, kept in order.`:'Your work appears here once you hand something in.'}</span></button>
+    <span class="sub">${S.reps.length?`${S.reps.length} piece${S.reps.length>1?'s':''} of your own work, kept in order.`:'Your work appears here once you hand something in.'}</span>
+    <span class="sub" style="color:var(--indigo);font-weight:700;margin-top:6px">Tap to open your portfolio &#8250;</span></button>
   <div class="card"><h3>Your skills</h3><div style="margin-top:6px">${rows||'<p class="muted">Nothing placed yet.</p>'}</div></div>
   <div class="card"><h3>Your badges</h3>
     <p class="muted" style="margin:6px 0 14px">${earnedCount()} of ${BADGES.length} earned. Every one of them is for doing something real.</p>
@@ -1438,20 +1440,26 @@ function cacheKey(key){ return key+':'+(uid||'anon'); }
 window.storage={
   async get(key){
     if(!uid) return null;
-    try{
-      const snap=await Promise.race([
-        getDoc(doc(db,'users',uid)),
-        new Promise(function(_,rej){ setTimeout(function(){ rej(new Error('timeout')); },10000); })
-      ]);
+    let cached=null;
+    try{ cached=localStorage.getItem(cacheKey(key)); }catch(e){}
+    /* Refresh the local copy from the server in the background. */
+    const serverRead=getDoc(doc(db,'users',uid)).then(function(snap){
       if(snap.exists()&&typeof snap.data().blob==='string'){
         const v=snap.data().blob;
         try{ localStorage.setItem(cacheKey(key),v); }catch(e){}
-        return { value:v };
+        return v;
       }
-    }catch(e){
-      try{ const c=localStorage.getItem(cacheKey(key)); if(c) return { value:c }; }catch(e2){}
-    }
-    return null;
+      return null;
+    }).catch(function(){ return null; });
+    /* A device copy is the reliable layer. Use it at once, no waiting. */
+    if(cached!=null) return { value:cached };
+    /* No device copy. This is a new user, or a returning user on a new
+       device. Wait briefly for the server, then fall back to fresh. */
+    const v=await Promise.race([
+      serverRead,
+      new Promise(function(r){ setTimeout(function(){ r(null); },6000); })
+    ]);
+    return v!=null ? { value:v } : null;
   },
   async set(key,value){
     try{ localStorage.setItem(cacheKey(key),value); }catch(e){}
