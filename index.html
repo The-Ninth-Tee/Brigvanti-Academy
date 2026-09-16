@@ -194,11 +194,100 @@ function fresh(){return{
   scan:{},seen:{},reps:[],rung:{},rewards:[],domSeen:{},focus:'',badges:{},flags:{},
   stage:0,dom:null,consent:false,started:new Date().toISOString()
 };}
+/* ---------- cross-device sync engine ----------
+   State is one JSON blob per user. Two devices can each hold a full copy,
+   so a blind overwrite would lose the other device's progress. Every read
+   and write merges the two copies instead. Progress only ever grows:
+   finished scans, earned levels, badges, portfolio pieces and rewards are
+   unioned and never regress. Settings take the newer edit. The current
+   screen stays on the device you are looking at, so a save on your phone
+   never yanks the laptop to another page. */
+const SETTINGS=['name','email','mode','role','ambition','topics','targets','r1','r2','entry','roleSkipped'];
+/* NAV fields stay device-local and are never copied from the other device:
+   stage, dom, back7, authMode, focus. pw is never persisted at all. */
+function serialize(s){ const c=Object.assign({},s); delete c.pw; return JSON.stringify(c); }
+function parseBlob(str){ if(str==null) return null; try{ const o=JSON.parse(str); return (o&&o.scan)?o:null; }catch(e){ return null; } }
+function mmax(a,b){ const o=Object.assign({},a); Object.keys(b||{}).forEach(function(k){ o[k]=Math.max(o[k]||0,b[k]||0); }); return o; }
+function mergeScan(a,b){
+  const out={},keys=new Set(Object.keys(a||{}).concat(Object.keys(b||{})));
+  keys.forEach(function(k){
+    const x=a[k],y=b[k];
+    if(!x){out[k]=y;return;} if(!y){out[k]=x;return;}
+    const xd=!!x.done,yd=!!y.done; let base=x,other=y;
+    if(yd&&!xd){base=y;other=x;}
+    else if(xd===yd&&(y.confirmed||0)>(x.confirmed||0)){base=y;other=x;}
+    const m=Object.assign({},base);
+    m.done=xd||yd; m.skipped=!!(x.skipped||y.skipped);
+    m.confirmed=Math.max(x.confirmed||0,y.confirmed||0);
+    m.claimed=(base.claimed!=null)?base.claimed:other.claimed;
+    out[k]=m;
+  });
+  return out;
+}
+function mergeRung(a,b){
+  const out={},keys=new Set(Object.keys(a||{}).concat(Object.keys(b||{})));
+  keys.forEach(function(k){
+    const x=a[k]||{},y=b[k]||{};
+    const passed=!!(x.passed||y.passed),at=Math.max(x.at||0,y.at||0);
+    const src=(y.passed&&(y.at||0)>=(x.at||0))?y:x;
+    out[k]=Object.assign({},x,y,{passed:passed,at:at,t:src.t,ev:src.ev});
+  });
+  return out;
+}
+function mergeBadges(a,b){ const o=Object.assign({},a); Object.keys(b||{}).forEach(function(k){ o[k]=(o[k]==null)?b[k]:Math.min(o[k],b[k]); }); return o; }
+function mergeFlags(a,b){
+  const o=Object.assign({},a);
+  Object.keys(b||{}).forEach(function(k){
+    const bv=b[k];
+    if(o[k]==null){o[k]=bv;return;}
+    if(typeof bv==='number'||typeof o[k]==='number') o[k]=Math.max(o[k]||0,bv||0);
+    else o[k]=!!(o[k]||bv);
+  });
+  return o;
+}
+function mergeArr(a,b,keyf){
+  const seen={},out=[];
+  (a||[]).concat(b||[]).forEach(function(x){ const k=keyf(x); if(!seen[k]){seen[k]=1;out.push(x);} });
+  out.sort(function(p,q){return (p.t||0)-(q.t||0);});
+  return out;
+}
+/* base is always the copy on this device, so this device keeps its own
+   screen and its own latest settings. Progress is unioned either way. */
+function mergeState(base,inc){
+  if(!base) return inc||null;
+  if(!inc) return base;
+  const out=Object.assign({},base);
+  const bt=base.updated||0,it=inc.updated||0,incNewer=it>bt;
+  SETTINGS.forEach(function(k){ if(incNewer&&inc[k]!==undefined) out[k]=inc[k]; });
+  out.consent=!!(base.consent||inc.consent);
+  out.signed=!!(base.signed||inc.signed);
+  if(inc.started&&(!base.started||inc.started<base.started)) out.started=inc.started;
+  out.scan=mergeScan(base.scan||{},inc.scan||{});
+  out.seen=Object.assign({},inc.seen||{},base.seen||{});
+  out.domSeen=mmax(base.domSeen||{},inc.domSeen||{});
+  out.rung=mergeRung(base.rung||{},inc.rung||{});
+  out.badges=mergeBadges(base.badges||{},inc.badges||{});
+  out.flags=mergeFlags(base.flags||{},inc.flags||{});
+  out.reps=mergeArr(base.reps||[],inc.reps||[],function(r){return r.c+'|'+r.aid+'|'+r.t;});
+  out.rewards=mergeArr(base.rewards||[],inc.rewards||[],function(r){return r.c+'|'+r.lv+'|'+r.t;});
+  out.updated=Math.max(bt,it);
+  return out;
+}
+/* The Firebase layer at the foot of the file calls these. */
+window.brigMerge={ mergeState:mergeState, parseBlob:parseBlob, serialize:serialize };
+
 async function load(){
   try{const r=await window.storage.get(KEY);S=r?JSON.parse(r.value):fresh();}catch(e){S=fresh();}
   if(!S||!S.scan)S=fresh();
 }
-async function save(){try{await window.storage.set(KEY,JSON.stringify(S));}catch(e){}}
+async function save(){
+  if(!S) return;
+  S.updated=Date.now();
+  let merged=null;
+  try{ merged=await window.storage.set(KEY,serialize(S)); }
+  catch(e){ toast('Your last change is saved on this device. It has not reached the server yet.'); return; }
+  if(merged){ try{ const m=JSON.parse(merged); if(m) S=mergeState(S,m); }catch(e){} }
+}
 /* Single deletion path. Everything the pilot stores lives under KEY, so one
    delete removes levels, badges, streak and the whole portfolio.
    PRODUCTION: add the server-side delete here before clearing local state, and
@@ -413,10 +502,13 @@ function badgeBanner(){
 
 /* ---------- live coach ---------- */
 async function claude(system,user,json){
+  const tok=window.brigvantiAuth?await window.brigvantiAuth.token():null;
   const r=await fetch("/.netlify/functions/coach",{
-    method:"POST",headers:{"Content-Type":"application/json"},
+    method:"POST",
+    headers:Object.assign({"Content-Type":"application/json"},tok?{"Authorization":"Bearer "+tok}:{}),
     body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,
       system,messages:[{role:"user",content:user}]})});
+  if(r.status===401) throw new Error('Please sign in again to use the coach.');
   const d=await r.json();
   let t=(d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n");
   if(json){t=t.replace(/```json|```/g,"").trim();return JSON.parse(t);}
@@ -1476,6 +1568,16 @@ window.brigvantiApp={
   },
   onSignedOut(){
     S=fresh();V={};LAST=-1;render();
+  },
+  /* A change arrived from another device. Merge in its progress, keep our own
+     screen, and refresh only when it is safe. Never interrupt typing. */
+  onRemote(remote){
+    if(!S||!S.signed) return;
+    const before=serialize(S);
+    S=mergeState(S,remote);
+    if(serialize(S)===before) return;
+    const el=document.activeElement, typing=el&&(el.tagName==='INPUT'||el.tagName==='TEXTAREA');
+    if(!typing){ LAST=-1;render(); }
   }
 };
 /* Show a connecting state until Firebase resolves the auth state.
@@ -1493,7 +1595,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/fireba
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup,
          signInWithEmailAndPassword, createUserWithEmailAndPassword,
          signOut, deleteUser } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import { initializeFirestore, doc, getDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { initializeFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, runTransaction } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAh70QZBMIycuK1hMkKD9mp7S7ubiPJF4A",
@@ -1518,33 +1620,53 @@ function cacheKey(key){ return key+':'+(uid||'anon'); }
 window.storage={
   async get(key){
     if(!uid) return null;
-    let cached=null;
-    try{ cached=localStorage.getItem(cacheKey(key)); }catch(e){}
-    /* Refresh the local copy from the server in the background. */
-    const serverRead=getDoc(doc(db,'users',uid)).then(function(snap){
-      if(snap.exists()&&typeof snap.data().blob==='string'){
-        const v=snap.data().blob;
-        try{ localStorage.setItem(cacheKey(key),v); }catch(e){}
-        return v;
-      }
-      return null;
-    }).catch(function(){ return null; });
-    /* A device copy is the reliable layer. Use it at once, no waiting. */
-    if(cached!=null) return { value:cached };
-    /* No device copy. This is a new user, or a returning user on a new
-       device. Wait briefly for the server, then fall back to fresh. */
-    const v=await Promise.race([
-      serverRead,
-      new Promise(function(r){ setTimeout(function(){ r(null); },6000); })
-    ]);
-    return v!=null ? { value:v } : null;
+    let local=null;
+    try{ local=localStorage.getItem(cacheKey(key)); }catch(e){}
+    const M=window.brigMerge, lobj=M?M.parseBlob(local):null;
+    try{
+      /* Read the server copy and this device's copy inside one transaction,
+         merge them, and write the union back. This both loads and heals, so
+         progress made offline on this device reaches the server, and progress
+         from another device reaches this one. */
+      const merged=await runTransaction(db,async function(tx){
+        const ref=doc(db,'users',uid);
+        const snap=await tx.get(ref);
+        const sobj=(snap.exists()&&typeof snap.data().blob==='string')?M.parseBlob(snap.data().blob):null;
+        const m=M.mergeState(lobj,sobj);
+        if(m) tx.set(ref,{ blob:JSON.stringify(m), updated:Date.now() });
+        return m;
+      });
+      const s=merged?JSON.stringify(merged):local;
+      if(s!=null){ try{ localStorage.setItem(cacheKey(key),s); }catch(e){} }
+      startSnapshot();
+      return s!=null?{ value:s }:null;
+    }catch(e){
+      /* Offline or a transaction failure. Fall back to the device copy so the
+         session is never lost. The next successful read or write heals it. */
+      startSnapshot();
+      return local!=null?{ value:local }:null;
+    }
   },
   async set(key,value){
     try{ localStorage.setItem(cacheKey(key),value); }catch(e){}
-    if(!uid) return;
-    try{ await setDoc(doc(db,'users',uid),{ blob:value, updated:Date.now() }); }catch(e){}
+    if(!uid) return value;
+    const M=window.brigMerge, lobj=M?M.parseBlob(value):null;
+    /* Merge with the current server copy inside a transaction, so a write
+       from the other device between our read and write is never clobbered. */
+    const merged=await runTransaction(db,async function(tx){
+      const ref=doc(db,'users',uid);
+      const snap=await tx.get(ref);
+      const sobj=(snap.exists()&&typeof snap.data().blob==='string')?M.parseBlob(snap.data().blob):null;
+      const m=M.mergeState(lobj,sobj)||lobj;
+      tx.set(ref,{ blob:JSON.stringify(m), updated:Date.now() });
+      return m;
+    });
+    const s=JSON.stringify(merged);
+    try{ localStorage.setItem(cacheKey(key),s); }catch(e){}
+    return s;
   },
   async delete(key){
+    stopSnapshot();
     try{ localStorage.removeItem(cacheKey(key)); }catch(e){}
     if(!uid) return;
     try{ await deleteDoc(doc(db,'users',uid)); }catch(e){}
@@ -1552,11 +1674,31 @@ window.storage={
   clearLocal(key){ try{ localStorage.removeItem(cacheKey(key)); }catch(e){} }
 };
 
+/* Live cross-device updates. While two devices are open at once, a change on
+   one merges into the other within a second. The listener never moves the
+   screen and never interrupts typing. */
+let snapOff=null;
+function startSnapshot(){
+  if(snapOff||!uid) return;
+  const ref=doc(db,'users',uid);
+  snapOff=onSnapshot(ref,function(snap){
+    if(!snap.exists()) return;
+    const d=snap.data();
+    if(typeof d.blob!=='string') return;
+    const M=window.brigMerge, remote=M?M.parseBlob(d.blob):null;
+    if(!remote) return;
+    try{ localStorage.setItem(cacheKey('brigvanti_pilot_v2'),d.blob); }catch(e){}
+    if(window.brigvantiApp&&window.brigvantiApp.onRemote) window.brigvantiApp.onRemote(remote);
+  },function(){});
+}
+function stopSnapshot(){ if(snapOff){ try{snapOff();}catch(e){} snapOff=null; } }
+
 window.brigvantiAuth={
   async google(){ await signInWithPopup(auth,new GoogleAuthProvider()); },
   async signInEmail(email,pw){ await signInWithEmailAndPassword(auth,email,pw); },
   async registerEmail(email,pw){ await createUserWithEmailAndPassword(auth,email,pw); },
   async doSignOut(){ await signOut(auth); },
+  async token(){ return auth.currentUser?await auth.currentUser.getIdToken():null; },
   msg(e){
     const c=(e&&e.code)||'';
     if(c==='auth/invalid-credential'||c==='auth/wrong-password'||c==='auth/user-not-found') return 'Email or password is not correct.';
@@ -1584,6 +1726,7 @@ onAuthStateChanged(auth,async function(user){
     uid=user.uid;
     if(window.brigvantiApp) await window.brigvantiApp.onSignedIn(user);
   }else{
+    stopSnapshot();
     uid=null;
     if(window.brigvantiApp) window.brigvantiApp.onSignedOut();
   }
