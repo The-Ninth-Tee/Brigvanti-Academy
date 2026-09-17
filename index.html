@@ -58,6 +58,13 @@ button{font-family:inherit;font-size:inherit;cursor:pointer;border:0;background:
 .btn.full{display:flex;width:100%}
 .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
 .row .btn{flex:1 1 auto}
+.abar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--ink);color:#fff;
+  padding:14px 16px calc(14px + env(safe-area-inset-bottom))}
+.abar-in{max-width:528px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+.abar-txt{font-size:14px;line-height:1.45}
+.abar a{color:#fff;text-decoration:underline}
+.abar-btns{display:flex;gap:10px}
+.abar-btns .btn{flex:1 1 0;min-height:44px;padding:10px 16px}
 
 /* options */
 .opt{display:block;width:100%;text-align:left;background:var(--card);border-radius:14px;
@@ -192,7 +199,7 @@ let S=null, V={}, LAST=-1;
 function fresh(){return{
   signed:false,email:'',name:'',mode:null,role:null,ambition:null,topics:[],targets:{},r1:null,r2:null,entry:1,
   scan:{},seen:{},reps:[],rung:{},rewards:[],domSeen:{},focus:'',badges:{},flags:{},
-  stage:0,dom:null,consent:false,started:new Date().toISOString()
+  stage:0,dom:null,consent:false,analytics:null,analyticsAt:null,started:new Date().toISOString()
 };}
 /* ---------- cross-device sync engine ----------
    State is one JSON blob per user. Two devices can each hold a full copy,
@@ -202,7 +209,7 @@ function fresh(){return{
    unioned and never regress. Settings take the newer edit. The current
    screen stays on the device you are looking at, so a save on your phone
    never yanks the laptop to another page. */
-const SETTINGS=['name','email','mode','role','ambition','topics','targets','r1','r2','entry','roleSkipped'];
+const SETTINGS=['name','email','mode','role','ambition','topics','targets','r1','r2','entry','roleSkipped','analytics','analyticsAt'];
 /* NAV fields stay device-local and are never copied from the other device:
    stage, dom, back7, authMode, focus. pw is never persisted at all. */
 function serialize(s){ const c=Object.assign({},s); delete c.pw; return JSON.stringify(c); }
@@ -584,13 +591,64 @@ function back(){
   if(S.stage===3&&!scanned())return go(2);
   go(map[S.stage]!=null?map[S.stage]:0);
 }
+/* ---------- analytics consent gate ----------
+   Google Analytics (GA4) stays off until the learner opts in, and can be
+   switched off again. gtag loads only from inside enableAnalytics, so no Google
+   script runs and no cookie is set until consent is given. Advertising and
+   Google Signals are off, so this is analytics only. Turning it off sets
+   Google's own ga-disable flag and clears the GA cookies. */
+const ANALYTICS_LIVE=true;
+const GA_ID='G-EN5GQLEC5Q';
+function analyticsAllowed(){ return !!(S&&S.analytics===true); }
+function enableAnalytics(){
+  if(!ANALYTICS_LIVE||!analyticsAllowed()||window.__brigAnalyticsOn) return;
+  window.__brigAnalyticsOn=true;
+  window['ga-disable-'+GA_ID]=false;
+  const s=document.createElement('script');
+  s.async=true; s.src='https://www.googletagmanager.com/gtag/js?id='+GA_ID;
+  document.head.appendChild(s);
+  window.dataLayer=window.dataLayer||[];
+  window.gtag=function(){ window.dataLayer.push(arguments); };
+  window.gtag('js',new Date());
+  window.gtag('config',GA_ID,{allow_google_signals:false,allow_ad_personalization_signals:false});
+}
+function disableAnalytics(){
+  window.__brigAnalyticsOn=false;
+  window['ga-disable-'+GA_ID]=true;
+  try{
+    document.cookie.split(';').forEach(function(c){
+      const n=c.split('=')[0].trim();
+      if(n==='_ga'||n.indexOf('_ga_')===0||n==='_gid'||n.indexOf('_gat')===0){
+        const base=n+'=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;';
+        document.cookie=base;
+        document.cookie=base+' domain='+location.hostname+';';
+        document.cookie=base+' domain=.'+location.hostname+';';
+      }
+    });
+  }catch(e){}
+}
+function setAnalytics(v){
+  if(!S) return;
+  S.analytics=!!v; S.analyticsAt=Date.now();
+  if(v) enableAnalytics(); else disableAnalytics();
+  save();render();
+}
+function analyticsBar(){
+  return `<div class="abar"><div class="abar-in">
+    <div class="abar-txt">Help improve Brigvanti with anonymous usage analytics? We use Google Analytics with advertising off, and nothing runs unless you allow it. Details and the off switch are in <a style="cursor:pointer" onclick="go(7)">Privacy and legal</a>.</div>
+    <div class="abar-btns">
+      <button class="btn sec" onclick="setAnalytics(false)">No thanks</button>
+      <button class="btn go" onclick="setAnalytics(true)">Allow</button>
+    </div></div></div>`;
+}
 function shell(inner,opts){
   const o=opts||{};
   const bar=S.stage===0?'':`<div class="topbar">
       ${o.noBack?'<div style="width:36px"></div>':'<button class="back" onclick="back()" aria-label="Go back">&#8592;</button>'}
       <div class="crumb">${esc(o.crumb||TITLE[S.stage])}</div></div>
     ${o.pct!=null?`<div class="track"><i style="width:${o.pct}%"></i></div>`:''}`;
-  return `<div class="app"><div class="top">${bar}</div>${badgeBanner()}${inner}</div>`;
+  const showAB=ANALYTICS_LIVE&&S.signed&&S.consent&&(S.analytics===null||S.analytics===undefined);
+  return `<div class="app"${showAB?' style="padding-bottom:150px"':''}><div class="top">${bar}</div>${badgeBanner()}${inner}${showAB?analyticsBar():''}</div>`;
 }
 /* Enter the scan from the account page. First run needs consent and setup.
    A returning user with both goes straight to where they left off. */
@@ -785,6 +843,7 @@ function vClaim(c,d,cs){
 }
 function claim(cid,l){
   const r=rec(cid),c=byId[cid];
+  V.earned=null;
   r.claimed=l;
   if(l<c.fl){r.confirmed=Math.max(0,c.fl-1);r.done=true;noteDomain(cid);mirrorTick(cid);checkBadges();}
   else startProbe(cid,Math.min(l,entryFor(cid)===l?l:l));
@@ -821,7 +880,9 @@ function mirrorTick(cid){
 function nextProbe(cid){
   advanceProbe(cid);const r=S.scan[cid];
   if(r.done){noteDomain(cid);mirrorTick(cid);}
-  const keep=V.earned;V={};if(r.done)checkBadges();else V.earned=keep;
+  /* Clear the view state on every step. A badge earned as this skill completes
+     shows on the next screen, then clears when the learner moves on. */
+  V={};if(r.done)checkBadges();
   save();render();
 }
 
@@ -909,8 +970,14 @@ function vLegal(){
     <p>You can also download your own record at any time from Your progress.</p>
     <p>If you are not satisfied, you may complain to the Dutch data protection authority, the Autoriteit Persoonsgegevens.</p>`)}
 
-  ${b('Cookies',`
-    <p>We use only what is needed to keep you signed in and to keep the service secure. We do not use advertising or tracking cookies, and there are no third party analytics trackers on this pilot.</p>`)}
+  ${b('Cookies and analytics',`
+    <p>We use only what is needed to keep you signed in and to keep the service secure. We do not set advertising or tracking cookies of our own.</p>
+    <p>Usage analytics stay off unless you allow them. If you allow them, we use Google Analytics to collect anonymous usage data, so we can improve Brigvanti. Google Analytics sets a cookie named _ga and sends usage data to Google, including outside the European Economic Area under the European Commission's standard contractual clauses. We keep Google's advertising and personalisation features switched off, so this is analytics only. Nothing from Google loads or is collected until you allow it. You can turn it off again at any time here, which stops the collection and clears its cookie.</p>
+    <div class="row" style="margin-top:12px">
+      <button class="btn go" onclick="setAnalytics(true)"${S.analytics===true?' disabled':''}>Allow analytics</button>
+      <button class="btn sec" onclick="setAnalytics(false)"${S.analytics===false?' disabled':''}>Turn analytics off</button>
+    </div>
+    <p class="muted" style="margin-top:10px">${S.analytics===true?'Status: analytics allowed.':S.analytics===false?'Status: analytics off.':'Status: not chosen yet, so analytics are off.'}</p>`)}
 
   ${b('Age',`
     <p>This pilot is for adults. You must be 18 or over to take part.</p>`)}
@@ -1571,11 +1638,12 @@ window.brigvantiApp={
     S.stage=9;
     LAST=-1;render();
     save();
+    enableAnalytics();
     /* Pull the server copy in the background. When it arrives, merge it in and
        refresh. Login never waits on this, so a slow or down server does not
        hold up the screen. */
     window.storage.syncFromServer(KEY).then(function(merged){
-      if(merged){ S=mergeState(S,merged); LAST=-1;render(); }
+      if(merged){ S=mergeState(S,merged); LAST=-1;render(); enableAnalytics(); }
     }).catch(function(){});
   },
   onSignedOut(){
