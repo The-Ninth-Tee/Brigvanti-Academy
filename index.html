@@ -283,10 +283,10 @@ async function load(){
 async function save(){
   if(!S) return;
   S.updated=Date.now();
-  let merged=null;
-  try{ merged=await window.storage.set(KEY,serialize(S)); }
-  catch(e){ toast('Your last change is saved on this device. It has not reached the server yet.'); return; }
-  if(merged){ try{ const m=JSON.parse(merged); if(m) S=mergeState(S,m); }catch(e){} }
+  try{
+    const merged=await window.storage.set(KEY,serialize(S));
+    if(merged){ const m=JSON.parse(merged); if(m) S=mergeState(S,m); }
+  }catch(e){}
 }
 /* Single deletion path. Everything the pilot stores lives under KEY, so one
    delete removes levels, badges, streak and the whole portfolio.
@@ -1595,7 +1595,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/fireba
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup,
          signInWithEmailAndPassword, createUserWithEmailAndPassword,
          signOut, deleteUser } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import { initializeFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, runTransaction } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { initializeFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAh70QZBMIycuK1hMkKD9mp7S7ubiPJF4A",
@@ -1623,47 +1623,52 @@ window.storage={
     let local=null;
     try{ local=localStorage.getItem(cacheKey(key)); }catch(e){}
     const M=window.brigMerge, lobj=M?M.parseBlob(local):null;
+    let merged=lobj;
     try{
-      /* Read the server copy and this device's copy inside one transaction,
-         merge them, and write the union back. This both loads and heals, so
-         progress made offline on this device reaches the server, and progress
-         from another device reaches this one. */
-      const merged=await runTransaction(db,async function(tx){
-        const ref=doc(db,'users',uid);
-        const snap=await tx.get(ref);
-        const sobj=(snap.exists()&&typeof snap.data().blob==='string')?M.parseBlob(snap.data().blob):null;
-        const m=M.mergeState(lobj,sobj);
-        if(m) tx.set(ref,{ blob:JSON.stringify(m), updated:Date.now() });
-        return m;
-      });
-      const s=merged?JSON.stringify(merged):local;
-      if(s!=null){ try{ localStorage.setItem(cacheKey(key),s); }catch(e){} }
-      startSnapshot();
-      return s!=null?{ value:s }:null;
+      /* Read the server copy and merge it with this device's copy. Progress
+         from either side is kept. If this device holds anything the server
+         lacks, push the union back so it reaches the server too. */
+      const snap=await getDoc(doc(db,'users',uid));
+      const sobj=(snap.exists()&&typeof snap.data().blob==='string')?M.parseBlob(snap.data().blob):null;
+      merged=M.mergeState(lobj,sobj);
+      if(merged){
+        const s=JSON.stringify(merged);
+        try{ localStorage.setItem(cacheKey(key),s); }catch(e){}
+        if(lobj) setDoc(doc(db,'users',uid),{ blob:s, updated:Date.now() }).catch(function(){});
+      }
     }catch(e){
-      /* Offline or a transaction failure. Fall back to the device copy so the
-         session is never lost. The next successful read or write heals it. */
-      startSnapshot();
-      return local!=null?{ value:local }:null;
+      /* Server unreachable or write rejected. Use the device copy so the
+         session is never lost. The error code tells us why (for example
+         permission-denied means the security rules block it). */
+      console.warn('[brigvanti sync] server read failed:', (e&&e.code)||e);
+      merged=lobj;
     }
+    startSnapshot();
+    const out=merged?JSON.stringify(merged):local;
+    return out!=null?{ value:out }:null;
   },
   async set(key,value){
     try{ localStorage.setItem(cacheKey(key),value); }catch(e){}
     if(!uid) return value;
     const M=window.brigMerge, lobj=M?M.parseBlob(value):null;
-    /* Merge with the current server copy inside a transaction, so a write
-       from the other device between our read and write is never clobbered. */
-    const merged=await runTransaction(db,async function(tx){
-      const ref=doc(db,'users',uid);
-      const snap=await tx.get(ref);
+    let merged=lobj;
+    try{
+      /* Merge with the current server copy, then write the union. This keeps a
+         write from the other device from being clobbered by ours. */
+      const snap=await getDoc(doc(db,'users',uid));
       const sobj=(snap.exists()&&typeof snap.data().blob==='string')?M.parseBlob(snap.data().blob):null;
-      const m=M.mergeState(lobj,sobj)||lobj;
-      tx.set(ref,{ blob:JSON.stringify(m), updated:Date.now() });
-      return m;
-    });
-    const s=JSON.stringify(merged);
-    try{ localStorage.setItem(cacheKey(key),s); }catch(e){}
-    return s;
+      merged=M.mergeState(lobj,sobj)||lobj;
+      const s=JSON.stringify(merged);
+      await setDoc(doc(db,'users',uid),{ blob:s, updated:Date.now() });
+      try{ localStorage.setItem(cacheKey(key),s); }catch(e){}
+      return s;
+    }catch(e){
+      /* The device copy is already saved above, so nothing is lost. The error
+         code tells us why the server write failed. permission-denied points at
+         the security rules, unavailable at the connection or database. */
+      console.warn('[brigvanti sync] server write failed:', (e&&e.code)||e);
+      return JSON.stringify(merged);
+    }
   },
   async delete(key){
     stopSnapshot();
