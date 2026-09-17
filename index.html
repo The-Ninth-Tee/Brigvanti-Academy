@@ -277,8 +277,9 @@ function mergeState(base,inc){
 window.brigMerge={ mergeState:mergeState, parseBlob:parseBlob, serialize:serialize };
 
 async function load(){
-  try{const r=await window.storage.get(KEY);S=r?JSON.parse(r.value):fresh();}catch(e){S=fresh();}
-  if(!S||!S.scan)S=fresh();
+  const r=window.storage.getLocal(KEY);
+  const o=r?parseBlob(r.value):null;
+  S=o||fresh();
 }
 async function save(){
   if(!S) return;
@@ -1565,6 +1566,13 @@ window.brigvantiApp={
     if(user&&user.email&&!S.email)S.email=user.email;
     S.stage=9;
     LAST=-1;render();
+    save();
+    /* Pull the server copy in the background. When it arrives, merge it in and
+       refresh. Login never waits on this, so a slow or down server does not
+       hold up the screen. */
+    window.storage.syncFromServer(KEY).then(function(merged){
+      if(merged){ S=mergeState(S,merged); LAST=-1;render(); }
+    }).catch(function(){});
   },
   onSignedOut(){
     S=fresh();V={};LAST=-1;render();
@@ -1609,7 +1617,11 @@ const firebaseConfig = {
 
 const app=initializeApp(firebaseConfig);
 const auth=getAuth(app);
-const db=initializeFirestore(app,{ experimentalAutoDetectLongPolling:true });
+/* Force long-polling. Auto-detect was failing on some networks with an
+   "unavailable" error as the WebChannel stream kept closing. Long-polling uses
+   plain HTTP requests, which connect through proxies, ad blockers and networks
+   that block the streaming channel. */
+const db=initializeFirestore(app,{ experimentalForceLongPolling:true });
 
 let uid=null;
 function cacheKey(key){ return key+':'+(uid||'anon'); }
@@ -1618,34 +1630,36 @@ function cacheKey(key){ return key+':'+(uid||'anon'); }
    held as a single JSON string field, which avoids Firestore key and nesting
    limits. A local copy is kept for offline use and cleared on sign out. */
 window.storage={
-  async get(key){
+  /* Instant read from the device copy. No network, so login never waits on
+     the server. */
+  getLocal(key){
+    let local=null;
+    try{ local=localStorage.getItem(cacheKey(key)); }catch(e){}
+    return local!=null?{ value:local }:null;
+  },
+  /* Pull the server copy, merge it with this device, and hand the union back
+     so the caller can adopt it and re-render. Also heals the server when this
+     device holds progress the server lacks. Returns null when there is nothing
+     to add or the server is unreachable. Runs in the background. */
+  async syncFromServer(key){
     if(!uid) return null;
+    startSnapshot();
     let local=null;
     try{ local=localStorage.getItem(cacheKey(key)); }catch(e){}
     const M=window.brigMerge, lobj=M?M.parseBlob(local):null;
-    let merged=lobj;
     try{
-      /* Read the server copy and merge it with this device's copy. Progress
-         from either side is kept. If this device holds anything the server
-         lacks, push the union back so it reaches the server too. */
       const snap=await getDoc(doc(db,'users',uid));
       const sobj=(snap.exists()&&typeof snap.data().blob==='string')?M.parseBlob(snap.data().blob):null;
-      merged=M.mergeState(lobj,sobj);
-      if(merged){
-        const s=JSON.stringify(merged);
-        try{ localStorage.setItem(cacheKey(key),s); }catch(e){}
-        if(lobj) setDoc(doc(db,'users',uid),{ blob:s, updated:Date.now() }).catch(function(){});
-      }
+      const merged=M.mergeState(lobj,sobj);
+      if(!merged) return null;
+      const s=JSON.stringify(merged);
+      try{ localStorage.setItem(cacheKey(key),s); }catch(e){}
+      if(lobj) setDoc(doc(db,'users',uid),{ blob:s, updated:Date.now() }).catch(function(e){ console.warn('[brigvanti sync] heal write failed:', (e&&e.code)||e); });
+      return merged;
     }catch(e){
-      /* Server unreachable or write rejected. Use the device copy so the
-         session is never lost. The error code tells us why (for example
-         permission-denied means the security rules block it). */
       console.warn('[brigvanti sync] server read failed:', (e&&e.code)||e);
-      merged=lobj;
+      return null;
     }
-    startSnapshot();
-    const out=merged?JSON.stringify(merged):local;
-    return out!=null?{ value:out }:null;
   },
   async set(key,value){
     try{ localStorage.setItem(cacheKey(key),value); }catch(e){}
