@@ -644,7 +644,11 @@ async function signIn(how){
   }
 }
 async function signOutUser(){
-  if(window.storage&&window.storage.clearLocal)window.storage.clearLocal(KEY);
+  /* Flush the latest state to the server before leaving, so a finished scan is
+     never lost at logout. The device copy is kept as a backstop. Its storage
+     key is per user, so the next person on this browser cannot see it through
+     the app. */
+  try{ await save(); }catch(e){}
   if(window.brigvantiAuth){try{await window.brigvantiAuth.doSignOut();}catch(e){}}
 }
 
@@ -1617,11 +1621,11 @@ const firebaseConfig = {
 
 const app=initializeApp(firebaseConfig);
 const auth=getAuth(app);
-/* Force long-polling. Auto-detect was failing on some networks with an
-   "unavailable" error as the WebChannel stream kept closing. Long-polling uses
-   plain HTTP requests, which connect through proxies, ad blockers and networks
-   that block the streaming channel. */
-const db=initializeFirestore(app,{ experimentalForceLongPolling:true });
+/* Connect to the named database "brigvanti". Without the third argument the
+   SDK talks to the "(default)" database, which is not where this project's
+   data lives, so reads and writes failed with "unavailable" and nothing was
+   stored. Long-polling stays on as a network compatibility safeguard. */
+const db=initializeFirestore(app,{ experimentalForceLongPolling:true },'brigvanti');
 
 let uid=null;
 function cacheKey(key){ return key+':'+(uid||'anon'); }
