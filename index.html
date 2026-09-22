@@ -78,7 +78,7 @@ button{font-family:inherit;font-size:inherit;cursor:pointer;border:0;background:
   background:var(--slate);color:var(--on-slate);border-radius:var(--r-sm);padding:14px 24px;font-weight:700;
   min-height:50px;transition:transform .1s,background .12s;text-transform:uppercase;letter-spacing:.08em;font-size:13px}
 .btn:active{transform:scale(.97)}
-.btn:disabled{background:#C3CDD4;cursor:not-allowed}
+.btn:disabled,.btn.go:disabled,.btn.sec:disabled{background:var(--line);color:var(--ink3);box-shadow:none;cursor:not-allowed;opacity:.7}
 .btn.go{background:var(--teal);color:#0F172A}
 .btn.sec{background:var(--card);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
 .btn.full{display:flex;width:100%}
@@ -1445,18 +1445,18 @@ function vRungRun(){
     return shell(`${head}
     <div class="card"><span class="chip t">Part 1 is clear</span>
       <h3 style="margin-top:14px">Part 2. Do it for real</h3>
-      <p style="margin-top:8px">Do one real task in your own context that meets every point below. Then confirm each one honestly. You confirm this, not your coach.</p>
+      <p style="margin-top:8px">Do one real task in your own life or work. Tick every point below that you actually did. You need all of them ticked to claim the level. At this level you confirm your own work, the coach does not.</p>
       ${cond.map((x,i)=>`<label class="chk ${R.cond[i]?'on':''}">
         <input type="checkbox" ${R.cond[i]?'checked':''} onchange="V.ru.cond[${i}]=this.checked;render()">
         <span><b style="font-weight:600">${esc(x[0])}</b><br><span class="muted">${esc(x[1])}</span></span></label>`).join('')}
       <label class="fl" style="margin-top:18px" for="ev">Add it to your portfolio</label>
-      <p class="muted" style="margin:0 0 10px">This entry is yours to keep. Write one or two sentences covering three things, so you can find it and show it later.</p>
+      <p class="muted" style="margin:0 0 10px">Now write your evidence in one or two sentences, in plain words. Cover the three things below, so you and others can find it and see what you did. It is never graded.</p>
       <ul class="muted" style="margin:0 0 10px;padding-left:20px">
         <li>What the real task was</li>
         <li>What you actually produced</li>
         <li>Where it lives now, or who received it</li>
       </ul>
-      <textarea id="ev" style="min-height:100px" placeholder="For example, my weekly team update took an hour to write. I built a prompt that structures my rough notes into the standard format. The prompt is saved in my notes app, and Monday's update went out to the team using it."
+      <textarea id="ev" style="min-height:100px" placeholder="For example: My weekly team update used to take an hour. I built a prompt that turns my rough notes into our standard format, saved it in my notes app, and Monday's update went out to the team using it."
         oninput="V.ru.ev=this.value;ruSync()">${esc(R.ev)}</textarea>
       <p class="muted" style="margin:8px 0 0">Later you may want to show this, or simply find it again.</p>
       <p id="ruHint" class="muted" style="margin:6px 0 0">${ruHintText()}</p>
@@ -1681,6 +1681,15 @@ function exportPortfolioDoc(){
       ${block('Your coach said',r.coach)}
       ${block('Your reflection',r.reflect)}
     </article>`;}).join('');
+  const rungArts=Object.keys(S.rung||{}).filter(k=>S.rung[k]&&S.rung[k].passed&&S.rung[k].ev&&byId[k]).map(k=>{
+    const r=S.rung[k],c=byId[k];
+    const skill=esc(c.n),area=esc(DATA.doms[c.d]),lvl=esc(LV[r.at]||'');
+    const date=new Date(r.t||Date.now()).toISOString().slice(0,10);
+    return `<article class="piece">
+      <div class="ph"><h2>${skill}</h2><span class="lv">Level up &middot; ${lvl}</span></div>
+      <div class="meta">${area?area+' &middot; ':''}${date}</div>
+      ${block('What you made',r.ev)}
+    </article>`;}).join('');
   const css=`:root{--teal:#0E8C7F;--indigo:#4B4DB5;--ink:#14202B;--ink2:#4A5C6B;--ink3:#7A8B98;--bg:#F6F4F0;--card:#fff;--line:#E3E8EC;--teal-l:#E2F4F1;--indigo-l:#ECEDFB}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.55}
@@ -1707,7 +1716,7 @@ footer{color:var(--ink3);font-size:12.5px;margin-top:30px;text-align:center}
     <p class="sub">${nm?esc(nm)+'. ':''}Everything you made, kept in order.</p>
     <p class="sub">Exported ${dd}. ${pieces.length} piece${pieces.length===1?'':'s'}.</p>
     <div class="note">This is yours. Nobody reviews it and nobody scores it. It records the real work you did and what your coach said.</div>
-    ${arts||'<div class="piece"><div class="val">Nothing handed in yet.</div></div>'}
+    ${(arts+rungArts)||'<div class="piece"><div class="val">Nothing handed in yet.</div></div>'}
     <footer>Brigvanti. Your coach advises, it never scores. This portfolio is not an assessment.</footer>
   </div></body></html>`;
   const b=new Blob([html],{type:'text/html;charset=utf-8'}),u=URL.createObjectURL(b);
