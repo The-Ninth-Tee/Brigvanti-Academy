@@ -642,7 +642,7 @@ function back(){
   if(V.ru){V.ru=null;render();return;}
   if(S.stage===8&&V.pf){V.pf=null;render();return;}
   if(S.stage===7)return go(S.back7!=null?S.back7:(S.signed?6:0));
-  const map={1:9,2:3,3:2,4:3,5:4,6:9,7:(S.signed?6:0),8:6};
+  const map={1:9,2:3,3:2,4:3,5:4,6:9,7:(S.signed?6:0),8:6,9:6};
   if(S.stage===2&&!scanned())return go(1);
   if(S.stage===3&&!scanned())return go(2);
   go(map[S.stage]!=null?map[S.stage]:0);
@@ -1507,11 +1507,11 @@ function vProgress(){
     <div class="tile"><b style="color:var(--amber-d)">${earnedCount()}</b><span>badges earned</span></div>
     <div class="tile"><b>${DATA.comps.length}</b><span>skills in total</span></div>
   </div>
+  <div class="card"><h3>Your skills</h3><div style="margin-top:6px">${rows||'<p class="muted">Nothing placed yet.</p>'}</div></div>
   <button class="opt" onclick="go(8)" style="background:var(--indigo-l);box-shadow:none">
     <b>Your portfolio</b>
     <span class="sub">${S.reps.length?`${S.reps.length} piece${S.reps.length>1?'s':''} of your own work, kept in order.`:'Your work appears here once you hand something in.'}</span>
     <span class="sub" style="color:var(--indigo);font-weight:700;margin-top:6px">Tap to open your portfolio &#8250;</span></button>
-  <div class="card"><h3>Your skills</h3><div style="margin-top:6px">${rows||'<p class="muted">Nothing placed yet.</p>'}</div></div>
   <details class="fold">
     <summary>Your badges <span class="fx">${earnedCount()} of ${BADGES.length} earned &#9662;</span></summary>
     <div class="fb"><p class="muted" style="margin:0 0 14px">Every one of them is for doing something real.</p>
@@ -1531,15 +1531,17 @@ function vProgress(){
     <button class="mtile" onclick="exportLog()"><span class="mi">&#128203;</span><b>Download record</b></button>
     <button class="mtile" onclick="go(7)"><span class="mi">&#128274;</span><b>Privacy &amp; legal</b></button>
     <button class="mtile" onclick="signOutUser()"><span class="mi">&#128682;</span><b>Log out</b></button>
-    <button class="mtile warn" onclick="V.reset=true;render()"><span class="mi">&#128465;</span><b>Reset pilot</b></button>
+    <button class="mtile" onclick="go(9)"><span class="mi">&#9881;&#65039;</span><b>Account settings</b></button>
   </div>
   <div class="row"><button class="btn sec full" onclick="V.ops=!V.ops;render()">
     ${V.ops?'Hide':'Show'} pilot check for the Brigvanti team</button></div>
+  <div class="row" style="margin-top:8px"><button class="btn sec full" style="color:var(--rose)" onclick="V.reset=true;render()">Reset pilot</button></div>
+  <p class="muted" style="margin:8px 4px 0;font-size:12px">Pilot only. Both controls above are removed in the live version.</p>
   ${V.ops?vOps():''}
   ${V.reset?`<div class="card"><h3>Erase everything?</h3>
     <p class="muted" style="margin:6px 0 0">This deletes your levels, badges, streak and your whole portfolio, from this device and from our storage. It cannot be undone. Download your record first if you want to keep it.</p>
     <div class="row"><button class="btn full" onclick="wipe()">Erase everything</button>
-    <button class="btn sec full" onclick="V.reset=false;render()">Keep it</button></div></div>`:''}`);
+    <button class="btn sec full" onclick="V.reset=false;render()">Keep it</button></div></div>`:''}`,{noBack:true});
 }
 function calib(){
   const all=[];Object.keys(S.scan).forEach(cid=>(S.scan[cid].log||[]).forEach(l=>all.push(l)));
@@ -1650,7 +1652,7 @@ function vAccount(){
       <button class="mtile" onclick="go(7)"><span class="mi">&#128274;</span><b>Privacy &amp; legal</b></button>
       <button class="mtile" onclick="signOutUser()"><span class="mi">&#128682;</span><b>Log out</b></button>
     </div>`,
-    {crumb:'Your account',noBack:true});
+    {crumb:'Account settings'});
   }
   const rows=DK.map(d=>{
     if(domDone(d))return `<div class="opt" style="opacity:.55"><b>${esc(DATA.doms[d])}</b><span class="sub">Assessed</span></div>`;
@@ -1688,15 +1690,8 @@ function vAccount(){
     ${rows}
     ${doneCount<total?`<div class="row" style="margin-top:8px"><button class="btn go full" onclick="goScan()">Continue the scan</button></div>`:''}</div></details>
 
-  <div class="sect">General</div>
-  <div class="rows">
-    <button class="rw" onclick="practiseDom('')"><div class="ic">&#128221;</div><div class="tx"><b>Assignments</b></div><span class="chev">&#8250;</span></button>
-    <button class="rw" onclick="go(6)"><div class="ic">&#128202;</div><div class="tx"><b>Progress &amp; data</b></div><span class="chev">&#8250;</span></button>
-    <button class="rw" onclick="go(7)"><div class="ic">&#128196;</div><div class="tx"><b>Privacy &amp; legal</b></div><span class="chev">&#8250;</span></button>
-    <button class="rw" onclick="signOutUser()"><div class="ic">&#128682;</div><div class="tx"><b>Log out</b></div><span class="chev">&#8250;</span></button>
-  </div>
   ${delRows}`,
-  {crumb:'Your account',noBack:true});
+  {crumb:'Account settings'});
 }
 /* ---------- render ---------- */
 function render(){
@@ -1720,7 +1715,7 @@ window.brigvantiApp={
     S.signed=true;
     if(user&&user.email&&!S.email)S.email=user.email;
     S.authProvider=(user&&user.providerData&&user.providerData[0]&&user.providerData[0].providerId)||'';
-    S.stage=setupDone()?9:1;
+    S.stage=setupDone()?6:1;
     LAST=-1;render();
     save();
     enableAnalytics();
@@ -1753,7 +1748,7 @@ render();
 setTimeout(function(){ if(window.__brigAuthPending){ window.__brigAuthPending=false; render(); } },6000);
 try{ history.replaceState(null,''); history.pushState(null,''); }catch(e){}
 window.addEventListener('popstate',function(){
-  var canBack=!!(S&&S.signed&&S.stage!==0&&(V.pf||V.rep||V.ru||S.stage!==9));
+  var canBack=!!(S&&S.signed&&S.stage!==0&&(V.pf||V.rep||V.ru||S.stage!==6));
   if(canBack){ try{history.pushState(null,'');}catch(e){} back(); }
   else{ try{history.back();}catch(e){} }
 });
