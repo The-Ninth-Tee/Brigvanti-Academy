@@ -1457,10 +1457,10 @@ function vRungRun(){
         <li>Where it lives now, or who received it</li>
       </ul>
       <textarea id="ev" style="min-height:100px" placeholder="For example, my weekly team update took an hour to write. I built a prompt that structures my rough notes into the standard format. The prompt is saved in my notes app, and Monday's update went out to the team using it."
-        oninput="V.ru.ev=this.value">${esc(R.ev)}</textarea>
+        oninput="V.ru.ev=this.value;ruSync()">${esc(R.ev)}</textarea>
       <p class="muted" style="margin:8px 0 0">Later you may want to show this, or simply find it again.</p>
-      ${R.err?`<div class="err">${esc(R.err)}</div>`:''}
-      <div class="row"><button class="btn go full" onclick="ruCertify()">Confirm and claim the level</button></div>
+      <p id="ruHint" class="muted" style="margin:6px 0 0">${ruHintText()}</p>
+      <div class="row"><button id="ruConfirm" class="btn go full" ${ruReady()?'':'disabled'} onclick="ruCertify()">Confirm and claim the level</button></div>
       <p class="muted" style="margin-top:12px">Nobody checks this. The level is yours. An honest one is worth more than a high one, because only an honest one tells you what to practise next.</p></div>`,
     {crumb:'Level up test'});}
 
@@ -1487,6 +1487,23 @@ function ruNext(){
   const R=V.ru;R.ix++;R.pick=null;R.shown=false;
   if(R.ix<R.forms.length){render();return;}
   R.step=R.got.every(Boolean)?'b':'afail';render();
+}
+function ruReady(){
+  const R=V.ru; if(!R)return false;
+  const cond=COND[R.tgt]||COND[2];
+  return cond.every((_,i)=>R.cond[i]) && (R.ev||'').trim().length>=25;
+}
+function ruHintText(){
+  const R=V.ru; if(!R)return '';
+  const cond=COND[R.tgt]||COND[2];
+  const need=cond.filter((_,i)=>!R.cond[i]).length;
+  if(need>0)return `Tick every point above. ${need} still ${need>1?'need':'needs'} confirming.`;
+  if((R.ev||'').trim().length<25)return 'Add your evidence, one or two sentences.';
+  return 'All set. You can claim the level.';
+}
+function ruSync(){
+  const b=document.getElementById('ruConfirm'); if(b)b.disabled=!ruReady();
+  const h=document.getElementById('ruHint'); if(h)h.textContent=ruHintText();
 }
 function ruCertify(){
   const R=V.ru,cond=COND[R.tgt]||COND[2];
