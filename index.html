@@ -226,6 +226,7 @@ let S=null, V={}, LAST=-1;
 function fresh(){return{
   signed:false,email:'',name:'',mode:null,role:null,ambition:null,topics:[],targets:{},r1:null,r2:null,entry:1,
   scan:{},seen:{},reps:[],rung:{},rewards:[],domSeen:{},focus:'',badges:{},flags:{},
+  plan:'free',notify:false,authProvider:'',
   stage:0,dom:null,consent:false,analytics:null,analyticsAt:null,started:new Date().toISOString()
 };}
 /* ---------- cross-device sync engine ----------
@@ -236,7 +237,7 @@ function fresh(){return{
    unioned and never regress. Settings take the newer edit. The current
    screen stays on the device you are looking at, so a save on your phone
    never yanks the laptop to another page. */
-const SETTINGS=['name','email','mode','role','ambition','topics','targets','r1','r2','entry','roleSkipped','analytics','analyticsAt'];
+const SETTINGS=['name','email','mode','role','ambition','topics','targets','r1','r2','entry','roleSkipped','analytics','analyticsAt','plan','notify'];
 /* NAV fields stay device-local and are never copied from the other device:
    stage, dom, back7, authMode, focus. pw is never persisted at all. */
 function serialize(s){ const c=Object.assign({},s); delete c.pw; return JSON.stringify(c); }
@@ -618,6 +619,10 @@ function back(){
   if(S.stage===3&&!scanned())return go(2);
   go(map[S.stage]!=null?map[S.stage]:0);
 }
+function setupDone(){ return !!(S&&S.name&&S.name.trim()&&S.consent&&Object.keys(S.targets||{}).length); }
+function setNotify(v){ if(!S)return; S.notify=!!v; save(); render(); }
+async function doPasswordReset(){ try{ await window.brigvantiSendReset(); toast('Reset link sent to your email.'); }catch(e){ toast('Could not send the reset email. Try again.'); } }
+async function doDelete(){ try{ await window.brigvantiDeleteAccount(); }catch(e){ if(V)V.del=false; render(); toast((window.brigvantiAuth&&window.brigvantiAuth.msg)?window.brigvantiAuth.msg(e):'Could not delete. Sign in again and retry.'); } }
 /* ---------- analytics consent gate ----------
    Google Analytics (GA4) stays off until the learner opts in, and can be
    switched off again. gtag loads only from inside enableAnalytics, so no Google
@@ -766,7 +771,8 @@ function vStart(){
   <p class="lede">A few quick things, then the scan begins. You can change any of this later.</p>
 
   <div class="card"><label class="fl" for="nm">What should your coach call you?</label>
-    <input id="nm" placeholder="Your first name" value="${esc(S.name)}" oninput="S.name=this.value"></div>
+    <input id="nm" placeholder="Your first name" value="${esc(S.name)}" oninput="S.name=this.value;var b=document.getElementById('startBtn');if(b)b.disabled=!this.value.trim();">
+    <p class="muted" style="margin:8px 0 0">A nickname is fine. This is needed to continue.</p></div>
 
   <div class="card"><h3>What brings you here?</h3>
     <p class="muted" style="margin:6px 0 14px">This only sets the level you are aiming for. It never changes how you are placed.</p>
@@ -792,7 +798,7 @@ function vStart(){
     ${TOPICS.map(t=>`<button class="opt ${S.topics.indexOf(t)>=0?'sel':''}" onclick="toggleTopic('${esc(t).replace(/'/g,"&#39;")}')">
       <b>${esc(t)}</b></button>`).join('')}</div>
     `:''}
-  ${ready?`<div class="row"><button class="btn go full" onclick="go(2)">Start the scan</button></div>`:''}`);
+  ${ready?`<div class="row"><button id="startBtn" class="btn go full" ${S.name&&S.name.trim()?'':'disabled'} onclick="go(2)">Start the scan</button></div>`:''}`);
 }
 function pickMode(m){
   S.mode=m;S.roleSkipped=false;
@@ -1625,9 +1631,25 @@ function vAccount(){
   <p class="lede">You have assessed ${doneCount} of ${total} areas.</p>
 
   <div class="card"><label class="fl" for="anm">What should your coach call you?</label>
-    <input id="anm" placeholder="Your first name" value="${esc(S.name)}" oninput="S.name=this.value" onchange="save()">
-    ${S.email?`<p class="muted" style="margin:10px 0 0">Signed in as ${esc(S.email)}.</p>`:''}
+    <input id="anm" placeholder="Your first name" value="${esc(S.name)}" oninput="S.name=this.value" onchange="if(!this.value.trim()){this.value=S.name;}else{S.name=this.value;save();}">
+    <p class="muted" style="margin:8px 0 0">A nickname is fine. A name is required.</p></div>
+
+  <div class="card"><h3>Sign in</h3>
+    ${S.email?`<p class="muted" style="margin:6px 0 0">You are signed in as ${esc(S.email)}.</p>`:''}
+    ${S.authProvider==='google.com'
+      ?`<p class="muted" style="margin:8px 0 0">This account is linked to your Google account. Google manages your password.</p>`
+      :`<div style="display:flex;align-items:center;gap:12px;margin:12px 0 0"><span class="fl" style="margin:0">Password</span><span style="letter-spacing:3px;color:var(--ink3)">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span></div>
+        <div class="row" style="margin-top:10px"><button class="btn sec full" onclick="doPasswordReset()">Change password</button></div>
+        <p class="muted" style="margin:8px 0 0">We send a secure reset link to your email. For safety, we never show or store your password.</p>`}
     <div class="row" style="margin-top:12px"><button class="btn sec full" onclick="go(1)">Change your setup</button></div></div>
+
+  <div class="card"><h3>Reminders</h3>
+    <p class="muted" style="margin:6px 0 12px">A friendly nudge on your come-back days, and if you drift off. Turn it off anytime.</p>
+    <div class="row"><button class="btn ${S.notify?'go':'sec'} full" onclick="setNotify(${S.notify?'false':'true'})">${S.notify?'Reminders are on':'Turn reminders on'}</button></div>
+    <p class="muted" style="margin:10px 0 0">Reminders start with the next update.</p></div>
+
+  <div class="card"><h3>Your plan</h3>
+    <p class="muted" style="margin:6px 0 0">You are on the <b>Free</b> plan.</p></div>
 
   <div class="card"><h3>Your areas</h3>
     <p class="muted" style="margin:6px 0 14px">Pick an area to assess, or continue where you left off.</p>
@@ -1639,7 +1661,12 @@ function vAccount(){
     <button class="mtile" onclick="go(6)"><span class="mi">&#128202;</span><b>Progress &amp; data</b></button>
     <button class="mtile" onclick="go(7)"><span class="mi">&#128274;</span><b>Privacy &amp; legal</b></button>
     <button class="mtile" onclick="signOutUser()"><span class="mi">&#128682;</span><b>Log out</b></button>
-  </div>`,
+  </div>
+
+  ${V.del?`<div class="card"><h3 style="color:var(--rose)">Delete your account?</h3>
+    <p class="muted" style="margin:6px 0 12px">This erases your account and everything in it. It cannot be undone.</p>
+    <div class="row"><button class="btn sec" onclick="V.del=false;render()">Keep it</button><button class="btn" style="background:var(--rose)" onclick="doDelete()">Delete everything</button></div></div>`
+    :`<div class="row" style="margin-top:2px"><button class="btn sec full" style="color:var(--rose)" onclick="V.del=true;render()">Delete my account</button></div>`}`,
   {crumb:'Your account',noBack:true});
 }
 /* ---------- render ---------- */
@@ -1663,7 +1690,8 @@ window.brigvantiApp={
     await load();
     S.signed=true;
     if(user&&user.email&&!S.email)S.email=user.email;
-    S.stage=9;
+    S.authProvider=(user&&user.providerData&&user.providerData[0]&&user.providerData[0].providerId)||'';
+    S.stage=setupDone()?9:1;
     LAST=-1;render();
     save();
     enableAnalytics();
@@ -1694,6 +1722,12 @@ S=fresh();
 window.__brigAuthPending=true;
 render();
 setTimeout(function(){ if(window.__brigAuthPending){ window.__brigAuthPending=false; render(); } },6000);
+try{ history.replaceState(null,''); history.pushState(null,''); }catch(e){}
+window.addEventListener('popstate',function(){
+  var canBack=!!(S&&S.signed&&S.stage!==0&&(V.pf||V.rep||V.ru||S.stage!==9));
+  if(canBack){ try{history.pushState(null,'');}catch(e){} back(); }
+  else{ try{history.back();}catch(e){} }
+});
 </script>
 <script type="module">
 /* Firebase auth and storage layer.
@@ -1702,7 +1736,7 @@ setTimeout(function(){ if(window.__brigAuthPending){ window.__brigAuthPending=fa
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup,
          signInWithEmailAndPassword, createUserWithEmailAndPassword,
-         signOut, deleteUser } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+         signOut, deleteUser, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { initializeFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -1837,6 +1871,10 @@ window.brigvantiDeleteAccount=async function(){
   if(uid) await deleteDoc(doc(db,'users',uid));
   const u=auth.currentUser;
   if(u) await deleteUser(u);
+};
+window.brigvantiSendReset=async function(){
+  const u=auth.currentUser;
+  if(u&&u.email) await sendPasswordResetEmail(auth,u.email);
 };
 
 onAuthStateChanged(auth,async function(user){
