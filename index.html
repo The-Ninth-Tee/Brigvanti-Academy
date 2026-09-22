@@ -170,6 +170,34 @@ label.fl{display:block;font-size:12px;font-weight:700;margin:0 0 6px;text-transf
 .mtiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}
 .mtile{background:var(--card);border:1px solid var(--line);border-radius:var(--r-sm);padding:18px 12px;text-align:center;cursor:pointer;font:inherit;color:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:100px;transition:background .15s ease,border-color .15s ease,transform .06s ease}
 .mtile:hover{background:var(--teal-l);border-color:var(--teal-d)}
+.sect{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--ink3);margin:22px 4px 8px}
+.rows{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.rw{display:flex;align-items:center;gap:12px;padding:14px 16px;border:0;border-top:1px solid var(--line2);text-align:left;width:100%;background:none;font:inherit;color:var(--ink)}
+.rw:first-child{border-top:0}
+button.rw{cursor:pointer}
+@media(hover:hover){button.rw:hover{background:var(--soft)}}
+.rw .ic{width:38px;height:38px;border-radius:var(--r-sm);display:grid;place-items:center;font-size:18px;flex:0 0 auto;background:var(--soft)}
+.rw .ic.a{background:var(--teal-l)}
+.rw .ic.c{background:var(--amber-l)}
+.rw .tx{flex:1;min-width:0}
+.rw .tx b{display:block;font-size:15px;font-weight:700}
+.rw .tx span{display:block;font-size:13px;color:var(--ink3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rw .chev{color:var(--ink3);font-size:22px;flex:0 0 auto;line-height:1}
+.iconbtn{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--card);display:grid;place-items:center;cursor:pointer;color:var(--ink2);flex:0 0 auto;font-size:15px}
+.pill{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:5px 10px;border-radius:99px;background:var(--soft);color:var(--ink2);flex:0 0 auto}
+.pill.ok{background:var(--teal-l);color:var(--teal-d)}
+.tgl{position:relative;width:46px;height:26px;flex:0 0 auto;border:0;padding:0;border-radius:99px;background:var(--line);cursor:pointer;transition:background .15s}
+.tgl.on{background:var(--teal-d)}
+.tgl i{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .15s}
+.tgl.on i{left:23px}
+.nedit{display:flex;gap:8px;align-items:center;flex:1}
+.nedit input{flex:1}
+.fold{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.fold>summary{list-style:none;cursor:pointer;padding:14px 16px;font-weight:700;font-size:15px;display:flex;align-items:center;gap:12px}
+.fold>summary::-webkit-details-marker{display:none}
+.fold>summary .chev{margin-left:auto;color:var(--ink3);font-size:22px;transition:transform .15s}
+.fold[open]>summary .chev{transform:rotate(90deg)}
+.fold .fbody{padding:0 16px 16px}
 .mtile:active{transform:scale(.97)}
 .mtile .mi{font-size:23px;line-height:1}
 .mtile b{font-size:13.5px;font-weight:700;line-height:1.25}
@@ -621,6 +649,7 @@ function back(){
 }
 function setupDone(){ return !!(S&&S.name&&S.name.trim()&&S.consent&&Object.keys(S.targets||{}).length); }
 function setNotify(v){ if(!S)return; S.notify=!!v; save(); render(); }
+function saveName(){ if(!(S.name||'').trim()){ toast('A name is required.'); return; } save(); if(V)V.editName=false; render(); }
 async function doPasswordReset(){ try{ await window.brigvantiSendReset(); toast('Reset link sent to your email.'); }catch(e){ toast('Could not send the reset email. Try again.'); } }
 async function doDelete(){ try{ await window.brigvantiDeleteAccount(); }catch(e){ if(V)V.del=false; render(); toast((window.brigvantiAuth&&window.brigvantiAuth.msg)?window.brigvantiAuth.msg(e):'Could not delete. Sign in again and retry.'); } }
 /* ---------- analytics consent gate ----------
@@ -767,12 +796,12 @@ function vStart(){
   const showRole=roleModes&&!S.roleSkipped;
   const showAmb=S.mode&&(!roleModes||S.roleSkipped);
   const ready=Object.keys(S.targets).length>0;
-  return shell(`<h1>Set up</h1>
-  <p class="lede">A few quick things, then the scan begins. You can change any of this later.</p>
+  return shell(`<h1>${setupDone()?'Change your focus':'Set up'}</h1>
+  <p class="lede">${setupDone()?'Update what you are aiming for, then re-run the scan.':'A few quick things, then the scan begins. You can change any of this later.'}</p>
 
-  <div class="card"><label class="fl" for="nm">What should your coach call you?</label>
+  ${!setupDone()?`<div class="card"><label class="fl" for="nm">What should your coach call you?</label>
     <input id="nm" placeholder="Your first name" value="${esc(S.name)}" oninput="S.name=this.value;var b=document.getElementById('startBtn');if(b)b.disabled=!this.value.trim();">
-    <p class="muted" style="margin:8px 0 0">A nickname is fine. This is needed to continue.</p></div>
+    <p class="muted" style="margin:8px 0 0">A nickname is fine. This is needed to continue.</p></div>`:''}
 
   <div class="card"><h3>What brings you here?</h3>
     <p class="muted" style="margin:6px 0 14px">This only sets the level you are aiming for. It never changes how you are placed.</p>
@@ -1627,46 +1656,46 @@ function vAccount(){
     if(domDone(d))return `<div class="opt" style="opacity:.55"><b>${esc(DATA.doms[d])}</b><span class="sub">Assessed</span></div>`;
     return `<button class="opt" onclick="scanDom('${d}')"><b>${esc(DATA.doms[d])}</b><span class="sub">Assess this area</span></button>`;
   }).join('');
-  return shell(`<h1>Welcome back${nm?', '+nm:''}</h1>
-  <p class="lede">You have assessed ${doneCount} of ${total} areas.</p>
+  const isG=S.authProvider==='google.com';
+  const modeLbl={work:'At work',personal:'In my own life',both:'Work and life'}[S.mode]||'Not set';
+  const focusSub=S.role?esc(S.role):modeLbl;
+  const nameRow=V.editName
+    ?`<div class="rw"><div class="ic a">&#128100;</div><div class="nedit"><input id="anm" value="${esc(S.name)}" placeholder="Your name" oninput="S.name=this.value" onkeydown="if(event.key==='Enter')saveName()"><button class="iconbtn" onclick="saveName()" aria-label="Save">&#10003;</button></div></div>`
+    :`<div class="rw"><div class="ic a">&#128100;</div><div class="tx"><b>Your name</b><span>${esc(S.name||'Not set')}</span></div><button class="iconbtn" onclick="V.editName=true;render()" aria-label="Edit name">&#9998;</button></div>`;
+  const secRows=isG
+    ?`<div class="rw"><div class="ic">&#128273;</div><div class="tx"><b>Google Sign-In</b><span>${esc(S.email||'')}</span></div><span class="pill ok">Connected</span></div>`
+    :`<button class="rw" onclick="doPasswordReset()"><div class="ic">&#128274;</div><div class="tx"><b>Change password</b><span>A secure reset link is emailed to you</span></div><span class="chev">&#8250;</span></button>`;
+  const delRows=V.del
+    ?`<div class="rows" style="margin-top:22px"><div class="rw"><div class="ic c">&#9888;</div><div class="tx"><b style="color:var(--rose)">Delete your account?</b><span>This erases everything. It cannot be undone.</span></div></div><div class="rw" style="gap:10px"><button class="btn sec" style="flex:1" onclick="V.del=false;render()">Keep it</button><button class="btn" style="flex:1;background:var(--rose)" onclick="doDelete()">Delete</button></div></div>`
+    :`<div class="rows" style="margin-top:22px"><button class="rw" onclick="V.del=true;render()"><div class="ic">&#128465;</div><div class="tx"><b style="color:var(--rose)">Delete my account</b><span>Erase everything, permanently</span></div><span class="chev">&#8250;</span></button></div>`;
+  return shell(`<div class="sect">Personal</div>
+  <div class="rows">${nameRow}
+    <div class="rw"><div class="ic">&#9993;</div><div class="tx"><b>Email</b><span>${esc(S.email||'Not set')}</span></div></div>
+    <button class="rw" onclick="go(1)"><div class="ic">&#127919;</div><div class="tx"><b>Your focus</b><span>${focusSub}</span></div><span class="chev">&#8250;</span></button></div>
 
-  <div class="card"><label class="fl" for="anm">What should your coach call you?</label>
-    <input id="anm" placeholder="Your first name" value="${esc(S.name)}" oninput="S.name=this.value" onchange="if(!this.value.trim()){this.value=S.name;}else{S.name=this.value;save();}">
-    <p class="muted" style="margin:8px 0 0">A nickname is fine. A name is required.</p></div>
+  <div class="sect">Security</div>
+  <div class="rows">${secRows}</div>
 
-  <div class="card"><h3>Sign in</h3>
-    ${S.email?`<p class="muted" style="margin:6px 0 0">You are signed in as ${esc(S.email)}.</p>`:''}
-    ${S.authProvider==='google.com'
-      ?`<p class="muted" style="margin:8px 0 0">This account is linked to your Google account. Google manages your password.</p>`
-      :`<div style="display:flex;align-items:center;gap:12px;margin:12px 0 0"><span class="fl" style="margin:0">Password</span><span style="letter-spacing:3px;color:var(--ink3)">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span></div>
-        <div class="row" style="margin-top:10px"><button class="btn sec full" onclick="doPasswordReset()">Change password</button></div>
-        <p class="muted" style="margin:8px 0 0">We send a secure reset link to your email. For safety, we never show or store your password.</p>`}
-    <div class="row" style="margin-top:12px"><button class="btn sec full" onclick="go(1)">Change your setup</button></div></div>
+  <div class="sect">Notifications</div>
+  <div class="rows"><div class="rw"><div class="ic c">&#128276;</div><div class="tx"><b>Reminders</b><span>Nudges on your come-back days. Live soon.</span></div><button class="tgl ${S.notify?'on':''}" onclick="setNotify(${S.notify?'false':'true'})" aria-label="Toggle reminders"><i></i></button></div></div>
 
-  <div class="card"><h3>Reminders</h3>
-    <p class="muted" style="margin:6px 0 12px">A friendly nudge on your come-back days, and if you drift off. Turn it off anytime.</p>
-    <div class="row"><button class="btn ${S.notify?'go':'sec'} full" onclick="setNotify(${S.notify?'false':'true'})">${S.notify?'Reminders are on':'Turn reminders on'}</button></div>
-    <p class="muted" style="margin:10px 0 0">Reminders start with the next update.</p></div>
+  <div class="sect">Subscription</div>
+  <div class="rows"><div class="rw"><div class="ic c">&#11088;</div><div class="tx"><b>Current plan</b><span>Free</span></div><span class="pill">Free</span></div></div>
 
-  <div class="card"><h3>Your plan</h3>
-    <p class="muted" style="margin:6px 0 0">You are on the <b>Free</b> plan.</p></div>
+  <div class="sect">Your areas</div>
+  <details class="fold" open><summary>Areas <span class="pill ok">${doneCount}/${total}</span><span class="chev">&#8250;</span></summary>
+    <div class="fbody"><p class="muted" style="margin:2px 0 12px">Pick an area to assess, or continue where you left off.</p>
+    ${rows}
+    ${doneCount<total?`<div class="row" style="margin-top:8px"><button class="btn go full" onclick="goScan()">Continue the scan</button></div>`:''}</div></details>
 
-  <div class="card"><h3>Your areas</h3>
-    <p class="muted" style="margin:6px 0 14px">Pick an area to assess, or continue where you left off.</p>
-    ${rows}</div>
-
-  ${doneCount<total?`<div class="row"><button class="btn go full" onclick="goScan()">Continue the scan</button></div>`:''}
-  <div class="mtiles">
-    <button class="mtile" onclick="practiseDom('')"><span class="mi">&#128221;</span><b>Assignments</b></button>
-    <button class="mtile" onclick="go(6)"><span class="mi">&#128202;</span><b>Progress &amp; data</b></button>
-    <button class="mtile" onclick="go(7)"><span class="mi">&#128274;</span><b>Privacy &amp; legal</b></button>
-    <button class="mtile" onclick="signOutUser()"><span class="mi">&#128682;</span><b>Log out</b></button>
+  <div class="sect">General</div>
+  <div class="rows">
+    <button class="rw" onclick="practiseDom('')"><div class="ic">&#128221;</div><div class="tx"><b>Assignments</b></div><span class="chev">&#8250;</span></button>
+    <button class="rw" onclick="go(6)"><div class="ic">&#128202;</div><div class="tx"><b>Progress &amp; data</b></div><span class="chev">&#8250;</span></button>
+    <button class="rw" onclick="go(7)"><div class="ic">&#128196;</div><div class="tx"><b>Privacy &amp; legal</b></div><span class="chev">&#8250;</span></button>
+    <button class="rw" onclick="signOutUser()"><div class="ic">&#128682;</div><div class="tx"><b>Log out</b></div><span class="chev">&#8250;</span></button>
   </div>
-
-  ${V.del?`<div class="card"><h3 style="color:var(--rose)">Delete your account?</h3>
-    <p class="muted" style="margin:6px 0 12px">This erases your account and everything in it. It cannot be undone.</p>
-    <div class="row"><button class="btn sec" onclick="V.del=false;render()">Keep it</button><button class="btn" style="background:var(--rose)" onclick="doDelete()">Delete everything</button></div></div>`
-    :`<div class="row" style="margin-top:2px"><button class="btn sec full" style="color:var(--rose)" onclick="V.del=true;render()">Delete my account</button></div>`}`,
+  ${delRows}`,
   {crumb:'Your account',noBack:true});
 }
 /* ---------- render ---------- */
