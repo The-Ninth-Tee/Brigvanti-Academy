@@ -190,6 +190,8 @@ button.rw{cursor:pointer}
 .tgl.on{background:var(--teal-d)}
 .tgl i{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .15s}
 .tgl.on i{left:23px}
+.modal-bg{position:fixed;inset:0;background:rgba(15,23,42,.55);display:grid;place-items:center;z-index:70;padding:24px}
+.modal{background:var(--card);border-radius:var(--r);padding:22px;max-width:340px;width:100%;text-align:center;box-shadow:0 20px 50px rgba(15,23,42,.3)}
 .nedit{display:flex;gap:8px;align-items:center;flex:1}
 .nedit input{flex:1}
 .fold{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
@@ -249,7 +251,7 @@ const AMB=[[2,'Confident with the basics','I want AI to be genuinely useful in d
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
   .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-let S=null, V={}, LAST=-1;
+let S=null, V={}, LAST=-1, NAV=[], EXITING=false;
 
 function fresh(){return{
   signed:false,email:'',name:'',mode:null,role:null,ambition:null,topics:[],targets:{},r1:null,r2:null,entry:1,
@@ -368,7 +370,7 @@ async function deleteEverywhere(){
 }
 async function wipe(){
   const ok=await deleteEverywhere();
-  S=fresh();V={};LAST=-1;
+  S=fresh();V={};LAST=-1;NAV=[];
   if(!ok)V.err='Your data was removed from this device. Removing it from our storage failed, so please contact us and we will finish it.';
   render();
 }
@@ -632,20 +634,23 @@ If they left the prompt out, do not mention that it is missing.`);
 /* ---------- navigation ---------- */
 const TITLE=['Sign in','Set up','Insight scan','Where you stand','Practice','Level up','Your progress','Privacy and legal','Portfolio','Your account'];
 function go(n){
-  if(n===7){S.back7=S.stage;}
   if(n===8)V.pf=null;
   if(n===S.stage&&!V.rep&&!V.ru)return;
+  if(n!==S.stage){NAV.push(S.stage);if(NAV.length>60)NAV.shift();}
   S.stage=n;V={};save();render();
 }
 function back(){
+  if(V.leaving){V.leaving=false;render();return;}
+  if(V.del){V.del=false;render();return;}
+  if(V.editName){V.editName=false;render();return;}
+  if(V.reset){V.reset=false;render();return;}
+  if(V.ops){V.ops=false;render();return;}
+  if(V.skills){V.skills=null;render();return;}
   if(V.rep){V.rep=null;render();return;}
   if(V.ru){V.ru=null;render();return;}
-  if(S.stage===8&&V.pf){V.pf=null;render();return;}
-  if(S.stage===7)return go(S.back7!=null?S.back7:(S.signed?6:0));
-  const map={1:9,2:3,3:2,4:3,5:4,6:9,7:(S.signed?6:0),8:6,9:6};
-  if(S.stage===2&&!scanned())return go(1);
-  if(S.stage===3&&!scanned())return go(2);
-  go(map[S.stage]!=null?map[S.stage]:0);
+  if(V.pf){V.pf=null;render();return;}
+  if(NAV.length){S.stage=NAV.pop();V={};save();render();return;}
+  V.leaving=true;render();
 }
 function setupDone(){ return !!(S&&S.name&&S.name.trim()&&S.consent&&Object.keys(S.targets||{}).length); }
 function setNotify(v){ if(!S)return; S.notify=!!v; save(); render(); }
@@ -899,6 +904,7 @@ function vClaim(c,d,cs){
   return shell(`<div class="eyebrow">${esc(DATA.doms[d])}</div>
   <h1>${esc(c.n)}</h1>
   <p class="lede">Choose the highest statement that is true for you. Then you show it, because the statement alone does not set your level.</p>
+  <p class="muted" style="margin:-6px 0 14px;font-size:13px">Area ${scanOrder().indexOf(d)+1} of ${DK.length} &#183; ${DK.filter(x=>domDone(x)).length} placed so far.</p>
   <div class="card">${rungs}
   <button class="opt" onclick="claim('${c.id}',${Math.max(c.fl-1,0)})">None of these fit me yet.</button></div>
   <div class="row"><button class="btn sec full" onclick="skipComp('${c.id}')">Skip this skill</button></div>`,
@@ -954,26 +960,32 @@ function vDomDone(d){
   const cur=domLevel(d);
   const rows=cs.map(c=>`<div class="line"><div class="nm">${esc(c.n)}</div>
     <span class="chip t">${LV[S.scan[c.id].confirmed||0]}</span></div>`).join('');
-  const left=DK.filter(x=>!domDone(x)).length;
+  const earned=(V.earned||[]).slice(); V.earned=null;
+  const badge=earned.length?byBadge[earned[0]]:null;
+  const next=DK.filter(x=>!domDone(x))[0];
   return shell(`<div class="card warm pop" style="text-align:center">
-    <div style="font-size:34px">&#10003;</div>
-    <h2 style="margin-top:6px">${esc(DATA.doms[d])} is placed</h2>
-    <p class="muted" style="margin:6px 0 0">Overall you are at <b style="color:var(--ink)">${LV[cur||0]}</b> here.</p></div>
+    <div style="font-size:48px;line-height:1">${badge?badge.i:'🎉'}</div>
+    <h2 style="margin-top:10px">${esc(DATA.doms[d])} is scanned</h2>
+    <p class="muted" style="margin:8px 0 0">You are at <b style="color:var(--ink)">${LV[cur||0]}</b> here.</p>
+    ${badge?`<div style="margin-top:14px;border-top:1px solid var(--line);padding-top:14px">
+      <div class="eyebrow" style="color:var(--amber-d)">Badge earned</div>
+      <b style="font-size:16px">${badge.n}</b><div class="muted">${badge.d}</div></div>`:''}</div>
   <div class="card">${rows}</div>
   <div class="row">
-    <button class="btn go full" onclick="go(3)">See where you stand</button></div>
+    ${next?`<button class="btn go full" onclick="scanDom('${next}')">Go to next domain</button>`
+      :`<button class="btn go full" onclick="go(6)">Go to your progress</button>`}</div>
   <div class="row">
-    ${left?`<button class="btn sec full" onclick="pickNext()">Choose the next area</button>`:''}
-    <button class="btn sec full" onclick="go(4)">Start practising</button></div>
+    ${next?`<button class="btn sec full" onclick="go(6)">Go to your progress</button>`:''}
+    <button class="btn sec full" onclick="practiseDom('')">Start practising</button></div>
   <p class="muted" style="margin-top:14px">You can stop here and come back. Everything is saved.</p>`,
   {crumb:'Area complete',pct:100});
 }
-function pickNext(){S.dom=null;go(3);}
+function pickNext(){S.dom=null;go(6);}
 function vAllDone(){
   return shell(`<div class="card warm pop" style="text-align:center">
     <div style="font-size:34px">&#10003;</div><h2>Every area is placed</h2>
     <p class="muted" style="margin:6px 0 0">You have a full picture now.</p></div>
-    <div class="row"><button class="btn go full" onclick="go(3)">See where you stand</button></div>`,
+    <div class="row"><button class="btn go full" onclick="go(6)">See your progress</button></div>`,
   {crumb:'Scan complete',pct:100});
 }
 
@@ -1211,9 +1223,9 @@ function vStand(){
   <div class="row"><button class="btn sec full" onclick="go(6)">Your progress</button></div>`,
   {crumb:'Your profile',pct:Math.round(scanned()/DATA.comps.length*100)});
 }
-function practiseDom(d){S.focus=d||'';S.stage=4;V={};save();render();}
+function practiseDom(d){if(S.stage!==4){NAV.push(S.stage);if(NAV.length>60)NAV.shift();}S.focus=d||'';S.stage=4;V={};save();render();}
 function scanDom(d){
-  if(domDone(d)){S.dom=d;S.stage=2;V={};save();render();return;}
+  if(S.stage!==2){NAV.push(S.stage);if(NAV.length>60)NAV.shift();}
   S.dom=d;S.stage=2;V={};save();render();
 }
 
@@ -1458,7 +1470,7 @@ function vRungRun(){
       <h2 style="margin-top:4px">You reached ${LV[R.tgt]}</h2>
       <p style="margin:8px 0 0">You answered a question you had never seen, and you confirmed a real task against fixed points. ${esc(c.n)} now sits at ${LV[R.tgt]}.</p>
       ${rw&&rw.phase?`<p style="margin-top:10px;font-weight:600">${esc(rw.phase)}</p>`:''}</div>
-    <div class="row"><button class="btn go full" onclick="V.ru=null;go(3)">See where you stand</button></div>
+    <div class="row"><button class="btn go full" onclick="V.ru=null;go(6)">See your progress</button></div>
     <div class="row"><button class="btn sec full" onclick="V.ru=null;render()">Another level up</button></div>`,
     {crumb:'Level up test'});}
 }
@@ -1497,6 +1509,31 @@ function vProgress(){
     return `<div class="line"><div class="nm">${esc(c.n)}
       <span>${esc(DATA.doms[c.d])}${n?` &#183; ${n} assignment${n>1?'s':''}`:''}</span></div>
       <span class="chip ${up?'a':'t'}">${up?'&#8593; ':''}${LV[lv]}</span></div>`;}).join('');
+  const avgN=placed.length?placed.reduce((a,c)=>a+(S.scan[c.id].confirmed||0),0)/placed.length:null;
+  const avgLv=avgN==null?null:Math.round(avgN);
+  if(V.skills){
+    return shell(`<h1>Your skills</h1>
+  <p class="lede">Every skill you have placed, with its level.</p>
+  <div class="card">${rows||'<p class="muted">Nothing placed yet. Scan an area from Your progress to begin.</p>'}</div>`,{crumb:'Your skills'});
+  }
+  const doms=scanOrder().map(d=>{
+    const cur=domLevel(d),tgt=domTarget(d),n=domCount(d),tot=compsOf(d).length;
+    if(cur===null)return `<button class="dom" onclick="scanDom('${d}')">
+      <div class="dom-h"><b>${esc(DATA.doms[d])}</b><span class="arrow">&#8594;</span></div>
+      <div class="muted">Not scanned yet. Tap to start this area.</div></button>`;
+    const gg=tgt-cur;
+    return `<button class="dom" onclick="scanDom('${d}')">
+      <div class="dom-h"><b>${esc(DATA.doms[d])}</b>
+        <span class="chip t">${LV[cur]}</span><span class="arrow">&#8594;</span></div>
+      ${steps(cur,tgt)}
+      <div class="muted" style="margin-top:9px">${
+        !domDone(d)?`${n} of ${tot} skills placed. Tap to continue.`
+        :gg>0?`${aimWord()} ${LV[tgt]}. ${gg} level${gg>1?'s':''} to grow.`
+        :'You are at or above what you are aiming for.'}</div></button>`;
+  }).join('');
+  const over=claimGap().filter(x=>x.gap>0).slice(0,3);
+  const gp=gaps();
+  const elig=DATA.comps.filter(c=>canLevelUp(c.id));
   return shell(`<h1>Your progress</h1>
   <p class="lede">What you have built so far. It grows every time you hand something in.</p>
   <div class="grid">
@@ -1507,7 +1544,28 @@ function vProgress(){
     <div class="tile"><b style="color:var(--amber-d)">${earnedCount()}</b><span>badges earned</span></div>
     <div class="tile"><b>${DATA.comps.length}</b><span>skills in total</span></div>
   </div>
-  <div class="card"><h3>Your skills</h3><div style="margin-top:6px">${rows||'<p class="muted">Nothing placed yet.</p>'}</div></div>
+  <button class="opt" onclick="V.skills=true;render()" style="display:flex;align-items:center;gap:14px;background:var(--teal-l);box-shadow:none">
+    <div style="flex:1"><b style="display:block">Your AI-literacy level</b>
+      <span class="sub">${avgLv==null?'Not placed yet. Scan an area to begin.':`Across ${placed.length} placed skill${placed.length>1?'s':''}. Tap for the breakdown.`}</span></div>
+    <span style="font-size:18px;font-weight:800;color:var(--teal-d);white-space:nowrap">${avgLv==null?'&#8212;':LV[avgLv]}</span>
+    <span class="arrow" style="color:var(--ink3)">&#8594;</span></button>
+  ${elig.length?`<button class="opt" onclick="go(5)" style="display:flex;align-items:center;gap:14px;background:var(--amber-l);box-shadow:none;margin-top:12px">
+    <div style="flex:1"><b style="display:block">Level up</b>
+      <span class="sub">${elig.length} skill${elig.length>1?'s':''} ready for a level-up test.</span></div>
+    <span class="arrow" style="color:var(--amber-d)">&#8594;</span></button>`:''}
+  <details class="fold" open style="margin-top:14px"><summary>Where you stand <span class="fx">tap an area to scan or practise &#9662;</span></summary>
+    <div class="fb"><p class="muted" style="margin:0 0 12px">A mirror, not a verdict. It moves as you practise.</p>
+    ${doms}
+    ${over.length?`<div class="card" style="margin-top:16px;box-shadow:none;border:1px solid var(--line)"><h3>Where you judged yourself differently</h3>
+      <p class="muted" style="margin:6px 0 10px">You picked a higher statement than the questions showed. That is normal and useful.</p>
+      ${over.map(x=>`<div class="line"><div class="nm">${esc(x.n)}
+        <span>You chose ${LV[x.claimed]}. Placed at ${LV[x.conf]}.</span></div></div>`).join('')}</div>`:''}
+    ${gp.length?`<div class="card tint" style="box-shadow:none"><h3>Where practice pays off most</h3>
+      <p class="muted" style="margin:6px 0 12px">Choose the area you want to practise now.</p>
+      ${gp.slice(0,4).map(x=>`<button class="opt" onclick="practiseDom('${x.d}')">
+        <b>${esc(DATA.doms[x.d])}</b>
+        <span class="sub">${LV[x.cur]} now. ${aimWord()} ${LV[x.tgt]}.</span></button>`).join('')}</div>`:''}
+    <div class="row" style="margin-top:6px"><button class="btn go full" onclick="practiseDom('')">Practise on real tasks</button></div></div></details>
   <button class="opt" onclick="go(8)" style="background:var(--indigo-l);box-shadow:none">
     <b>Your portfolio</b>
     <span class="sub">${S.reps.length?`${S.reps.length} piece${S.reps.length>1?'s':''} of your own work, kept in order.`:'Your work appears here once you hand something in.'}</span>
@@ -1703,10 +1761,18 @@ function render(){
   if(!S.signed&&S.stage!==7)S.stage=0;
   const v=[vAccess,vStart,vScan,vStand,vPractice,vRung,vProgress,vLegal,vPortfolio,vAccount][S.stage]||vAccess;
   const y=window.scrollY;
-  document.getElementById('app').innerHTML=v();
+  document.getElementById('app').innerHTML=v()+(V.leaving?leavingOverlay():'');
   if(S.stage!==LAST){window.scrollTo(0,0);LAST=S.stage;}
   else window.scrollTo(0,y);
 }
+function leavingOverlay(){
+  return `<div class="modal-bg" onclick="V.leaving=false;render()"><div class="modal" onclick="event.stopPropagation()">
+    <h3>You are leaving the app</h3>
+    <p class="muted" style="margin:8px 0 16px">Do you want to leave?</p>
+    <div class="row"><button class="btn sec" style="flex:1" onclick="V.leaving=false;render()">No, stay</button>
+    <button class="btn" style="flex:1" onclick="doExit()">Yes, leave</button></div></div></div>`;
+}
+function doExit(){ V.leaving=false; render(); signOutUser(); }
 /* Boot is driven by the Firebase auth layer below.
    onSignedIn loads the user's stored state; onSignedOut returns to sign in. */
 window.brigvantiApp={
@@ -1715,7 +1781,7 @@ window.brigvantiApp={
     S.signed=true;
     if(user&&user.email&&!S.email)S.email=user.email;
     S.authProvider=(user&&user.providerData&&user.providerData[0]&&user.providerData[0].providerId)||'';
-    S.stage=setupDone()?6:1;
+    S.stage=setupDone()?6:1;NAV=[];
     LAST=-1;render();
     save();
     enableAnalytics();
@@ -1727,7 +1793,7 @@ window.brigvantiApp={
     }).catch(function(){});
   },
   onSignedOut(){
-    S=fresh();V={};LAST=-1;render();
+    S=fresh();V={};LAST=-1;NAV=[];render();
   },
   /* A change arrived from another device. Merge in its progress, keep our own
      screen, and refresh only when it is safe. Never interrupt typing. */
@@ -1748,9 +1814,8 @@ render();
 setTimeout(function(){ if(window.__brigAuthPending){ window.__brigAuthPending=false; render(); } },6000);
 try{ history.replaceState(null,''); history.pushState(null,''); }catch(e){}
 window.addEventListener('popstate',function(){
-  var canBack=!!(S&&S.signed&&S.stage!==0&&(V.pf||V.rep||V.ru||S.stage!==6));
-  if(canBack){ try{history.pushState(null,'');}catch(e){} back(); }
-  else{ try{history.back();}catch(e){} }
+  back();
+  try{ history.pushState(null,''); }catch(e){}
 });
 </script>
 <script type="module">
