@@ -295,7 +295,7 @@ function mergeRung(a,b){
     const x=a[k]||{},y=b[k]||{};
     const passed=!!(x.passed||y.passed),at=Math.max(x.at||0,y.at||0);
     const src=(y.passed&&(y.at||0)>=(x.at||0))?y:x;
-    out[k]=Object.assign({},x,y,{passed:passed,at:at,t:src.t,ev:src.ev});
+    out[k]=Object.assign({},x,y,{passed:passed,at:at,t:src.t,ev:src.ev,grew:src.grew});
   });
   return out;
 }
@@ -323,7 +323,13 @@ function mergeState(base,inc){
   if(!inc) return base;
   const out=Object.assign({},base);
   const bt=base.updated||0,it=inc.updated||0,incNewer=it>bt;
-  SETTINGS.forEach(function(k){ if(incNewer&&inc[k]!==undefined) out[k]=inc[k]; });
+  SETTINGS.forEach(function(k){
+    if(inc[k]===undefined) return;
+    var bv=base[k];
+    var baseEmpty=(bv===undefined||bv===null||bv===''||(Array.isArray(bv)&&!bv.length)||(typeof bv==='object'&&bv&&!Array.isArray(bv)&&!Object.keys(bv).length));
+    if(incNewer||baseEmpty) out[k]=inc[k];
+  });
+  if(out.r1!==null&&out.r1!==undefined) out.entry=out.r1<=1?1:2;
   out.consent=!!(base.consent||inc.consent);
   out.signed=!!(base.signed||inc.signed);
   if(inc.started&&(!base.started||inc.started<base.started)) out.started=inc.started;
@@ -469,7 +475,7 @@ const fmtDate=d=>d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',mont
 function canLevelUp(cid){
   const r=S.scan[cid];if(!r||!r.done||r.skipped)return false;
   const c=byId[cid],t=(r.confirmed||0)+1;
-  return t<=4&&t>=c.fl&&formsAt(cid,t).length>0&&repsFor(cid).length>=1;
+  return t<=4&&t>=c.fl&&formsAt(cid,t).length>0&&repsFor(cid).length>=(t-1);
 }
 function rungState(cid){if(!S.rung[cid])S.rung[cid]={};return S.rung[cid];}
 function pickForms(cid,t){
@@ -645,9 +651,11 @@ function back(){
   if(V.editName){V.editName=false;render();return;}
   if(V.reset){V.reset=false;render();return;}
   if(V.ops){V.ops=false;render();return;}
+  if(V.grow){V.grow=null;render();return;}
   if(V.skills){V.skills=null;render();return;}
   if(V.rep){V.rep=null;render();return;}
   if(V.ru){V.ru=null;render();return;}
+  if(V.lvArea){V.lvArea=null;render();return;}
   if(V.pf){V.pf=null;render();return;}
   if(NAV.length){S.stage=NAV.pop();V={};save();render();return;}
   V.leaving=true;render();
@@ -856,7 +864,7 @@ function pickRole(i){const r=DATA.roles[i];S.role=r.r;S.ambition=null;S.targets=
 
 /* ---------- 2. scan ---------- */
 function vScan(){
-  if(S.r1===null||S.r2===null)return vRoute();
+  if((S.r1===null||S.r2===null)&&!scanned())return vRoute();
   if(!S.dom||domDone(S.dom))S.dom=nextDomain();
   if(!S.dom)return vAllDone();
   const d=S.dom,cs=compsOf(d);
@@ -1133,7 +1141,7 @@ function vPortfolioSkill(){
     <span class="chip t">${LV[(S.scan[id]&&S.scan[id].confirmed)||0]}</span></div>
   ${up.passed?`<div class="card warm"><h3>&#9733; Level earned, ${LV[up.at]}</h3>
     <p class="muted" style="margin:6px 0 8px">Confirmed on ${shortDate(up.t)}.</p>
-    <div class="why"><b>What you made</b>${esc(up.ev||'')}</div></div>`:''}
+    <div class="why"><b>What you made</b>${esc(up.ev||'')}</div>${up.grew?`<div class="why"><b>What changed</b>${esc(up.grew)}</div>`:''}</div>`:''}
   ${compare}
   ${entries||'<div class="card"><p class="muted">No assignments handed in for this skill yet.</p></div>'}`,
   {crumb:'Portfolio'});
@@ -1192,11 +1200,11 @@ function steps(cur,tgt){
 function vStand(){
   const doms=scanOrder().map(d=>{
     const cur=domLevel(d),tgt=domTarget(d),n=domCount(d),tot=compsOf(d).length;
-    if(cur===null)return `<button class="dom" onclick="scanDom('${d}')">
+    if(cur===null)return `<button class="dom" onclick="areaTap('${d}')">
       <div class="dom-h"><b>${esc(DATA.doms[d])}</b><span class="arrow">&#8594;</span></div>
       <div class="muted">Not scanned yet. Tap to start this area.</div></button>`;
     const g=tgt-cur;
-    return `<button class="dom" onclick="scanDom('${d}')">
+    return `<button class="dom" onclick="areaTap('${d}')">
       <div class="dom-h"><b>${esc(DATA.doms[d])}</b>
         <span class="chip t">${LV[cur]}</span><span class="arrow">&#8594;</span></div>
       ${steps(cur,tgt)}
@@ -1394,24 +1402,65 @@ function logRep(){
 /* ---------- 5. level up ---------- */
 function vRung(){
   if(V.ru)return vRungRun();
-  const elig=DATA.comps.filter(c=>canLevelUp(c.id));
-  if(!elig.length)return shell(`<h1>Level up</h1>
-    <p class="lede">A level up test opens once you have handed in one assignment for that skill.</p>
-    <div class="card"><p>Do an assignment first. The test asks you to show the level in two ways, and one of them is a real task.</p>
-    <div class="row"><button class="btn go full" onclick="go(4)">Go and practise</button></div></div>`);
+  if(V.lvArea)return vRungArea(V.lvArea);
+  const list=DK.map(d=>{
+    const done=compsOf(d).some(c=>S.scan[c.id]&&S.scan[c.id].done);
+    const ready=compsOf(d).filter(c=>canLevelUp(c.id)).length;
+    return {d,done,ready};
+  }).filter(x=>x.done);
+  if(!list.length)return shell(`<h1>Level up</h1>
+    <p class="lede">A level up test opens once you have scanned an area and practised its skills.</p>
+    <div class="card"><p>Scan an area, then hand in a practice task. The test then asks you to show the level in two ways, and one of them is a real task.</p>
+    <div class="row"><button class="btn go full" onclick="go(6)">Your progress</button></div></div>`);
   return shell(`<h1>Level up</h1>
-  <p class="lede">Two parts, and both must be clear. Questions are checked against a fixed answer key. The real task you confirm yourself. Your coach decides neither.</p>
-  ${elig.map(c=>{const cur=S.scan[c.id].confirmed||0,t=cur+1,st=rungState(c.id);
-    return `<button class="opt" onclick="openRung('${c.id}')">
-      <b>${esc(c.n)}</b>
-      <span class="sub">${esc(DATA.doms[c.d])}</span>
-      <span style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap">
-        <span class="chip t">${LV[cur]}</span><span class="chip a">&#8593; ${LV[t]}</span>
-        ${st.passed?'<span class="chip i">earned</span>':''}</span></button>`;}).join('')}`);
+  <p class="lede">Pick an area, then a skill that is ready. Both parts of the test must be clear. Questions are checked against a fixed answer key. The real task you confirm yourself. Your coach decides neither.</p>
+  ${list.map(x=>`<button class="opt" onclick="V.lvArea='${x.d}';render()">
+    <b>${esc(DATA.doms[x.d])}</b>
+    <span class="sub">${x.ready?`${x.ready} skill${x.ready>1?'s':''} ready to test`:'Practise a skill to open a test'}</span>
+    <span style="display:flex;gap:7px;margin-top:11px"><span class="chip ${x.ready?'a':''}">${x.ready?'&#8593; '+x.ready+' ready':'in progress'}</span><span class="arrow">&#8594;</span></span></button>`).join('')}`);
 }
+function vRungArea(d){
+  const skills=compsOf(d).filter(c=>S.scan[c.id]&&S.scan[c.id].done&&!S.scan[c.id].skipped);
+  const rows=skills.map(c=>{
+    const cur=S.scan[c.id].confirmed||0,t=cur+1,st=rungState(c.id);
+    const atTop=t>4||t<c.fl||formsAt(c.id,t).length===0;
+    const need=Math.max(t-1,0),have=repsFor(c.id).length,ready=canLevelUp(c.id);
+    const state=(st.passed&&atTop)?'<span class="chip i">at your target</span>'
+      :atTop?'<span class="chip">nothing higher to test</span>'
+      :ready?`<span class="chip a">&#8593; test to ${LV[t]}</span>`
+      :`<span class="chip">${have} of ${need} practised</span>`;
+    return `<button class="opt" ${ready?`onclick="openRung('${c.id}')"`:''} ${ready?'':'style="opacity:.9"'}>
+      <b>${esc(c.n)}</b>
+      <span style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap"><span class="chip t">${LV[cur]}</span>${state}</span>
+      ${(!ready&&!atTop)?`<span class="sub" style="margin-top:8px">Practise ${need-have} more to open the test.</span>`:''}</button>`;
+  }).join('');
+  return shell(`<h1>${esc(DATA.doms[d])}</h1>
+  <p class="lede">Tap a skill that is ready to take its level up test. The rest open as you practise.</p>
+  ${rows||'<div class="card"><p class="muted">No placed skills in this area yet.</p></div>'}`,{crumb:'Level up'});
+}
+function vGrowScreen(){
+  const d=V.grow,cur=domLevel(d),tgt=domTarget(d);
+  const gap=(tgt!=null&&cur!=null)?Math.max(tgt-cur,0):0;
+  const ready=compsOf(d).filter(c=>canLevelUp(c.id)).length;
+  return shell(`<h1>Grow ${esc(DATA.doms[d])}</h1>
+  <p class="lede">${cur!=null?`You are at ${LV[cur]} here. `:''}${gap>0?`${aimWord()} ${LV[tgt]}, ${gap} level${gap>1?'s':''} to grow.`:'You are at or above what you are aiming for.'}</p>
+  <div class="card">
+    <h3>Two ways to grow</h3>
+    <p class="muted" style="margin:6px 0 14px">Practise on a real task to sharpen a skill. When a skill has enough practice behind it, its level up test opens.</p>
+    <div class="row"><button class="btn go full" onclick="practiseDom('${d}')">Practise on real tasks</button></div>
+    <div class="row" style="margin-top:10px">${ready?`<button class="btn sec full" onclick="openAreaLevelUp('${d}')">Level up, ${ready} ready</button>`
+      :`<button class="btn sec full" onclick="practiseDom('${d}')">Level up, practise first to open a test</button>`}</div>
+  </div>`,{crumb:'Grow'});
+}
+function areaTap(d){
+  if(domDone(d)){ if(S.stage!==6){NAV.push(S.stage);S.stage=6;} V.grow=d; save(); render(); return; }
+  scanDom(d);
+}
+function openAreaLevelUp(d){ if(S.stage!==5)NAV.push(S.stage); S.stage=5; V={lvArea:d}; save(); render(); }
+function effortXP(){ return (S.reps?S.reps.length:0)*15 + Object.keys(S.rung||{}).filter(k=>S.rung[k]&&S.rung[k].passed).length*50; }
 function openRung(cid){
   const c=byId[cid],cur=S.scan[cid].confirmed||0,tgt=cur+1;
-  V.ru={cid,c,tgt,forms:pickForms(cid,tgt),ix:0,got:[],step:'a',pick:null,shown:false,cond:[],ev:'',err:''};
+  V.ru={cid,c,tgt,forms:pickForms(cid,tgt),ix:0,got:[],step:'a',pick:null,shown:false,cond:[],ev:'',grew:'',err:''};
   render();
 }
 function vRungRun(){
@@ -1459,6 +1508,8 @@ function vRungRun(){
       <textarea id="ev" style="min-height:100px" placeholder="For example: My weekly team update used to take an hour. I built a prompt that turns my rough notes into our standard format, saved it in my notes app, and Monday's update went out to the team using it."
         oninput="V.ru.ev=this.value;ruSync()">${esc(R.ev)}</textarea>
       <p class="muted" style="margin:8px 0 0">Later you may want to show this, or simply find it again.</p>
+      <label class="fl" style="margin-top:16px" for="grew">What changed in how you work? Optional, one line.</label>
+      <input id="grew" type="text" style="width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--card);color:var(--ink);font-size:15px;font-family:inherit" value="${esc(R.grew||'')}" placeholder="For example: I reuse this now instead of rewriting it each week." oninput="V.ru.grew=this.value">
       <p id="ruHint" class="muted" style="margin:6px 0 0">${ruHintText()}</p>
       <div class="row"><button id="ruConfirm" class="btn go full" ${ruReady()?'':'disabled'} onclick="ruCertify()">Confirm and claim the level</button></div>
       <p class="muted" style="margin-top:12px">Nobody checks this. The level is yours. An honest one is worth more than a high one, because only an honest one tells you what to practise next.</p></div>`,
@@ -1511,7 +1562,7 @@ function ruCertify(){
   if(!R.ev||R.ev.trim().length<25){R.err='Please cover all three points, so your evidence can be found and understood later.';render();return;}
   const before=S.scan[R.cid].confirmed||0;
   S.scan[R.cid].confirmed=R.tgt;
-  const st=rungState(R.cid);st.passed=true;st.at=R.tgt;st.t=Date.now();st.ev=R.ev;
+  const st=rungState(R.cid);st.passed=true;st.at=R.tgt;st.t=Date.now();st.ev=R.ev;st.grew=R.grew||'';
   const rw={c:R.cid,lv:R.tgt,t:Date.now()},d=byId[R.cid].d,dl=domLevel(d);
   if(dl&&dl>=R.tgt&&dl>before)rw.phase=`${DATA.doms[d]} has moved up to ${LV[dl]}.`;
   S.rewards.push(rw);R.step='done';R.err='';checkBadges();save();render();
@@ -1528,6 +1579,7 @@ function vProgress(){
       <span class="chip ${up?'a':'t'}">${up?'&#8593; ':''}${LV[lv]}</span></div>`;}).join('');
   const avgN=placed.length?placed.reduce((a,c)=>a+(S.scan[c.id].confirmed||0),0)/placed.length:null;
   const avgLv=avgN==null?null:Math.round(avgN);
+  if(V.grow)return vGrowScreen();
   if(V.skills){
     return shell(`<h1>Your skills</h1>
   <p class="lede">Every skill you have placed, with its level.</p>
@@ -1535,11 +1587,11 @@ function vProgress(){
   }
   const doms=scanOrder().map(d=>{
     const cur=domLevel(d),tgt=domTarget(d),n=domCount(d),tot=compsOf(d).length;
-    if(cur===null)return `<button class="dom" onclick="scanDom('${d}')">
+    if(cur===null)return `<button class="dom" onclick="areaTap('${d}')">
       <div class="dom-h"><b>${esc(DATA.doms[d])}</b><span class="arrow">&#8594;</span></div>
       <div class="muted">Not scanned yet. Tap to start this area.</div></button>`;
     const gg=tgt-cur;
-    return `<button class="dom" onclick="scanDom('${d}')">
+    return `<button class="dom" onclick="areaTap('${d}')">
       <div class="dom-h"><b>${esc(DATA.doms[d])}</b>
         <span class="chip t">${LV[cur]}</span><span class="arrow">&#8594;</span></div>
       ${steps(cur,tgt)}
@@ -1553,6 +1605,11 @@ function vProgress(){
   const elig=DATA.comps.filter(c=>canLevelUp(c.id));
   return shell(`<h1>Your progress</h1>
   <p class="lede">What you have built so far. It grows every time you hand something in.</p>
+  <div class="card" style="background:var(--slate);color:var(--on-slate);border-top:3px solid var(--amber);display:flex;align-items:center;gap:14px">
+    <div style="flex:1"><div class="eyebrow" style="color:var(--teal)">Effort points</div>
+      <b style="font-size:26px;display:block;line-height:1.1;margin-top:2px">${effortXP()}</b>
+      <span class="sub" style="color:var(--on-slate);opacity:.75">Earned by handing in work and levelling up, never by being right.</span></div>
+  </div>
   <div class="grid">
     <div class="tile"><b style="color:var(--amber-d)">${streak()}</b><span>day streak</span></div>
     <div class="tile"><b style="color:var(--teal-d)">${S.reps.length}</b><span>assignments handed in</span></div>
@@ -1689,6 +1746,7 @@ function exportPortfolioDoc(){
       <div class="ph"><h2>${skill}</h2><span class="lv">Level up &middot; ${lvl}</span></div>
       <div class="meta">${area?area+' &middot; ':''}${date}</div>
       ${block('What you made',r.ev)}
+      ${block('What changed in how you work',r.grew)}
     </article>`;}).join('');
   const css=`:root{--teal:#0E8C7F;--indigo:#4B4DB5;--ink:#14202B;--ink2:#4A5C6B;--ink3:#7A8B98;--bg:#F6F4F0;--card:#fff;--line:#E3E8EC;--teal-l:#E2F4F1;--indigo-l:#ECEDFB}
 *{box-sizing:border-box}
@@ -1740,7 +1798,7 @@ function vAccount(){
   }
   const rows=DK.map(d=>{
     if(domDone(d))return `<div class="opt" style="opacity:.55"><b>${esc(DATA.doms[d])}</b><span class="sub">Assessed</span></div>`;
-    return `<button class="opt" onclick="scanDom('${d}')"><b>${esc(DATA.doms[d])}</b><span class="sub">Assess this area</span></button>`;
+    return `<button class="opt" onclick="areaTap('${d}')"><b>${esc(DATA.doms[d])}</b><span class="sub">Assess this area</span></button>`;
   }).join('');
   const isG=S.authProvider==='google.com';
   const modeLbl={work:'At work',personal:'In my own life',both:'Work and life'}[S.mode]||'Not set';
@@ -1815,7 +1873,11 @@ window.brigvantiApp={
        refresh. Login never waits on this, so a slow or down server does not
        hold up the screen. */
     window.storage.syncFromServer(KEY).then(function(merged){
-      if(merged){ S=mergeState(S,merged); LAST=-1;render(); enableAnalytics(); }
+      if(merged){
+        S=mergeState(S,merged);
+        if(S.stage===1&&!NAV.length&&setupDone())S.stage=6;
+        LAST=-1;render(); save(); enableAnalytics();
+      }
     }).catch(function(){});
   },
   onSignedOut(){
