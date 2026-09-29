@@ -25,7 +25,10 @@ COLS = ["item_id", "competence_id", "level", "form", "claim (I can...)", "stem",
         "option_A", "option_B", "option_C", "option_D", "key", "rationale", "status"]
 # Phrases a text generator uses when talking to its operator. They never belong in learner text.
 LEAK = re.compile(r"next batch|I have successfully|you would like me to|could you specify|"
-                  r"assessment items|next set of items|as an AI|here is the rewritten|here are the", re.I)
+                  r"assessment items|next set of items|as an AI|here is the rewritten|here are the|"
+                  r"would you like|would you prefer|shall I|let me know if|should we refine|"
+                  r"fully processed|successfully processed|to prep", re.I)
+LEVEL_LABEL = re.compile(r"\bL[1-4]\b")
 
 
 def read_content(path):
@@ -97,6 +100,10 @@ def main():
             m = LEAK.search(g[c])
             if m:
                 errors.append(f"{iid}: {c} looks like leaked chat text near '{m.group(0)}'")
+        for c in ("claim (I can...)", "stem", "option_A", "option_B", "option_C", "option_D", "rationale"):
+            m = LEVEL_LABEL.search(g[c])
+            if m:
+                errors.append(f"{iid}: {c} shows the level label '{m.group(0)}'. Learners never see level numbers.")
         k = "ABCD".index(g["key"])
         if k != it["k"]:
             keychg.append(iid)
