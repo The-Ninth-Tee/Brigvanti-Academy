@@ -9,7 +9,8 @@ content file, so run the English build first. It takes item texts from the
 tab Scan Item Bank NL, competence names, level descriptions and proof from
 Competency Matrix NL, and domain names from Domains NL. IDs, keys, levels and
 competences must match the English file exactly. Roles and activities stay
-English until they get Dutch texts.
+English in this file, because saved progress refers to them; the app translates
+them on screen from content/brigvanti-strings.nl.js.
 
 Reads the Scan Item Bank tab. Every row with status AUTHORED replaces the
 texts of the matching item in the content file. Competences, activities,
@@ -153,7 +154,7 @@ def build_nl(xlsx, en_path):
         if v == read_content(en_path)["doms"][d]:
             warns.append(f"{d}: domain name is still English")
 
-    warns.append(f"Roles ({len(data['roles'])}) and activities ({len(data['acts'])}) are still English.")
+    # Roles and activities stay English in the data; the app translates them on screen from brigvanti-strings.nl.js.
     if errors:
         print("Nothing written. Fix these first:")
         for e in errors:

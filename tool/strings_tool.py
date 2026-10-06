@@ -19,7 +19,8 @@ Commands
       dated copy of the workbook. Status becomes 'translated'.
 
   python tools/strings_tool.py build
-      Writes content/brigvanti-strings.nl.js from every row with Dutch text.
+      Writes content/brigvanti-strings.nl.js from every row with Dutch text. Rows with status
+      'hold' or 'unused' are left out, so the app shows the English there.
 
 Global option: --file "path/to/Brigvanti-UI-Strings.xlsx"
 Requires: pip install openpyxl
@@ -292,7 +293,7 @@ def cmd_build(a):
         if not row or not row[0]:
             continue
         rid, en, nl, st = clean(row[0]), clean(row[C["EN"] - 1]), clean(row[C["NL"] - 1]), clean(row[C["status"] - 1])
-        if st == "unused":
+        if st in ("unused", "hold"):
             continue
         if not nl:
             todo += 1; continue
