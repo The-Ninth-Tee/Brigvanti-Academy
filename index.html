@@ -236,8 +236,8 @@ button.rw{cursor:pointer}
 <div id="app"></div>
 <script>
 /* Language. ?lang=nl or ?lang=en sets it and remembers it. Without a stored choice the
-   browser language decides, but only once NL_AUTO is true. */
-(function(){var NL_AUTO=false,l='en';try{var q=new URLSearchParams(location.search).get('lang');
+   browser language decides while NL_AUTO is true. */
+(function(){var NL_AUTO=true,l='en';try{var q=new URLSearchParams(location.search).get('lang');
 if(q==='nl'||q==='en')localStorage.setItem('brigvanti_lang',q);var st=localStorage.getItem('brigvanti_lang');
 if(st==='nl'||st==='en')l=st;else if(NL_AUTO&&/^nl\b/i.test(navigator.language||''))l='nl';}catch(e){}
 window.BRIG_LANG=l;document.documentElement.lang=l;
@@ -1069,7 +1069,7 @@ function vAllDone(){
 }
 
 /* ---------- 7. legal and privacy ---------- */
-const LEGAL_UPDATED='[DATE]';
+const LEGAL_UPDATED=new Date(2026,9,6).toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'});
 function vLegal(){
   const b=(t,body)=>`<div class="card"><h3>${t}</h3><div style="margin-top:8px">${body}</div></div>`;
   return shell(`<h1>Privacy and legal</h1>
@@ -1115,7 +1115,7 @@ function vLegal(){
     <p>Because it holds text you wrote yourself, it is the part of your account most likely to contain something personal. That is why we ask you not to enter private details, and why you can erase all of it in one action.</p>`)}
 
   ${b('How long we keep it',`
-    <p>Your account data is kept while your account is open, and for [RETENTION PERIOD] after you close it.</p>
+    <p>Your account data is kept while your account is open. When you delete your account or reset the pilot, we delete it from our storage straight away. Our storage provider, Google Firebase, completes the deletion from its systems and backups within 180 days. Netlify keeps technical logs with your IP address for up to 90 days, and archived copies for up to one year.</p>
     <p>You can erase everything yourself at any time. Open Your progress and choose Reset this pilot. That deletes your levels, badges, streak and your whole portfolio, from this device and from our storage. We remove the server copy first, and confirm it to you. If that step fails, we tell you rather than pretending it worked.</p>
     <p>Deletion is permanent. Download your record first if you want to keep it.</p>`)}
 
@@ -2002,6 +2002,8 @@ const firebaseConfig = {
 
 const app=initializeApp(firebaseConfig);
 const auth=getAuth(app);
+/* Reset emails and the Google sign-in window follow the app language. */
+auth.languageCode=window.BRIG_LANG==='nl'?'nl':'en';
 /* Connect to the named database "brigvanti". Without the third argument the
    SDK talks to the "(default)" database, which is not where this project's
    data lives, so reads and writes failed with "unavailable" and nothing was
