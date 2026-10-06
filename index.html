@@ -234,7 +234,75 @@ button.rw{cursor:pointer}
 </head>
 <body>
 <div id="app"></div>
-<script src="/content/brigvanti-content.js"></script>
+<script>
+/* Language. ?lang=nl or ?lang=en sets it and remembers it. Without a stored choice the
+   browser language decides, but only once NL_AUTO is true. */
+(function(){var NL_AUTO=false,l='en';try{var q=new URLSearchParams(location.search).get('lang');
+if(q==='nl'||q==='en')localStorage.setItem('brigvanti_lang',q);var st=localStorage.getItem('brigvanti_lang');
+if(st==='nl'||st==='en')l=st;else if(NL_AUTO&&/^nl\b/i.test(navigator.language||''))l='nl';}catch(e){}
+window.BRIG_LANG=l;document.documentElement.lang=l;
+var x=l==='nl'?'.nl':'';
+document.write('<script src="/content/brigvanti-content'+x+'.js"><\/script>'+(l==='nl'?'<script src="/content/brigvanti-strings.nl.js"><\/script>':''));})();
+function setLang(l){try{localStorage.setItem('brigvanti_lang',l);}catch(e){}location.href=location.pathname;}
+</script>
+<script>
+/* Translates the app text after it is written to the page. Keys are the English texts,
+   values the Dutch ones. {0} placeholders match any value; the value itself is translated
+   too when it is a key. Inline <b>, <strong>, <i>, <em> and <br> may sit inside a key.
+   Only runs for Dutch. With ?i18n=debug, untranslated English is collected in window.__i18nMiss. */
+(function(){
+if(window.BRIG_LANG!=='nl'||!window.BRIG_STRINGS)return;
+var D=window.BRIG_STRINGS,EX={},PAT=[],INL={B:1,STRONG:1,I:1,EM:1,BR:1},SKIP={SCRIPT:1,STYLE:1,TEXTAREA:1,INPUT:1,CODE:1,PRE:1},
+    ATTR=['placeholder','aria-label','title','alt'],DEBUG=/i18n=debug/.test(location.search);
+window.__i18nMiss=new Set();
+function norm(t){return String(t).replace(/\s+/g,' ').trim();}
+function rx(t){return t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
+Object.keys(D).forEach(function(k){var v=D[k],nk=norm(k);if(!v)return;
+  if(/\{\d+\}/.test(nk)){var order=[],re='^'+nk.split(/(\{\d+\})/).map(function(p){var m=p.match(/^\{(\d+)\}$/);
+    if(m){order.push(+m[1]);return '(.*?)';}return rx(p);}).join('')+'$';
+    PAT.push({re:new RegExp(re),order:order,v:v,len:nk.replace(/\{\d+\}/g,'').length});}
+  else EX[nk]=v;});
+PAT.sort(function(a,b){return b.len-a.len;});
+function tr(s){var n=norm(s);if(!n)return null;if(Object.prototype.hasOwnProperty.call(EX,n))return EX[n];
+  for(var i=0;i<PAT.length;i++){var m=n.match(PAT[i].re);if(m){var val={};PAT[i].order.forEach(function(ix,j){var c=m[j+1];
+    val[ix]=Object.prototype.hasOwnProperty.call(EX,norm(c))?EX[norm(c)]:c;});
+    return PAT[i].v.replace(/\{(\d+)\}/g,function(x,d){return d in val?val[d]:x;});}}
+  return null;}
+function esc(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function sig(el){var out='',txt=false,tags=false;for(var c=el.firstChild;c;c=c.nextSibling){
+  if(c.nodeType===3){out+=c.nodeValue;if(/\S/.test(c.nodeValue))txt=true;}
+  else if(c.nodeType===1){if(!INL[c.tagName])return null;tags=true;var t=c.tagName.toLowerCase();
+    if(t==='br'){out+='<br>';continue;}var s=sig(c);if(!s)return null;out+='<'+t+'>'+s.s+'</'+t+'>';if(s.txt)txt=true;}}
+  return {s:out,txt:txt,tags:tags};}
+function build(v,el){var q={};el.querySelectorAll('b,strong,i,em').forEach(function(e){var t=e.tagName.toLowerCase();
+  (q[t]=q[t]||[]).push(e.outerHTML.slice(0,e.outerHTML.indexOf('>')+1));});
+  return v.split(/(<\/?(?:b|strong|i|em)>|<br>)/).map(function(p,i){if(i%2===0)return esc(p);
+    var m=p.match(/^<(b|strong|i|em)>$/);return m&&q[m[1]]&&q[m[1]].length?q[m[1]].shift():p;}).join('');}
+function miss(t){if(DEBUG&&/[A-Za-z]{3,}/.test(t))window.__i18nMiss.add(norm(t));}
+function attrs(el){ATTR.forEach(function(a){var v=el.getAttribute&&el.getAttribute(a);if(v){var t=tr(v);if(t)el.setAttribute(a,t);else miss(v);}});}
+/* Fallback for text the app glues together: keep a leading symbol such as ↑ or ★, and translate
+   the parts around " · " one by one. */
+function trText(v){var t=tr(v);if(t!==null)return t;var n=norm(v),m=n.match(/^([^A-Za-z0-9{]+)(.+)$/);
+  if(m){var r=trText(m[2]);if(r!==null)return m[1]+r;}
+  if(n.indexOf(' · ')>0){var ps=n.split(' · '),hit=false;ps=ps.map(function(p){var x=trText(p);if(x!==null){hit=true;return x;}return p;});
+    if(hit)return ps.join(' · ');}
+  return null;}
+function text(n){var v=n.nodeValue;if(!/\S/.test(v))return;var t=trText(v);
+  if(t){var lead=v.match(/^\s*/)[0],trail=v.match(/\s*$/)[0];n.nodeValue=lead+t+trail;}else miss(v);}
+function visit(n){
+  if(n.nodeType===3){if(!(n.parentNode&&SKIP[n.parentNode.tagName]))text(n);return;}
+  if(n.nodeType!==1||SKIP[n.tagName]||n.hasAttribute('data-no-i18n'))return;
+  attrs(n);
+  var s=sig(n);
+  if(s&&s.txt&&s.tags){var t=tr(s.s);if(t){n.innerHTML=build(t,n);return;}}
+  for(var c=n.firstChild;c;){var nx=c.nextSibling;visit(c);c=nx;}}
+var busy=false,obs=new MutationObserver(function(ms){if(busy)return;busy=true;try{ms.forEach(function(m){
+  if(m.type==='childList')m.addedNodes.forEach(visit);else if(m.type==='characterData')visit(m.target);
+  else if(m.type==='attributes')attrs(m.target);});}finally{obs.takeRecords();busy=false;}});
+obs.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:ATTR});
+window.brigI18n={tr:tr};
+})();
+</script>
 <script>
 /* Content lives in /content/brigvanti-content.js. Update it with tools/build_content.py. */
 if(!window.BRIG_CONTENT){document.getElementById('app').innerHTML='<p style="padding:24px">The content could not load. Please refresh the page.</p>';throw new Error('brigvanti content missing');}
@@ -471,7 +539,7 @@ function nextDue(cid){
   d.setDate(d.getDate()+RAMP[Math.min(rs.length,RAMP.length)-1]);
   return d;
 }
-const fmtDate=d=>d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
+const fmtDate=d=>d.toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{weekday:'long',day:'numeric',month:'long'});
 
 /* ---------- level up ---------- */
 function canLevelUp(cid){
@@ -576,6 +644,7 @@ function badgeBanner(){
 
 /* ---------- live coach ---------- */
 async function claude(system,user,json){
+  if(window.BRIG_LANG==='nl')system+='\n\nWrite every text in your reply in Dutch, with informal "je". Never refer to AI as "hij" or "zij". Keep any JSON keys in English.';
   const tok=window.brigvantiAuth?await window.brigvantiAuth.token():null;
   const r=await fetch("/.netlify/functions/coach",{
     method:"POST",
@@ -1086,7 +1155,7 @@ function portfolioSkills(){
   Object.keys(S.rung||{}).forEach(k=>{if(S.rung[k].passed&&ids.indexOf(k)<0)ids.push(k);});
   return ids.filter(id=>byId[id]);
 }
-const shortDate=t=>new Date(t).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+const shortDate=t=>new Date(t).toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'short',year:'numeric'});
 
 function vPortfolio(){
   if(V.pf)return vPortfolioSkill();
@@ -1824,6 +1893,9 @@ function vAccount(){
 
   <div class="sect">Notifications</div>
   <div class="rows"><div class="rw"><div class="ic c">&#128276;</div><div class="tx"><b>Reminders</b><span>Nudges on your come-back days. Live soon.</span></div><button class="tgl ${S.notify?'on':''}" onclick="setNotify(${S.notify?'false':'true'})" aria-label="Toggle reminders"><i></i></button></div></div>
+
+  <div class="sect">Language</div>
+  <div class="rows" data-no-i18n><div class="rw"><div class="ic">&#127760;</div><div class="tx"><b>Taal / Language</b><span>${window.BRIG_LANG==='nl'?'Nederlands':'English'}</span></div><button class="btn sec" style="padding:8px 14px" onclick="setLang('${window.BRIG_LANG==='nl'?'en':'nl'}')">${window.BRIG_LANG==='nl'?'English':'Nederlands'}</button></div></div>
 
   <div class="sect">Subscription</div>
   <div class="rows"><div class="rw"><div class="ic c">&#11088;</div><div class="tx"><b>Current plan</b><span>Free</span></div><span class="pill">Free</span></div></div>
