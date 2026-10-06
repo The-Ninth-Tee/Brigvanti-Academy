@@ -2,6 +2,14 @@
 
 Usage:
     python tools/build_content.py <workbook.xlsx> [content/brigvanti-content.js]
+    python tools/build_content.py <workbook.xlsx> --lang nl
+
+--lang nl writes content/brigvanti-content.nl.js. It starts from the English
+content file, so run the English build first. It takes item texts from the
+tab Scan Item Bank NL, competence names, level descriptions and proof from
+Competency Matrix NL, and domain names from Domains NL. IDs, keys, levels and
+competences must match the English file exactly. Roles and activities stay
+English until they get Dutch texts.
 
 Reads the Scan Item Bank tab. Every row with status AUTHORED replaces the
 texts of the matching item in the content file. Competences, activities,
@@ -29,6 +37,8 @@ LEAK = re.compile(r"next batch|I have successfully|you would like me to|could yo
                   r"would you like|would you prefer|shall I|let me know if|should we refine|"
                   r"fully processed|successfully processed|to prep", re.I)
 LEVEL_LABEL = re.compile(r"\bL[1-4]\b")
+LEAK_NL = re.compile(r"hier zijn de|hieronder volgen|volgende batch|laat me weten|wil je dat ik|"
+                     r"vertaalde items|als AI-model|ik heb de", re.I)
 
 
 def read_content(path):
@@ -63,13 +73,111 @@ def read_bank(xlsx):
     return bank
 
 
+def matrix_rows(wb, sheet):
+    out = {}
+    for r in wb[sheet].iter_rows(min_row=2, values_only=True):
+        if r[0] and re.fullmatch(r"D\d+\.\d+", str(r[0]).strip()):
+            out[str(r[0]).strip()] = r
+    return out
+
+
+def build_nl(xlsx, en_path):
+    out_path = en_path.with_name(en_path.name.replace(".js", ".nl.js"))
+    data = read_content(en_path)
+    wb = openpyxl.load_workbook(xlsx, read_only=True)
+    errors, warns = [], []
+
+    # Items: Dutch texts, everything else must equal the English file.
+    ws = wb["Scan Item Bank NL"]
+    rows = ws.iter_rows(values_only=True)
+    header = [clean(h) for h in next(rows)]
+    missing = [c for c in COLS if c not in header]
+    if missing:
+        sys.exit(f"Missing columns in Scan Item Bank NL: {missing}")
+    ix = {c: header.index(c) for c in COLS}
+    en_bank = read_bank(xlsx)
+    nl = {}
+    for r in rows:
+        iid = clean(r[ix["item_id"]])
+        if iid:
+            nl[iid] = {c: clean(r[ix[c]]) for c in COLS}
+    texts = ("claim (I can...)", "stem", "option_A", "option_B", "option_C", "option_D", "rationale")
+    for it in data["items"]:
+        iid, g = it["i"], nl.get(it["i"])
+        if not g:
+            errors.append(f"{iid}: no row in Scan Item Bank NL"); continue
+        for c in texts:
+            if not g[c]:
+                errors.append(f"{iid}: {c} is empty in Dutch")
+            elif en_bank.get(iid) and g[c] == en_bank[iid][c]:
+                errors.append(f"{iid}: {c} is still the English text")
+            if LEAK.search(g[c]) or LEAK_NL.search(g[c]):
+                errors.append(f"{iid}: {c} looks like leaked chat text")
+            if LEVEL_LABEL.search(g[c]):
+                errors.append(f"{iid}: {c} shows a level label. Learners never see level numbers.")
+        if g["key"] not in ("A", "B", "C", "D") or "ABCD".index(g["key"]) != it["k"]:
+            errors.append(f"{iid}: Dutch key '{g['key']}' differs from the English file")
+        if g["competence_id"] != it["c"] or g["form"] != it["f"]:
+            errors.append(f"{iid}: competence or form differs from the English file")
+        it.update({"cl": g["claim (I can...)"], "s": g["stem"],
+                   "o": [g["option_A"], g["option_B"], g["option_C"], g["option_D"]],
+                   "w": g["rationale"]})
+
+    # Competences: name, four level descriptions, proof.
+    mat = matrix_rows(wb, "Competency Matrix NL")
+    for c in data["comps"]:
+        m = mat.get(c["id"])
+        if not m:
+            errors.append(f"{c['id']}: not in Competency Matrix NL"); continue
+        name, ld, pf = clean(m[1]), [clean(x) for x in m[5:9]], clean(m[9])
+        if not name or not pf:
+            errors.append(f"{c['id']}: name or proof is empty in Competency Matrix NL")
+        new_ld = []
+        for lv, (en_txt, nl_txt) in enumerate(zip(c["ld"], ld), 1):
+            if not en_txt:
+                new_ld.append("")          # level below the floor stays empty
+            elif not nl_txt or nl_txt in ("—", "-"):
+                errors.append(f"{c['id']}: level {lv} description is empty in Dutch")
+                new_ld.append(en_txt)
+            else:
+                new_ld.append(nl_txt)
+        c.update({"n": name, "ld": new_ld, "pf": pf})
+
+    # Domains: name without the bracketed note, as in the English file.
+    for r in wb["Domains NL"].iter_rows(min_row=2, values_only=True):
+        if r[0] and str(r[0]).strip().isdigit() and r[1]:
+            d = "D" + str(r[0]).strip()
+            if d in data["doms"]:
+                data["doms"][d] = re.sub(r"\s*\([^)]*\)\s*$", "", clean(r[1]))
+    for d, v in data["doms"].items():
+        if v == read_content(en_path)["doms"][d]:
+            warns.append(f"{d}: domain name is still English")
+
+    warns.append(f"Roles ({len(data['roles'])}) and activities ({len(data['acts'])}) are still English.")
+    if errors:
+        print("Nothing written. Fix these first:")
+        for e in errors:
+            print("  " + e)
+        sys.exit(1)
+    data["lang"] = "nl"
+    data["version"] = datetime.now().strftime("%Y-%m-%d-%H%M")
+    write_content(out_path, data)
+    print(f"Wrote {out_path}. {len(data['items'])} items, {len(data['comps'])} competences. Version {data['version']}.")
+    for w in warns:
+        print("  Note: " + w)
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     allow_key = "--allow-key-change" in sys.argv
+    lang = "nl" if "--lang" in sys.argv and "nl" in sys.argv else "en"
+    args = [a for a in args if a != "nl"]
     if not args:
         sys.exit(__doc__)
     xlsx = Path(args[0])
     path = Path(args[1]) if len(args) > 1 else Path("content/brigvanti-content.js")
+    if lang == "nl":
+        return build_nl(xlsx, path)
     data = read_content(path)
     bank = read_bank(xlsx)
     items = {it["i"]: it for it in data["items"]}
