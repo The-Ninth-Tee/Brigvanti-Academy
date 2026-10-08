@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "Brigvanti",
+  "short_name": "Brigvanti",
+  "description": "Build real AI skill on your own work.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#F8FAFC",
+  "categories": ["education", "productivity"],
+  "icons": [
+    { "src": "/Icons/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/Icons/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/Icons/app-icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/Icons/app-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

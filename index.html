@@ -9,8 +9,11 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/Icons/favicon-32-dark.png" media="(prefers-color-scheme: dark)">
 <link rel="icon" type="image/png" sizes="16x16" href="/Icons/favicon-16.png" media="(prefers-color-scheme: light)">
 <link rel="icon" type="image/png" sizes="16x16" href="/Icons/favicon-16-dark.png" media="(prefers-color-scheme: dark)">
-<link rel="apple-touch-icon" sizes="180x180" href="/Icons/apple-touch-icon.png">
-<link rel="manifest" href="/Icons/site.webmanifest">
+<link rel="apple-touch-icon" sizes="180x180" href="/Icons/app-apple-touch-180.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="apple-mobile-web-app-title" content="Brigvanti">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#F8FAFC" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0F172A" media="(prefers-color-scheme: dark)">
 <style>
@@ -228,6 +231,15 @@ button.rw{cursor:pointer}
 @keyframes sp{to{transform:rotate(360deg)}}
 .pop{animation:pop .35s cubic-bezier(.34,1.56,.64,1)}
 @keyframes pop{from{transform:scale(.92);opacity:0}to{transform:scale(1);opacity:1}}
+.offbar{position:fixed;left:0;right:0;top:0;z-index:65;background:var(--amber-l);color:var(--amber-d);
+  border-bottom:1px solid var(--line);padding:calc(8px + env(safe-area-inset-top)) 16px 8px;font-size:13.5px;line-height:1.4;text-align:center}
+body.is-offline{padding-top:calc(54px + env(safe-area-inset-top))}
+.inst{display:flex;gap:12px;align-items:center}
+.inst img{width:44px;height:44px;border-radius:10px;flex:0 0 auto;border:1px solid var(--line)}
+.inst .tx{flex:1;font-size:14px;color:var(--ink2);line-height:1.4}
+.inst .tx b{display:block;color:var(--ink);font-size:15px}
+.isteps{text-align:left;margin:10px 0 16px;padding-left:20px;color:var(--ink2);font-size:14.5px;line-height:1.5}
+.isteps li{margin:6px 0}
 @media(min-width:620px){.app{padding:0 24px 110px}h1{font-size:29px}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
@@ -302,6 +314,74 @@ var busy=false,obs=new MutationObserver(function(ms){if(busy)return;busy=true;tr
 obs.observe(document.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:ATTR});
 window.brigI18n={tr:tr};
 })();
+</script>
+<script>
+/* Install and offline support. Android and desktop Chromium fire beforeinstallprompt,
+   which the app keeps for its own Install button. iPhone has no install prompt, so
+   the button opens a short Add to Home Screen guide instead. */
+(function(){
+var deferred=null;
+function typing(){var el=document.activeElement;return !!(el&&(el.tagName==='INPUT'||el.tagName==='TEXTAREA'));}
+function refresh(){if(typeof render==='function'&&typeof S!=='undefined'&&S&&!typing())render();}
+var P=window.brigPWA={
+  standalone:function(){try{return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;}catch(e){return false;}},
+  ios:function(){var u=navigator.userAgent||'';return /iPhone|iPad|iPod/.test(u)||(/Macintosh/.test(u)&&navigator.maxTouchPoints>1);},
+  mobile:function(){try{return matchMedia('(pointer:coarse)').matches;}catch(e){return false;}},
+  offer:function(){return !P.standalone()&&(!!deferred||P.ios()||P.mobile());},
+  dismissed:function(){try{return localStorage.getItem('brigvanti_install_dismissed')==='1';}catch(e){return false;}},
+  dismiss:function(){try{localStorage.setItem('brigvanti_install_dismissed','1');}catch(e){}refresh();},
+  install:async function(){
+    if(!deferred){V.instHelp=true;render();return;}
+    var ev=deferred;deferred=null;
+    try{ev.prompt();await ev.userChoice;}catch(e){}
+    refresh();
+  }
+};
+window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();deferred=e;refresh();});
+window.addEventListener('appinstalled',function(){deferred=null;refresh();if(typeof toast==='function')toast('Brigvanti is installed. Open it from your home screen.');});
+
+function offline(){
+  var on=navigator.onLine!==false,bar=document.getElementById('offbar');
+  document.body.classList.toggle('is-offline',!on);
+  if(on){if(bar)bar.remove();return;}
+  if(bar)return;
+  bar=document.createElement('div');bar.id='offbar';bar.className='offbar';bar.setAttribute('role','status');
+  bar.textContent='You are offline. Your work is saved on this device. Your coach, sign in and syncing need a connection.';
+  document.body.appendChild(bar);
+}
+window.addEventListener('online',offline);
+window.addEventListener('offline',offline);
+document.addEventListener('DOMContentLoaded',offline);
+
+if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost')){
+  window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(e){console.warn('[brigvanti sw]',e);});});
+}
+})();
+function installCard(){
+  if(!brigPWA.mobile()||!brigPWA.offer()||brigPWA.dismissed())return '';
+  return `<div class="card"><div class="inst"><img src="/Icons/app-icon-192.png" alt="">
+    <div class="tx"><b>Install Brigvanti</b>Add it to your home screen. It opens full screen, like an app.</div></div>
+    <div class="row" style="margin-top:12px"><button class="btn sec" style="flex:1" onclick="brigPWA.dismiss()">Not now</button>
+    <button class="btn go" style="flex:1" onclick="brigPWA.install()">Install</button></div></div>`;
+}
+function installRow(){
+  if(!brigPWA.offer())return '';
+  return `<div class="sect">App</div>
+  <div class="rows"><button class="rw" onclick="brigPWA.install()"><div class="ic c">&#128242;</div><div class="tx"><b>Install the app</b><span>Add Brigvanti to your home screen</span></div><span class="chev">&#8250;</span></button></div>`;
+}
+function installHelp(){
+  const steps=brigPWA.ios()
+    ?`<li>Tap the Share button in your browser. In Safari it can sit under the &#8943; menu.</li>
+      <li>Choose Add to Home Screen, then tap Add.</li>
+      <li>Open Brigvanti from your home screen and sign in once more.</li>`
+    :`<li>Open your browser menu.</li>
+      <li>Choose Install app or Add to Home screen.</li>
+      <li>Open Brigvanti from your home screen.</li>`;
+  return `<div class="modal-bg" onclick="V.instHelp=false;render()"><div class="modal" onclick="event.stopPropagation()">
+    <h3>Add Brigvanti to your home screen</h3>
+    <ol class="isteps">${steps}</ol>
+    <div class="row"><button class="btn go full" onclick="V.instHelp=false;render()">Got it</button></div></div></div>`;
+}
 </script>
 <script>
 /* Content lives in /content/brigvanti-content.js. Update it with tools/build_content.py. */
@@ -717,6 +797,7 @@ function go(n){
   S.stage=n;V={};save();render();
 }
 function back(){
+  if(V.instHelp){V.instHelp=false;render();return;}
   if(V.leaving){V.leaving=false;render();return;}
   if(V.del){V.del=false;render();return;}
   if(V.editName){V.editName=false;render();return;}
@@ -812,6 +893,7 @@ function vAccess(){
     <h1>Build real AI skill on your own work</h1>
     <p class="lede">Short assignments built on the tasks you already do. Your coach guides you. Nothing here is a test you can fail.</p>
   </div>
+  ${installCard()}
   <div class="card">
     <button class="sso" onclick="signIn('google')">
       <span class="g" style="background:#4285F4">G</span>Continue with Google</button>
@@ -1894,6 +1976,8 @@ function vAccount(){
   <div class="sect">Notifications</div>
   <div class="rows"><div class="rw"><div class="ic c">&#128276;</div><div class="tx"><b>Reminders</b><span>Nudges on your come-back days. Live soon.</span></div><button class="tgl ${S.notify?'on':''}" onclick="setNotify(${S.notify?'false':'true'})" aria-label="Toggle reminders"><i></i></button></div></div>
 
+  ${installRow()}
+
   <div class="sect">Language</div>
   <div class="rows" data-no-i18n><div class="rw"><div class="ic">&#127760;</div><div class="tx"><b>Taal / Language</b><span>${window.BRIG_LANG==='nl'?'Nederlands':'English'}</span></div><button class="btn sec" style="padding:8px 14px" onclick="setLang('${window.BRIG_LANG==='nl'?'en':'nl'}')">${window.BRIG_LANG==='nl'?'English':'Nederlands'}</button></div></div>
 
@@ -1919,7 +2003,7 @@ function render(){
   if(!S.signed&&S.stage!==7)S.stage=0;
   const v=[vAccess,vStart,vScan,vStand,vPractice,vRung,vProgress,vLegal,vPortfolio,vAccount][S.stage]||vAccess;
   const y=window.scrollY;
-  document.getElementById('app').innerHTML=v()+(V.leaving?leavingOverlay():'');
+  document.getElementById('app').innerHTML=v()+(V.leaving?leavingOverlay():'')+(V.instHelp?installHelp():'');
   if(S.stage!==LAST){window.scrollTo(0,0);LAST=S.stage;}
   else window.scrollTo(0,y);
 }
