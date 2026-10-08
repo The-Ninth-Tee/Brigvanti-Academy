@@ -583,5 +583,20 @@ window.BRIG_STRINGS = {
 "Model good, open, honest AI use": "Modelleer goed, open, eerlijk AI-gebruik",
 "Teach someone a verify-before-share habit": "Leer iemand een gewoonte van verifiëren voordat je deelt.",
 "Set a simple AI-use norm for a household or club": "Stel een eenvoudige AI-gebruiksnorm in voor een huishouden of club",
-"Tick every point above. 1 still needs confirming.": "Vink elk punt hierboven aan. Er moet er nog 1 bevestigd worden."
+"Tick every point above. 1 still needs confirming.": "Vink elk punt hierboven aan. Er moet er nog 1 bevestigd worden.",
+"Install Brigvanti": "Installeer Brigvanti",
+"Add it to your home screen. It opens full screen, like an app.": "Voeg Brigvanti toe aan je startscherm. De app opent in full screen, net als een normale app.",
+"Not now": "Niet nu",
+"Install": "Installeren",
+"App": "App",
+"Install the app": "Installeer de app",
+"Add Brigvanti to your home screen": "Voeg Brigvanti toe aan je startscherm",
+"Tap the Share button in your browser. In Safari it can sit under the ⋯ menu.": "Kies in je browser de deelknop. In Safari zit die soms onder het ⋯ menu.",
+"Choose Add to Home Screen, then tap Add.": "Kies Voeg toe aan startscherm en kies dan Voeg toe.",
+"Open Brigvanti from your home screen and sign in once more.": "Open Brigvanti vanaf je startscherm en log nog één keer in.",
+"Open your browser menu.": "Open het menu van je browser.",
+"Choose Install app or Add to Home screen.": "Kies App installeren of Toevoegen aan startscherm.",
+"Open Brigvanti from your home screen.": "Open Brigvanti vanaf je startscherm.",
+"Brigvanti is installed. Open it from your home screen.": "Brigvanti is geïnstalleerd. Open de app vanaf je startscherm.",
+"You are offline. Your work is saved on this device. Your coach, sign in and syncing need a connection.": "Je bent offline. Je werk staat veilig op dit apparaat. Voor je coach, inloggen en synchroniseren heb je verbinding nodig."
 };
