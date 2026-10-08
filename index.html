@@ -910,7 +910,7 @@ function vAccess(){
     <p class="muted" style="margin:12px 0 0">${S.authMode==='up'?'Already have an account? ':'New to Brigvanti? '}<button style="color:var(--teal-d);font-weight:600;text-decoration:underline" onclick="S.authMode='${S.authMode==='up'?'in':'up'}';V.err='';render()">${S.authMode==='up'?'Sign in':'Create one'}</button></p>
   </div>
   <p class="muted" style="text-align:center;padding:0 8px 8px">By continuing you agree to how we handle your data.
-    <button style="color:var(--teal-d);font-weight:600;text-decoration:underline" onclick="go(7)">Read privacy and legal</button></p>`;
+    <button style="color:var(--teal-d);font-weight:600;text-decoration:underline" onclick="go(7)">Read privacy and legal</button></p></div>`;
 }
 async function signIn(how){
   V.err='';
@@ -2002,9 +2002,16 @@ function render(){
   }
   if(!S.signed&&S.stage!==7)S.stage=0;
   const v=[vAccess,vStart,vScan,vStand,vPractice,vRung,vProgress,vLegal,vPortfolio,vAccount][S.stage]||vAccess;
-  const y=window.scrollY;
-  document.getElementById('app').innerHTML=v()+(V.leaving?leavingOverlay():'')+(V.instHelp?installHelp():'');
-  if(S.stage!==LAST){window.scrollTo(0,0);LAST=S.stage;}
+  const y=window.scrollY, moved=S.stage!==LAST, app=document.getElementById('app');
+  /* On a screen change, scroll up before swapping content and nudge a repaint.
+     Android Chrome could leave a stale picture of a long screen below a shorter one. */
+  if(moved)window.scrollTo(0,0);
+  app.innerHTML=v()+(V.leaving?leavingOverlay():'')+(V.instHelp?installHelp():'');
+  if(moved){
+    LAST=S.stage;window.scrollTo(0,0);
+    app.style.opacity='0.999';
+    requestAnimationFrame(function(){app.style.opacity='';});
+  }
   else window.scrollTo(0,y);
 }
 function leavingOverlay(){
