@@ -13,14 +13,14 @@ const COPY = {
   },
   nl: {
     comeback: (s) => ['Tijd om weer te oefenen',
-      s ? `Vandaag is een goede dag om weer te oefenen met ${s}. Eén taak uit de praktijk is genoeg.`
-        : 'Vandaag is een goede dag om weer te oefenen. Eén taak uit de praktijk is genoeg.'],
+      s ? `Vandaag is een goede dag om weer te oefenen met ${s}. Het doen van één taak per werkdag is voldoende.`
+        : 'Vandaag is een goede dag om weer te oefenen. Het doen van één taak per werkdag is voldoende.'],
     levelup: (s) => ['Je level up test staat klaar',
       s ? `Je hebt genoeg geoefend om de level up test voor ${s} te doen.`
         : 'Je hebt genoeg geoefend om een level up test te doen.'],
-    scan: () => ['Je scan wacht op je', 'Plaats je volgende gebied in de scan. Dat kost maar een paar minuten.'],
-    start: () => ['Klaar voor je eerste opdracht?', 'Kies een taak uit je eigen week en oefen ermee.'],
-    followup: () => ['Pak de draad weer op', 'Eén taak uit de praktijk deze week houdt je vaardigheden in beweging.'],
+    scan: () => ['Je scan wacht op je', 'Start het volgende gebied in de scan. Het kost je maar een paar minuten.'],
+    start: () => ['Klaar voor je eerste opdracht?', 'Kies een taak uit je eigen werkzaamheden en oefen ermee.'],
+    followup: () => ['Pak de draad weer op', 'Het uitvoeren van één taak deze week houdt je vaardigheden up to date.'],
   },
 };
 const ROUTE = { comeback: 'practice', followup: 'practice', start: 'practice', levelup: 'levelup', scan: 'scan' };
