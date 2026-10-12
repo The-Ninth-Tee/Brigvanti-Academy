@@ -1,3 +1,5 @@
+importScripts('/push-sw.js');
+
 /* Brigvanti service worker.
    Pages and app files: network first, so a deploy shows up on the next online open.
    The cached copy is used only when the network fails or takes longer than NET_TIMEOUT.

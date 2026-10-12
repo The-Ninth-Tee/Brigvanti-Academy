@@ -389,6 +389,8 @@ if(!window.BRIG_CONTENT){document.getElementById('app').innerHTML='<p style="pad
 const DATA = window.BRIG_CONTENT;
 const LV=['Not yet','Aware','Explorer','Integrator','Creator'];
 const KEY='brigvanti_pilot_v2';
+let REMIND_GO=(function(){try{const q=new URLSearchParams(location.search),k=q.get('remind');
+  if(k){q.delete('remind');history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:''));}return k;}catch(e){return null;}})();
 const byId={}; DATA.comps.forEach(c=>byId[c.id]=c);
 const itemsOf=(c,l,f)=>DATA.items.find(x=>x.c===c&&x.l===l&&x.f===f);
 const formsAt=(c,l)=>DATA.items.filter(x=>x.c===c&&x.l===l).map(x=>x.f);
@@ -509,6 +511,7 @@ async function save(){
     const merged=await window.storage.set(KEY,serialize(S));
     if(merged){ const m=JSON.parse(merged); if(m) S=mergeState(S,m); }
   }catch(e){}
+  remindSync();
 }
 /* Single deletion path. Everything the pilot stores lives under KEY, so one
    delete removes levels, badges, streak and the whole portfolio.
@@ -813,7 +816,155 @@ function back(){
   V.leaving=true;render();
 }
 function setupDone(){ return !!(S&&S.name&&S.name.trim()&&S.consent&&Object.keys(S.targets||{}).length); }
-function setNotify(v){ if(!S)return; S.notify=!!v; save(); render(); }
+/* ---------- reminders ----------
+   Push belongs to a device, so each device keeps its own switch under
+   reminders/{uid}/devices/{deviceId}. The account record reminders/{uid}
+   holds a schedule summary that the hourly server job reads. */
+const RM={loaded:false,devices:[],key:null};
+function deviceId(){
+  let id=null;try{id=localStorage.getItem('brigvanti_device');}catch(e){}
+  if(!id){id=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2);
+    try{localStorage.setItem('brigvanti_device',id);}catch(e){}}
+  return id;
+}
+const pushOnHere=()=>RM.devices.some(d=>d.id===deviceId()&&d.on);
+function pushSupport(){
+  const ok='serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+  if(!ok)return brigPWA.ios()&&!brigPWA.standalone()?'ios-install':'none';
+  if(Notification.permission==='denied')return 'denied';
+  return 'ok';
+}
+function swReady(){
+  return Promise.race([navigator.serviceWorker.ready,new Promise((_,no)=>setTimeout(()=>no(new Error('sw-timeout')),6000))]);
+}
+function b64u(s){const b=atob((s+'='.repeat((4-s.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(b,ch=>ch.charCodeAt(0));}
+async function pushKey(){
+  if(RM.key)return RM.key;
+  const r=await fetch('/.netlify/functions/push-config');const j=await r.json();
+  RM.key=j&&j.publicKey||null;return RM.key;
+}
+function at9(t){const x=new Date(t);x.setHours(9,0,0,0);return x.getTime();}
+/* Earliest come-back day wins. A level up test that is ready nudges the day
+   after the last hand in. Without any hand in, nudge two days after this visit. */
+function remindPlan(){
+  let best=null;
+  const take=(t,kind,c)=>{if(!best||t<best.t)best={t,kind,c};};
+  DATA.comps.forEach(c=>{const d=nextDue(c.id);if(d)take(at9(d),'comeback',c);});
+  const ready=DATA.comps.filter(c=>canLevelUp(c.id));
+  const lastRep=S.reps.length?Math.max.apply(null,S.reps.map(r=>r.t)):0;
+  if(ready.length)take(at9((lastRep||Date.now())+864e5),'levelup',ready[0]);
+  if(!best)take(at9(Date.now()+2*864e5),scanned()<DATA.comps.length?'scan':'start',null);
+  return {best,ready:ready.length,lastRep};
+}
+function remindSync(force){
+  if(!S||!S.signed||!RM.loaded||!window.brigReminders)return Promise.resolve();
+  const p=remindPlan(),active=RM.devices.some(d=>d.on),c=p.best.c;
+  let tz='';try{tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'';}catch(e){}
+  return window.brigReminders.saveSchedule({
+    active,nextNudgeAt:active?p.best.t:null,kind:p.best.kind,
+    skillName:c?c.n:'',areaName:c?DATA.doms[c.d]:'',levelUpReady:p.ready,
+    lastRepAt:p.lastRep,lang:window.BRIG_LANG||'en',tz
+  },force).catch(e=>console.warn('[brigvanti reminders]',(e&&e.code)||e));
+}
+async function unsubHere(){try{const reg=await swReady();const s=await reg.pushManager.getSubscription();if(s)await s.unsubscribe();}catch(e){}}
+/* On sign in: load this account's devices and repair this device's entry when
+   permission was withdrawn or the browser renewed its push address. */
+async function remindInit(){
+  if(!window.brigReminders)return;
+  try{
+    RM.devices=await window.brigReminders.listDevices();RM.loaded=true;
+    const mine=RM.devices.find(d=>d.id===deviceId());
+    if(mine&&mine.on){
+      let sub=null;
+      try{if(Notification.permission==='granted'){const reg=await swReady();sub=await reg.pushManager.getSubscription();}}catch(e){}
+      if(!sub){await window.brigReminders.deleteDevice(deviceId());RM.devices=RM.devices.filter(d=>d.id!==deviceId());}
+      else if(!mine.sub||mine.sub.endpoint!==sub.endpoint){
+        const rec={on:true,sub:sub.toJSON(),lang:window.BRIG_LANG||'en',at:Date.now()};
+        await window.brigReminders.setDevice(deviceId(),rec);Object.assign(mine,rec);}
+    }
+    await remindSync();
+    if(S.stage===9)render();
+  }catch(e){console.warn('[brigvanti reminders]',(e&&e.code)||e);}
+}
+async function pushToggle(on){
+  if(V.pushBusy||!RM.loaded)return;
+  try{
+    if(on){
+      if(pushSupport()!=='ok')return;
+      const perm=await Notification.requestPermission();
+      if(perm!=='granted'){toast('Notifications are blocked for Brigvanti. Allow them in your phone or browser settings, then try again.');render();return;}
+      V.pushBusy=true;render();
+      const key=await pushKey();if(!key)throw new Error('no-key');
+      const reg=await swReady();
+      let sub=await reg.pushManager.getSubscription();
+      if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(key)});
+      const rec={on:true,sub:sub.toJSON(),lang:window.BRIG_LANG||'en',at:Date.now()};
+      await window.brigReminders.setDevice(deviceId(),rec);
+      RM.devices=RM.devices.filter(d=>d.id!==deviceId()).concat([Object.assign({id:deviceId()},rec)]);
+      toast('Push reminders are on for this device.');
+    }else{
+      V.pushBusy=true;render();
+      await window.brigReminders.deleteDevice(deviceId());
+      await unsubHere();
+      RM.devices=RM.devices.filter(d=>d.id!==deviceId());
+    }
+    await remindSync(true);
+  }catch(e){
+    console.warn('[brigvanti push]',(e&&e.code)||e);
+    toast(on?'Push reminders could not be switched on. Please try again.':'Push reminders could not be switched off. Please try again.');
+  }finally{V.pushBusy=false;render();}
+}
+async function pushOffEverywhere(){
+  if(V.pushBusy)return;V.pushBusy=true;render();
+  try{
+    for(const d of RM.devices)await window.brigReminders.deleteDevice(d.id);
+    await unsubHere();RM.devices=[];await remindSync(true);
+    toast('Push reminders are off on all your devices.');
+  }catch(e){toast('Push reminders could not be switched off. Please try again.');}
+  finally{V.pushBusy=false;render();}
+}
+/* Signing out stops push here, so a shared device never shows another person's reminders. */
+async function remindDeviceOff(){
+  if(!RM.loaded||!pushOnHere())return;
+  try{await window.brigReminders.deleteDevice(deviceId());}catch(e){}
+  await unsubHere();
+  RM.devices=RM.devices.filter(d=>d.id!==deviceId());
+  await remindSync(true);
+}
+/* Invite to switch push on. Shown after a hand in, when the come-back day is
+   known, and in the installed app on Your progress. "Not now" hides it for 14 days. */
+function pushInviteLater(){try{localStorage.setItem('brigvanti_push_invite_until',String(Date.now()+14*864e5));}catch(e){}render();}
+function pushInvite(){
+  if(!RM.loaded||pushOnHere())return '';
+  try{if(Number(localStorage.getItem('brigvanti_push_invite_until')||0)>Date.now())return '';}catch(e){}
+  const st=pushSupport();
+  if(st==='ok')return `<div class="card tint pop"><h3>Want a reminder on your practice days?</h3>
+    <p class="muted" style="margin:6px 0 0">Skills stick when you come back to them after a few days. A short reminder helps you keep that rhythm. You get one a day at most, and you can switch it off at any time in Account settings.</p>
+    <div class="row"><button class="btn sec" style="flex:1" onclick="pushInviteLater()">Not now</button>
+    <button class="btn go" style="flex:1" ${V.pushBusy?'disabled':''} onclick="pushToggle(true)">Remind me</button></div></div>`;
+  if(st==='ios-install')return `<div class="card tint pop"><h3>Get reminders on your iPhone</h3>
+    <p class="muted" style="margin:6px 0 0">Reminders work from the installed app. Add Brigvanti to your home screen first, then switch reminders on inside the app.</p>
+    <div class="row"><button class="btn sec" style="flex:1" onclick="pushInviteLater()">Not now</button>
+    <button class="btn go" style="flex:1" onclick="brigPWA.install()">Show me how</button></div></div>`;
+  return '';
+}
+function remindRows(){
+  const st=pushSupport(),on=pushOnHere(),others=RM.devices.filter(d=>d.on&&d.id!==deviceId()).length;
+  const wrap='style="white-space:normal"';
+  let sub;
+  if(!RM.loaded)sub='Loading your reminder settings.';
+  else if(st==='ios-install'&&!on)sub='On iPhone, install the app first. Then switch this on inside the app.';
+  else if(st==='none'&&!on)sub='This browser cannot show push reminders.';
+  else if(st==='denied'&&!on)sub='Notifications are blocked for Brigvanti in your phone or browser settings.';
+  else sub=on?'On. Reminders arrive around 9:00 on your practice days.':'Get a reminder on your practice days.';
+  const can=RM.loaded&&(st==='ok'||on);
+  return `<div class="rows">
+    <div class="rw"><div class="ic c">&#128276;</div><div class="tx"><b>Push on this device</b><span ${wrap}>${sub}</span></div>
+      ${can?`<button class="tgl ${on?'on':''}" ${V.pushBusy?'disabled':''} onclick="pushToggle(${on?'false':'true'})" aria-label="Push reminders on this device"><i></i></button>`:''}</div>
+    ${others?`<button class="rw" onclick="pushOffEverywhere()"><div class="ic">&#128241;</div><div class="tx"><b>${others} other device${others>1?'s':''} with push on</b><span ${wrap}>Tap to switch push off on all your devices</span></div><span class="chev">&#8250;</span></button>`:''}
+    <div class="rw" style="opacity:.6"><div class="ic">&#9993;</div><div class="tx"><b>Email reminders</b><span ${wrap}>Arrives in a later update.</span></div></div>
+  </div>`;
+}
 function saveName(){ if(!(S.name||'').trim()){ toast('A name is required.'); return; } save(); if(V)V.editName=false; render(); }
 async function doPasswordReset(){ try{ await window.brigvantiSendReset(); toast('Reset link sent to your email.'); }catch(e){ toast('Could not send the reset email. Try again.'); } }
 async function doDelete(){ try{ await window.brigvantiDeleteAccount(); }catch(e){ if(V)V.del=false; render(); toast((window.brigvantiAuth&&window.brigvantiAuth.msg)?window.brigvantiAuth.msg(e):'Could not delete. Sign in again and retry.'); } }
@@ -935,6 +1086,7 @@ async function signOutUser(){
      key is per user, so the next person on this browser cannot see it through
      the app. */
   try{ await save(); }catch(e){}
+  try{ await remindDeviceOff(); }catch(e){}
   if(window.brigvantiAuth){try{await window.brigvantiAuth.doSignOut();}catch(e){}}
 }
 
@@ -1176,6 +1328,7 @@ function vLegal(){
       <li>The text you write in a practice assignment, and the coach reply</li>
       <li>Your badges, streak and assignment history</li>
       <li>Your portfolio: the text of each assignment you hand in, the coach reply, and what you wrote when you claimed a level</li>
+      <li>If you switch reminders on: a push address for each device, your timezone, your app language and a reminder schedule</li>
     </ul>
     <p style="margin-top:12px">We ask you not to enter special category data. That means health details, political or religious views, trade union membership, ethnic origin, sexual orientation, or biometric and genetic data. We also ask you not to enter identification numbers, bank details, or another person's personal data. The app repeats this warning at every point where you type.</p>`)}
 
@@ -1184,6 +1337,7 @@ function vLegal(){
     <p><b>Stored data.</b> Your account, progress and assignment history are stored by Google Firebase. We use European region storage where the service offers it. Google may still process some data outside the European Economic Area under the European Commission's standard contractual clauses.</p>
     <p><b>Coach replies.</b> When you press send, the text you wrote in the assignment is sent to Anthropic, which provides the AI model behind the coach. <b>This processing is not limited to the European Economic Area.</b> It is covered by a data processing agreement and standard contractual clauses. If you would rather not have your text leave the platform, do not use the coach.</p>
     <p><b>Hosting.</b> The site is served by Netlify and its code is held on GitHub. Netlify records technical request logs, including your IP address, to deliver and secure the site.</p>
+    <p><b>Reminders.</b> A push reminder travels through the push service of your browser or phone. That service is run by the company behind it, for example Google, Apple, Microsoft or Mozilla. It may process the reminder outside the European Economic Area. A reminder holds only a title, one sentence and a link.</p>
     <p>We do not sell your data. We do not use it for advertising. We do not use your assignment text to train any AI model.</p>`)}
 
   ${b('Why we are allowed to hold it',`
@@ -1195,6 +1349,13 @@ function vLegal(){
     <p>It exists for one reason, which is so you can find your own work again and see how it changed. Nobody at Brigvanti reviews it, scores it, or checks whether a level you claimed was deserved. It is not shared with an employer by us.</p>
     <p>It is stored with the rest of your account in Firebase, and a copy is held on this device so the app works when you are offline. You can download the whole portfolio as a spreadsheet at any time from Your progress.</p>
     <p>Because it holds text you wrote yourself, it is the part of your account most likely to contain something personal. That is why we ask you not to enter private details, and why you can erase all of it in one action.</p>`)}
+
+  ${b('Reminders',`
+    <p>Reminders are off until you switch them on. Push reminders are switched on per device, in Account settings.</p>
+    <p>When push is on, we store a push address for that device, your timezone, your app language and a short schedule. The schedule holds the next reminder time, the kind of reminder and the name of the skill or area it mentions.</p>
+    <p>We send at most one reminder a day and three a week. After three reminders without a hand in, we stop until you hand in work again.</p>
+    <p>A reminder never holds your assignments, your portfolio or a level. It shows a short title, one sentence and a link to the app.</p>
+    <p>You can switch push off in Account settings or in your phone or browser settings. Signing out stops push on that device. Deleting your account deletes all reminder data.</p>`)}
 
   ${b('How long we keep it',`
     <p>Your account data is kept while your account is open. When you delete your account or reset the pilot, we delete it from our storage straight away. Our storage provider, Google Firebase, completes the deletion from its systems and backups within 180 days. Netlify keeps technical logs with your IP address for up to 90 days, and archived copies for up to one year.</p>
@@ -1514,6 +1675,7 @@ function vRep(){
       <h2>Handed in</h2>
       <p class="muted" style="margin:6px 0 0">${st} day streak. That is assignment ${n} on this skill.</p></div>
     ${due?`<div class="note">Come back around <b>${fmtDate(due)}</b> for the next one. It will be a little harder. Spacing is what turns this into a habit.</div>`:''}
+    ${pushInvite()}
     <div class="row">${canLevelUp(c.id)?`<button class="btn go full" onclick="V.rep=null;go(5)">Try the level up test</button>`:''}</div>
     <div class="row"><button class="btn sec full" onclick="V.rep=null;render()">Another assignment</button>
       <button class="btn sec full" onclick="V.rep=null;go(6)">Your progress</button></div>`,
@@ -1758,6 +1920,7 @@ function vProgress(){
   const elig=DATA.comps.filter(c=>canLevelUp(c.id));
   return shell(`<h1>Your progress</h1>
   <p class="lede">What you have built so far. It grows every time you hand something in.</p>
+  ${brigPWA.standalone()?pushInvite():''}
   <div class="card" style="background:var(--slate);color:var(--on-slate);border-top:3px solid var(--amber);display:flex;align-items:center;gap:14px">
     <div style="flex:1"><div class="eyebrow" style="color:var(--teal)">Effort points</div>
       <b style="font-size:26px;display:block;line-height:1.1;margin-top:2px">${effortXP()}</b>
@@ -1974,7 +2137,7 @@ function vAccount(){
   <div class="rows">${secRows}</div>
 
   <div class="sect">Notifications</div>
-  <div class="rows"><div class="rw"><div class="ic c">&#128276;</div><div class="tx"><b>Reminders</b><span>Nudges on your come-back days. Live soon.</span></div><button class="tgl ${S.notify?'on':''}" onclick="setNotify(${S.notify?'false':'true'})" aria-label="Toggle reminders"><i></i></button></div></div>
+  ${remindRows()}
 
   ${installRow()}
 
@@ -2031,9 +2194,12 @@ window.brigvantiApp={
     if(user&&user.email&&!S.email)S.email=user.email;
     S.authProvider=(user&&user.providerData&&user.providerData[0]&&user.providerData[0].providerId)||'';
     S.stage=setupDone()?6:1;NAV=[];
+    if(REMIND_GO&&setupDone()){NAV=[6];S.stage=REMIND_GO==='levelup'?5:REMIND_GO==='scan'?2:4;}
+    REMIND_GO=null;
     LAST=-1;render();
     save();
     enableAnalytics();
+    remindInit();
     /* Pull the server copy in the background. When it arrives, merge it in and
        refresh. Login never waits on this, so a slow or down server does not
        hold up the screen. */
@@ -2046,6 +2212,7 @@ window.brigvantiApp={
     }).catch(function(){});
   },
   onSignedOut(){
+    RM.loaded=false;RM.devices=[];
     S=fresh();V={};LAST=-1;NAV=[];render();
   },
   /* A change arrived from another device. Merge in its progress, keep our own
@@ -2079,7 +2246,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/fireba
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup,
          signInWithEmailAndPassword, createUserWithEmailAndPassword,
          signOut, deleteUser, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import { initializeFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { initializeFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAh70QZBMIycuK1hMkKD9mp7S7ubiPJF4A",
@@ -2209,10 +2376,43 @@ window.brigvantiAuth={
   }
 };
 
+/* Reminder records. The account record merges, so the server's own fields
+   (lastSentAt, unanswered, sentLog) are never overwritten by the browser.
+   The last written schedule is remembered per user, so unchanged saves cost nothing. */
+window.brigReminders={
+  async listDevices(){
+    if(!uid) return [];
+    const s=await getDocs(collection(db,'reminders',uid,'devices'));
+    return s.docs.map(function(d){ return Object.assign({ id:d.id },d.data()); });
+  },
+  async setDevice(id,data){ if(uid) await setDoc(doc(db,'reminders',uid,'devices',id),data); },
+  async deleteDevice(id){ if(uid) await deleteDoc(doc(db,'reminders',uid,'devices',id)); },
+  async saveSchedule(fields,force){
+    if(!uid) return;
+    const k='brigvanti_rsig:'+uid, sig=JSON.stringify(fields);
+    let old=null; try{ old=localStorage.getItem(k); }catch(e){}
+    if(!force&&old===sig) return;
+    await setDoc(doc(db,'reminders',uid),fields,{ merge:true });
+    try{ localStorage.setItem(k,sig); }catch(e){}
+  },
+  async deleteAll(){
+    if(!uid) return;
+    const s=await getDocs(collection(db,'reminders',uid,'devices'));
+    await Promise.all(s.docs.map(function(d){ return deleteDoc(d.ref); }));
+    await deleteDoc(doc(db,'reminders',uid));
+    try{ localStorage.removeItem('brigvanti_rsig:'+uid); }catch(e){}
+  }
+};
+
 /* Server-side deletion. Delete the user document first, then the auth account.
    deleteUser can throw auth/requires-recent-login, which the app surfaces. */
 window.brigvantiDeleteAccount=async function(){
-  if(uid) await deleteDoc(doc(db,'users',uid));
+  if(uid){
+    /* The hourly reminder job also removes records of deleted accounts, so a
+       failure here never leaves reminders running. */
+    try{ await window.brigReminders.deleteAll(); }catch(e){ console.warn('[brigvanti reminders] delete failed:',(e&&e.code)||e); }
+    await deleteDoc(doc(db,'users',uid));
+  }
   const u=auth.currentUser;
   if(u) await deleteUser(u);
 };
