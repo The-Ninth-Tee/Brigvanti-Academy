@@ -2,7 +2,7 @@
   "name": "brigvanti-academy",
   "private": true,
   "dependencies": {
-    "firebase-admin": "^14.5.0",
+    "firebase-admin": "^13.10.0",
     "web-push": "^3.6.7"
   }
 }
