@@ -923,14 +923,6 @@ async function pushOffEverywhere(){
   }catch(e){toast('Push reminders could not be switched off. Please try again.');}
   finally{V.pushBusy=false;render();}
 }
-/* Signing out stops push here, so a shared device never shows another person's reminders. */
-async function remindDeviceOff(){
-  if(!RM.loaded||!pushOnHere())return;
-  try{await window.brigReminders.deleteDevice(deviceId());}catch(e){}
-  await unsubHere();
-  RM.devices=RM.devices.filter(d=>d.id!==deviceId());
-  await remindSync(true);
-}
 /* Invite to switch push on. Shown after a hand in, when the come-back day is
    known, and in the installed app on Your progress. "Not now" hides it for 14 days. */
 function pushInviteLater(){try{localStorage.setItem('brigvanti_push_invite_until',String(Date.now()+14*864e5));}catch(e){}render();}
@@ -1086,7 +1078,6 @@ async function signOutUser(){
      key is per user, so the next person on this browser cannot see it through
      the app. */
   try{ await save(); }catch(e){}
-  try{ await remindDeviceOff(); }catch(e){}
   if(window.brigvantiAuth){try{await window.brigvantiAuth.doSignOut();}catch(e){}}
 }
 
@@ -1355,7 +1346,7 @@ function vLegal(){
     <p>When push is on, we store a push address for that device, your timezone, your app language and a short schedule. The schedule holds the next reminder time, the kind of reminder and the name of the skill or area it mentions.</p>
     <p>We send at most one reminder a day and three a week. After three reminders without a hand in, we stop until you hand in work again.</p>
     <p>A reminder never holds your assignments, your portfolio or a level. It shows a short title, one sentence and a link to the app.</p>
-    <p>You can switch push off in Account settings or in your phone or browser settings. Signing out stops push on that device. Deleting your account deletes all reminder data.</p>`)}
+    <p>You can switch push off in Account settings or in your phone or browser settings. Push stays on when you sign out. Deleting your account deletes all reminder data.</p>`)}
 
   ${b('How long we keep it',`
     <p>Your account data is kept while your account is open. When you delete your account or reset the pilot, we delete it from our storage straight away. Our storage provider, Google Firebase, completes the deletion from its systems and backups within 180 days. Netlify keeps technical logs with your IP address for up to 90 days, and archived copies for up to one year.</p>
