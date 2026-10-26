@@ -23,6 +23,8 @@ Commands
       'hold' or 'unused' are left out, so the app shows the English there.
 
 Global option: --file "path/to/Brigvanti-UI-Strings.xlsx"
+Without --file the newest Brigvanti-UI-Strings*.xlsx is used, searched in the repository root,
+in tools/, and in ../translations and its subfolders.
 Requires: pip install openpyxl
 """
 import argparse, datetime as dt, glob, json, os, re, subprocess, sys
@@ -58,14 +60,25 @@ def screen_of(ctx):
     return "General"
 
 
+TRANSLATIONS = os.path.join(os.path.dirname(ROOT), "translations")
+
+
+def workbooks():
+    """Workbooks in the repository root, in tools/, and in ../translations and its subfolders."""
+    found = glob.glob(os.path.join(ROOT, PREFIX + "*.xlsx")) + glob.glob(os.path.join(HERE, PREFIX + "*.xlsx"))
+    found += glob.glob(os.path.join(TRANSLATIONS, "**", PREFIX + "*.xlsx"), recursive=True)
+    return [p for p in found if not os.path.basename(p).startswith("~$")]
+
+
 def find_workbook(path=None):
     if path:
         return path
-    pool = [p for p in glob.glob(os.path.join(ROOT, PREFIX + "*.xlsx")) + glob.glob(os.path.join(HERE, PREFIX + "*.xlsx"))
-            if not os.path.basename(p).startswith("~$")]
+    pool = workbooks()
     if not pool:
-        sys.exit(f"No {PREFIX}*.xlsx found. Use --file.")
-    return max(pool, key=os.path.getmtime)
+        sys.exit(f"No {PREFIX}*.xlsx found in the repository, tools/ or {TRANSLATIONS}. Use --file.")
+    best = max(pool, key=os.path.getmtime)
+    print(f"Workbook found: {best}")
+    return best
 
 
 def new_name(wbp):
@@ -131,7 +144,10 @@ def postprocess(raw):
 
 def extract(index_html):
     html = open(index_html, encoding="utf-8").read()
-    main = max(re.findall(r"<script>(.*?)</script>", html, re.S), key=len)
+    # Every inline script with app text. The language loader and the translation layer hold no app text.
+    blocks = [b for b in re.findall(r"<script>(.*?)</script>", html, re.S)
+              if "document.write(" not in b and "MutationObserver" not in b]
+    main = "\n;\n".join(blocks)
     tmp_js, tmp_json = os.path.join(HERE, "_main.js"), os.path.join(HERE, "_strings.json")
     open(tmp_js, "w", encoding="utf-8").write(main)
     try:
@@ -159,7 +175,7 @@ def cmd_sync(a):
     items = extract(os.path.join(ROOT, "index.html"))
     found = [(e["key"], screen_of(", ".join(sorted(e["ctx"]))), e["kind"]) for e in sorted(items, key=lambda e: e["line"])]
     found += content_rows()
-    path = a.file or (find_workbook() if glob.glob(os.path.join(ROOT, PREFIX + "*.xlsx")) else None)
+    path = a.file or (find_workbook() if workbooks() else None)
     if path:
         wb = openpyxl.load_workbook(path); ws = wb[SHEET]
     else:
@@ -182,6 +198,9 @@ def cmd_sync(a):
         have[en] = ws.max_row; nxt += 1; added += 1
     unused = 0
     for en, r in have.items():
+        # type 'manual': a full sentence the app builds from parts, so sync cannot find it in the code.
+        if clean(ws.cell(r, C["type"]).value) == "manual":
+            continue
         if en not in current and clean(ws.cell(r, C["status"]).value) != "unused":
             ws.cell(r, C["status"]).value = "unused"; unused += 1
     out = path and new_name(path) or os.path.join(ROOT, PREFIX + ".xlsx")
