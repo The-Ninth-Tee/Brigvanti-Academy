@@ -416,7 +416,7 @@ window.BRIG_STRINGS = {
 "Your badges": "Jouw badges",
 "{0} of {1} earned ▾": "{0} van {1} verdiend ▾",
 "Every one of them is for doing something real.": "Elk van hen is bedoeld omdat je echt hebt geoefend.",
-"Assignments": "Toewijzingen",
+"Assignments": "Oefeningen",
 "Download my work": "Download mijn werk",
 "Download record": "Download record",
 "Privacy & legal": "Privacy & juridisch",
