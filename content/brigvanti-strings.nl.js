@@ -620,5 +620,14 @@ window.BRIG_STRINGS = {
 "Reset account": "Reset account",
 "Erase all progress and start again": "Verwijder alle voortgang en begin opnieuw",
 "Tick every point above. {0} still need confirming.": "Vink elk punt hierboven aan. Er moeten er nog {0} bevestigd worden.",
-"Tick every point above. 1 still needs confirming.": "Vink elk punt hierboven aan. Er moet er nog 1 bevestigd worden."
+"Tick every point above. 1 still needs confirming.": "Vink elk punt hierboven aan. Er moet er nog 1 bevestigd worden.",
+"Your assignments as a page to read or print.": "Je oefeningen als pagina om te lezen of te printen.",
+"Your levels and assignments as a spreadsheet.": "Je levels en oefeningen als spreadsheet.",
+"Type": "Soort",
+"Skill": "Vaardigheid",
+"Area": "Onderdeel",
+"Placed level": "Geplaatst level",
+"Working towards": "Werkt toe naar",
+"Level earned": "Behaald level",
+"Date": "Datum"
 };
