@@ -53,6 +53,7 @@
 .menu button{display:block;width:100%;text-align:left;padding:13px 18px;font-size:15px;font-weight:600;color:var(--ink)}
 .menu button.sep{border-top:1px solid var(--line);margin-top:6px;padding-top:16px}
 @media(hover:hover){.menu button:hover{background:var(--soft)}}
+.menu button .sub{display:block;font-size:12.5px;font-weight:400;color:var(--ink3);margin-top:2px}
 .lm-dark,.cm-dark{display:none}
 @media(prefers-color-scheme:dark){.lm-light,.cm-light{display:none}.lm-dark,.cm-dark{display:block}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -1030,8 +1031,8 @@ function menuPanel(){
   return `<div class="menu-bg" onclick="V.menu=false;render()"></div>
   <nav class="menu" aria-label="Menu">
     <button onclick="practiseDom('')">Assignments</button>
-    <button onclick="menuDo(exportPortfolioDoc)">Download my work</button>
-    <button onclick="menuDo(exportLog)">Download record</button>
+    <button onclick="menuDo(exportPortfolioDoc)">Download my work<span class="sub">Your assignments as a page to read or print.</span></button>
+    <button onclick="menuDo(exportLog)">Download record<span class="sub">Your levels and assignments as a spreadsheet.</span></button>
     <button onclick="go(7)">Privacy &amp; legal</button>
     <button onclick="go(9)">Account settings</button>
     <button class="sep" onclick="V.menu=false;signOutUser()">Log out</button>
@@ -1995,19 +1996,26 @@ function vProgress(){
       </div></div>`).join('')}</div></details>
 `,{noBack:true});
 }
+/* The file is not on screen, so the translation layer cannot reach it. T() looks the text up directly. */
+function T(t){const x=window.brigI18n&&window.brigI18n.tr(t);return x||t;}
 function exportLog(){
-  const rows=[['type','skill','area','level','date','task','prompt','what_came_back','what_you_did','reflection','coach','evidence']];
+  const day=t=>new Date(t).toISOString().slice(0,10),lv=l=>T(LV[l||0]);
+  const rows=[['Type','Skill','Area','Placed level','Working towards','Level earned','Date','The assignment',
+    'The task you set','Your prompt','What the tool gave back','What you did','Your reflection','Your coach said',
+    'What you made','What changed in how you work'].map(T)];
+  const row=o=>rows.push([o.type,o.skill,o.area,o.placed,o.towards,o.earned,o.date,o.act,o.sit,o.prompt,o.back,o.did,
+    o.reflect,o.coach,o.ev,o.grew].map(v=>v==null?'':v));
   DATA.comps.forEach(c=>{const r=S.scan[c.id];if(!r||!r.done||r.skipped)return;
-    const u=rungState(c.id);
-    rows.push(['skill',c.n,DATA.doms[c.d],LV[r.confirmed||0],
-      u.passed?new Date(u.t).toISOString().slice(0,10):'',
-      '','','','','','',u.passed?(u.ev||''):'']);});
+    row({type:T('Skill'),skill:c.n,area:DATA.doms[c.d],placed:lv(r.confirmed)});});
   S.reps.slice().sort((a,b)=>a.t-b.t).forEach(r=>{const c=byId[r.c];if(!c)return;
-    rows.push(['portfolio',c.n,DATA.doms[c.d],LV[r.tgt],new Date(r.t).toISOString().slice(0,10),
-      r.act||'',r.prompt||'',r.back||'',r.did||'',r.reflect||'',r.coach||'','']);});
-  const csv=rows.map(r=>r.map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const b=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),u=URL.createObjectURL(b);
-  const a=document.createElement('a');a.href=u;a.download='brigvanti-portfolio.csv';a.click();URL.revokeObjectURL(u);
+    row({type:T('Assignment'),skill:c.n,area:DATA.doms[c.d],towards:lv(r.tgt),date:day(r.t),act:r.act?T(r.act):'',
+      sit:r.sit,prompt:r.prompt,back:r.back,did:r.did,reflect:r.reflect,coach:r.coach});});
+  Object.keys(S.rung||{}).filter(k=>S.rung[k]&&S.rung[k].passed&&byId[k]).sort((a,b)=>(S.rung[a].t||0)-(S.rung[b].t||0)).forEach(k=>{
+    const r=S.rung[k],c=byId[k];
+    row({type:T('Level up'),skill:c.n,area:DATA.doms[c.d],earned:lv(r.at),date:r.t?day(r.t):'',ev:r.ev,grew:r.grew});});
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const b=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}),u=URL.createObjectURL(b);
+  const a=document.createElement('a');a.href=u;a.download='brigvanti-record.csv';a.click();URL.revokeObjectURL(u);
 }
 /* Branded, print-ready portfolio document. */
 function exportPortfolioDoc(){
