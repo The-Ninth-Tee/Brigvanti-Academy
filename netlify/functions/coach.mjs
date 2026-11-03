@@ -1,16 +1,10 @@
-// Brigvanti coach proxy.
-// The browser calls /.netlify/functions/coach. This function adds the secret
-// API key server-side and forwards the request to Anthropic. The key is never
-// sent to the browser. Set ANTHROPIC_API_KEY in Netlify, Environment variables.
-//
-// The endpoint is gated. Only a signed in learner can reach Anthropic, so the
-// endpoint cannot be abused to spend API credits. The browser sends a Firebase
-// ID token as "Authorization: Bearer <token>". This function verifies it
-// against Google's public keys before forwarding.
-//
-// Optional: set COACH_MODEL to change the model without editing code.
+// Brigvanti coach proxy. The browser sends a Firebase ID token, and this file
+// verifies it. All capping and the call to Anthropic live in coach-gate.mjs.
+// Do not call Anthropic from here. tool/check-coach-cap.mjs blocks such a deploy.
 
 import crypto from "node:crypto";
+import { db } from "../lib/firebase-admin.mjs";
+import { createCoachHandler, firestoreUsageStore } from "../lib/coach-gate.mjs";
 
 const PROJECT_ID = "brigvanti-academy";
 const CERT_URL =
@@ -63,68 +57,7 @@ async function verifyIdToken(token) {
   return payload;
 }
 
-export default async (req) => {
-  if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
-  }
-
-  // Gate: require a valid Firebase ID token.
-  const authz = req.headers.get("authorization") || "";
-  const m = /^Bearer (.+)$/.exec(authz);
-  if (!m) {
-    return json({ error: "Please sign in to use the coach." }, 401);
-  }
-  try {
-    await verifyIdToken(m[1]);
-  } catch (e) {
-    return json({ error: "Please sign in to use the coach." }, 401);
-  }
-
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) {
-    return json({ error: "Server is missing ANTHROPIC_API_KEY." }, 500);
-  }
-
-  let body;
-  try {
-    body = await req.json();
-  } catch (e) {
-    return json({ error: "Bad request." }, 400);
-  }
-  if (!body || typeof body !== "object") {
-    return json({ error: "Bad request." }, 400);
-  }
-
-  // Force a known-good model and cap the size, so the endpoint cannot be
-  // steered into an expensive request.
-  body.model = process.env.COACH_MODEL || "claude-sonnet-5";
-  body.max_tokens = Math.min(Number(body.max_tokens) || 1000, 1500);
-
-  let r;
-  try {
-    r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01"
-      },
-      body: JSON.stringify(body)
-    });
-  } catch (e) {
-    return json({ error: "Upstream request failed." }, 502);
-  }
-
-  const text = await r.text();
-  return new Response(text, {
-    status: r.status,
-    headers: { "Content-Type": "application/json" }
-  });
-};
-
-function json(obj, status) {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: { "Content-Type": "application/json" }
-  });
-}
+export default createCoachHandler({
+  verify: verifyIdToken,
+  store: firestoreUsageStore(db)
+});
