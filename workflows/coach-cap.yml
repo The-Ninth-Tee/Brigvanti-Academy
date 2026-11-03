@@ -1,1 +1,26 @@
+name: Coach cap watch
 
+on:
+  push:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node tool/check-coach-cap.mjs
+      - name: Test the live coach
+        if: github.event_name != 'push'
+        run: node tool/probe-coach-cap.mjs
+        env:
+          COACH_PROBE_EMAIL: ${{ secrets.COACH_PROBE_EMAIL }}
+          COACH_PROBE_PASSWORD: ${{ secrets.COACH_PROBE_PASSWORD }}
