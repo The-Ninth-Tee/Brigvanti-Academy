@@ -15,7 +15,7 @@ const LOCKED = {
     free: { day: 2, month: 20 }, plus: { day: 20, month: 300 }, b2b: { day: 20, month: 300 },
     b2b_ended: { day: 0, month: 0 }, probe: { day: 0, month: 0 },
   },
-  model: 'claude-opus-5-5', effort: 'medium', maxOutputTokens: 1500, maxInputChars: 14000,
+  model: 'claude-opus-5-5', effort: 'medium', maxOutputTokens: 2500, maxInputChars: 14000,
   callsPerAssignment: 2, maxFreeRebuilds: 3, givebacksPerDay: 1,
 };
 
