@@ -1,3 +1,7 @@
+# The coach cap check blocks any deploy that weakens or removes the cap.
+[build]
+  command = "node tool/check-coach-cap.mjs"
+
 # The Firebase web apiKey is a public client identifier, not a secret.
 # This line tells Netlify's secrets scanner to ignore that specific value.
 [build.environment]

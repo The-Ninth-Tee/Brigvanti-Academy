@@ -738,16 +738,57 @@ function badgeBanner(){
 }
 
 /* ---------- live coach ---------- */
-async function claude(system,user,json){
+const COACH={plan:null,left:null,refresh:null,at:0,busy:false};
+function coachNote(d){if(d&&d.left){COACH.plan=d.plan;COACH.left=d.left;COACH.refresh=d.refresh;COACH.at=Date.now();}}
+const coachLang=()=>window.BRIG_LANG==='nl'?'nl-NL':'en-GB';
+function capMessage(d){
+  const paid=d.plan==='plus'||d.plan==='b2b';
+  if(d.plan==='b2b_ended')return 'Your company no longer has access to the coach. Please ask your administrator.';
+  if(d.scope==='day')return paid?"You have used today's assignments. New ones are ready tomorrow.":"You have used today's assignment. A new one is ready tomorrow.";
+  const m=new Date(d.refresh+'T12:00:00').toLocaleDateString(coachLang(),{month:'long'});
+  return `You have reached your monthly limit. Your assignments refresh on 1 ${m}.`;
+}
+const REBUILD_MSG='Send your current assignment to your coach, or start a new one.';
+function coachLeftText(){
+  if(!COACH.left||COACH.plan==='b2b_ended'||COACH.plan==='probe')return '';
+  const {day,month}=COACH.left;
+  return `${day} assignment${day===1?'':'s'} left today, ${month} left this month`;
+}
+function practiceCounter(){
+  const show=COACH.plan==='free'||(COACH.left&&COACH.left.month<10);
+  return show?coachLeftText():'';
+}
+const planName=()=>({plus:'Plus',b2b:'Company',b2b_ended:'Company'})[COACH.plan]||'Free';
+function coachPaint(){
+  const p=document.getElementById('coachLeftPractice');if(p){const t=practiceCounter();p.textContent=t;p.style.display=t?'':'none';}
+  const a=document.getElementById('coachLeftAccount');if(a){const t=coachLeftText();a.textContent=t||planName();}
+  const n=document.getElementById('coachPlan');if(n)n.textContent=planName();
+}
+async function coachRefresh(){
+  if(COACH.busy||Date.now()-COACH.at<30000||!window.brigvantiAuth)return;
+  COACH.busy=true;
+  try{
+    const tok=await window.brigvantiAuth.token();
+    if(tok){const r=await fetch("/.netlify/functions/coach",{headers:{"Authorization":"Bearer "+tok}});
+      if(r.ok){coachNote(await r.json());coachPaint();}}
+  }catch(e){}
+  COACH.busy=false;
+}
+function coachSoon(){setTimeout(()=>{coachPaint();coachRefresh();},0);}
+const coachErr=(e,fallback)=>e&&e.coachMessage?e.coachMessage:fallback;
+async function claude(system,user,purpose,json,meta){
   if(window.BRIG_LANG==='nl')system+='\n\nWrite every text in your reply in Dutch, with informal "je". Never refer to AI as "hij" or "zij". Keep any JSON keys in English.';
   const tok=window.brigvantiAuth?await window.brigvantiAuth.token():null;
   const r=await fetch("/.netlify/functions/coach",{
     method:"POST",
     headers:Object.assign({"Content-Type":"application/json"},tok?{"Authorization":"Bearer "+tok}:{}),
-    body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,
-      system,messages:[{role:"user",content:user}]})});
+    body:JSON.stringify(Object.assign({system,user,purpose},meta||{}))});
   if(r.status===401) throw new Error('Please sign in again to use the coach.');
   const d=await r.json();
+  coachNote(d);
+  if(d.code==='cap_reached'){const e=new Error('cap');e.coachMessage=capMessage(d);throw e;}
+  if(d.code==='rebuild_limit'){const e=new Error('rebuild');e.coachMessage=REBUILD_MSG;e.rebuildLimit=true;throw e;}
+  if(!r.ok)throw new Error(d.error||'coach');
   let t=(d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n");
   if(json){t=t.replace(/```json|```/g,"").trim();return JSON.parse(t);}
   return t;
@@ -763,7 +804,7 @@ Rules you never break:
 7. Use the real situation the person described. Refer to their own words.
 8. Never ask for private or sensitive data. If you see any, tell them to remove it.`;
 
-async function genBrief(act,comp,tgt,sit){
+async function genBrief(act,comp,tgt,sit,meta){
   return await claude(RULES+`\nReturn only JSON. No extra text. No code fences.`,
 `Build one practice assignment.
 
@@ -777,13 +818,13 @@ Return JSON with these keys:
 "learn": two or three sentences that teach the idea for this level.
 "do": the assignment, written for the situation above. Two to four sentences. It must be something they do for real today.
 "good": an array of three short strings. Each names one thing a strong attempt clearly shows.
-"reflect": one short reflection question.`,true);
+"reflect": one short reflection question.`,'brief',true,meta);
 }
 async function genCoach(comp,tgt,sit,brief,f){
   const parts=[];
-  if(f.prompt&&f.prompt.trim())parts.push(`The prompt they wrote:\n"""${f.prompt.trim()}"""`);
-  if(f.back&&f.back.trim())parts.push(`What the tool gave back:\n"""${f.back.trim()}"""`);
-  if(f.did&&f.did.trim())parts.push(`What they did with it, and what they noticed:\n"""${f.did.trim()}"""`);
+  if(f.prompt&&f.prompt.trim())parts.push(`The prompt they wrote:\n"""${f.prompt.trim().slice(0,2500)}"""`);
+  if(f.back&&f.back.trim())parts.push(`What the tool gave back:\n"""${f.back.trim().slice(0,7000)}"""`);
+  if(f.did&&f.did.trim())parts.push(`What they did with it, and what they noticed:\n"""${f.did.trim().slice(0,2500)}"""`);
   return await claude(RULES,
 `Give coaching feedback on this practice assignment.
 
@@ -800,7 +841,7 @@ Write 110 to 160 words of plain prose. No headings. No bullet points.
 First, name one specific thing they did well. Quote a few of their own words.
 Second, name the single most useful thing to sharpen, and how.
 Third, suggest one harder version to try in a few days, in their own context.
-If they left the prompt out, do not mention that it is missing.`);
+If they left the prompt out, do not mention that it is missing.`,'feedback');
 }
 
 /* ---------- navigation ---------- */
@@ -1574,6 +1615,7 @@ function scanDom(d){
 
 /* ---------- 4. practice ---------- */
 function vPractice(){
+  coachSoon();
   if(V.rep)return vRep();
   const g=gaps(),prio=g.length?g.map(x=>x.d):DK;
   const placed=DATA.comps.filter(c=>S.scan[c.id]&&S.scan[c.id].done&&!S.scan[c.id].skipped);
@@ -1606,6 +1648,7 @@ function vPractice(){
   return shell(`<h1>Practise on real tasks</h1>
   <p class="lede">${S.focus?`You are practising <b>${esc(DATA.doms[S.focus])}</b>. Pick something you actually have to do this week.`
     :'Pick something you actually have to do this week. The assignment is the task itself.'}</p>
+  <p class="muted" id="coachLeftPractice" style="margin:0 0 12px;display:none"></p>
   ${tabs}
   ${st?`<div class="streak pop"><div class="flame">${st}</div>
     <div><b>${st} day streak</b><span class="muted">${S.reps.length} assignment${S.reps.length===1?'':'s'} handed in.
@@ -1646,10 +1689,13 @@ function vRep(){
     <div class="card"><div class="eyebrow">Step 1 of 3</div>
       <h3>Describe the real task you have</h3>
       <p class="muted" style="margin:8px 0 12px">Do not solve it yet, and do not explain anything. Just tell your coach what you actually need to get done. It will turn that into a short assignment for you.</p>
+      <p class="muted" style="margin:0 0 12px">Your coach builds a practice assignment for the skill you are training. It does not walk you through your whole task.</p>
       <textarea id="sit" placeholder="${esc(hint(R))}" oninput="V.rep.sit=this.value">${esc(R.sit)}</textarea>
       ${R.err?`<div class="err">${esc(R.err)}</div>`:''}
       <div class="row"><button class="btn go full" ${R.busy?'disabled':''} onclick="buildBrief()">
-        ${R.busy?'<span class="spin"></span> Building your assignment':'Build my assignment'}</button></div></div>`,
+        ${R.busy?'<span class="spin"></span> Building your assignment':'Build my assignment'}</button></div>
+      ${R.ceiling?`<div class="row">${R.brief?`<button class="btn sec full" onclick="V.rep.err='';V.rep.ceiling=false;V.rep.step='do';render()">Back to my assignment</button>`:''}
+        <button class="btn sec full" onclick="buildBrief(true)">Start a new one</button></div>`:''}</div>`,
     {crumb:'Practice assignment'});
 
   if(R.step==='do'){const b=R.brief;return shell(`${head}
@@ -1657,7 +1703,8 @@ function vRep(){
       <p style="margin-top:8px">${esc(b.learn)}</p></div>
     <div class="card tint"><h3>Now do this for real</h3><p style="margin-top:8px">${esc(b.do)}</p>
       <div style="margin-top:12px;font-weight:600">A strong attempt shows</div>
-      <ul style="margin:6px 0 0;padding-left:20px">${(b.good||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>
+      <ul style="margin:6px 0 0;padding-left:20px">${(b.good||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+      <div class="row"><button class="btn sec full" onclick="V.rep.err='';V.rep.step='sit';render()">Change my task and rebuild</button></div></div>
     <div class="card"><div class="eyebrow">Step 3 of 3</div><h3>Hand in what you made</h3>
       <p class="muted" style="margin:8px 0 16px">Three short boxes. Remove anything private first.</p>
 
@@ -1702,12 +1749,12 @@ function vRep(){
       <button class="btn sec full" onclick="V.rep=null;go(6)">Your progress</button></div>`,
     {crumb:'Practice assignment'});}
 }
-async function buildBrief(){
+async function buildBrief(fresh){
   const R=V.rep;
   if(!R.sit||R.sit.trim().length<12){R.err='Please write one full sentence about the real task.';render();return;}
-  R.err='';R.busy=true;render();
-  try{R.brief=await genBrief(R.a,R.c,R.tgt,R.sit.trim());R.step='do';}
-  catch(e){R.err='Your coach could not be reached. Check your connection and try again.';}
+  R.err='';R.ceiling=false;R.busy=true;render();
+  try{R.brief=await genBrief(R.a,R.c,R.tgt,R.sit.trim(),{assignmentKey:`${R.a.id}:${R.c.id}:${R.tgt}`,fresh:fresh===true});R.step='do';}
+  catch(e){R.ceiling=!!e.rebuildLimit;R.err=coachErr(e,'Your coach could not be reached. Check your connection and try again.');}
   R.busy=false;render();
 }
 async function submitRep(){
@@ -1718,7 +1765,7 @@ async function submitRep(){
     R.err='Please fill in box 2 or box 3 before sending. Box 1 is optional.';render();return;}
   R.err='';R.busy=true;render();
   try{R.coach=await genCoach(R.c,R.tgt,R.sit,R.brief,{prompt:R.prompt,back:R.back,did:R.did});R.step='coach';}
-  catch(e){R.err='Your coach could not be reached. Your work is safe. Please try again.';}
+  catch(e){R.err=coachErr(e,'Your coach could not be reached. Your work is safe. Please try again.');}
   R.busy=false;render();
 }
 function logRep(){
@@ -2084,6 +2131,7 @@ footer{color:var(--ink3);font-size:12.5px;margin-top:30px;text-align:center}
 }
 /* ---------- 9. account ---------- */
 function vAccount(){
+  coachSoon();
   const doneCount=DK.filter(d=>domDone(d)).length, total=DK.length, anyDone=doneCount>0;
   const nm=S.name?esc(S.name):'';
   if(!anyDone){
@@ -2134,7 +2182,7 @@ function vAccount(){
   <div class="rows" data-no-i18n><div class="rw"><div class="ic">&#127760;</div><div class="tx"><b>Taal / Language</b><span>${window.BRIG_LANG==='nl'?'Nederlands':'English'}</span></div><button class="btn sec" style="padding:8px 14px" onclick="setLang('${window.BRIG_LANG==='nl'?'en':'nl'}')">${window.BRIG_LANG==='nl'?'English':'Nederlands'}</button></div></div>
 
   <div class="sect">Subscription</div>
-  <div class="rows"><div class="rw"><div class="ic c">&#11088;</div><div class="tx"><b>Current plan</b><span>Free</span></div><span class="pill">Free</span></div></div>
+  <div class="rows"><div class="rw"><div class="ic c">&#11088;</div><div class="tx"><b>Current plan</b><span id="coachLeftAccount">Free</span></div><span class="pill" id="coachPlan">Free</span></div></div>
 
   <div class="sect">Your areas</div>
   <details class="fold" open><summary>Areas <span class="pill ok">${doneCount}/${total}</span><span class="chev">&#8250;</span></summary>
