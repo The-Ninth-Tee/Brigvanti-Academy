@@ -160,6 +160,13 @@ export function createCoachHandler({ verify, store, fetchImpl = fetch, env = pro
       console.error('coach incomplete', d.stop_reason, JSON.stringify(d.usage || {}));
       return refuse('incomplete', 'incomplete');
     }
+    console.log('coach usage', JSON.stringify({
+      kind: spot.call.kind,
+      model: d.model,
+      input: d.usage?.input_tokens,
+      output: d.usage?.output_tokens,
+      thinking: d.usage?.output_tokens_details?.thinking_tokens,
+    }));
     return json({ content, ...summary(plan, spot.used) }, 200);
   };
 }

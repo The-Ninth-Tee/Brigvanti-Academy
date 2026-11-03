@@ -13,7 +13,7 @@ export const CAPS = Object.freeze({
 export const LIMITS = Object.freeze({
   model: 'claude-opus-5-5',
   effort: 'medium',
-  maxOutputTokens: 1500,
+  maxOutputTokens: 2500,    // thinking counts inside this, measured at 1,332 on feedback
   maxInputChars: 14000,      // about 4,000 tokens
   maxSystemChars: 2400,
   keepTailChars: 700,        // the closing instructions of the prompt
