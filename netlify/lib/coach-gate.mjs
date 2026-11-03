@@ -94,7 +94,10 @@ export function createCoachHandler({ verify, store, fetchImpl = fetch, env = pro
     }
 
     const key = env[KEY_VAR];
-    if (!key || env[RETIRED_KEY_VAR]) return locked(`${KEY_VAR} missing or ${RETIRED_KEY_VAR} still set`);
+    if (!key) return locked(`${KEY_VAR} missing`);
+    // Netlify's AI Gateway injects its own key with a base URL. That key cannot
+    // reach api.anthropic.com, so only a key without that URL is the retired one.
+    if (env[RETIRED_KEY_VAR] && !env.ANTHROPIC_BASE_URL) return locked(`${RETIRED_KEY_VAR} still set`);
 
     let body;
     try { body = await req.json(); } catch (e) { return json({ error: 'Bad request.' }, 400); }
