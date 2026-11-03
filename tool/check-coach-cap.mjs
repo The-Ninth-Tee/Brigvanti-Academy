@@ -109,7 +109,7 @@ check('the coach function goes through the gate', () => {
 });
 
 check('only the gate can reach Anthropic or hold the key', () => {
-  const banned = /api\.anthropic\.com|x-api-key|BRIGVANTI_COACH_KEY|@anthropic-ai\/sdk/;
+  const banned = /api\.anthropic\.com|x-api-key|BRIGVANTI_COACH_KEY|@anthropic-ai\/sdk|ANTHROPIC_BASE_URL|NETLIFY_AI_GATEWAY/;
   const self = 'tool/check-coach-cap.mjs';
   const offenders = walk('.').map((p) => relative('.', p)).filter((p) => /\.(mjs|js|cjs|ts|html|json|toml)$/.test(p))
     .filter((p) => p !== GATE && p !== self && banned.test(read(p)));
@@ -276,6 +276,12 @@ check('fails closed: no key, retired key or broken store never reaches Anthropic
   const b = await harness({ store: brokenReserve });
   assert.equal((await b.call('feedback')).status, 503);
   assert.equal(a.sent.length + b.sent.length, 0);
+});
+
+check('the key injected by the Netlify AI Gateway does not lock the coach', async () => {
+  const { call, sent } = await harness({ env: { ...ENV, ANTHROPIC_API_KEY: 'gateway', ANTHROPIC_BASE_URL: 'https://gateway' } });
+  assert.equal((await call('brief')).status, 200);
+  assert.equal(sent.length, 1);
 });
 
 check('no sign in, no call', async () => {
