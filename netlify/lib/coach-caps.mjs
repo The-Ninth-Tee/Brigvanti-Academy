@@ -23,6 +23,33 @@ export const LIMITS = Object.freeze({
   upstreamTimeoutMs: 50000,  // Netlify stops synchronous functions at 60 seconds
 });
 
+// Dollars per million tokens. Thinking is billed inside output tokens.
+export const PRICES = Object.freeze({
+  'claude-opus-5-5': Object.freeze({ input: 4, output: 20 }),
+});
+
+// Anthropic bills in dollars. This is the rate from the pricing model, 29 Oct 2026.
+export const EUR_PER_USD = 0.8982;
+
+// One billed call, for the cost ledger. It holds numbers only, never learner text.
+export function ledgerEntry(reply, kind, incomplete) {
+  const u = reply.usage || {};
+  const input = (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
+  const output = u.output_tokens || 0;
+  const price = PRICES[reply.model];
+  const rate = price || PRICES[LIMITS.model];
+  return {
+    calls: 1,
+    input,
+    output,
+    thinking: u.output_tokens_details?.thinking_tokens || 0,
+    costEur: Number((((input * rate.input + output * rate.output) / 1e6) * EUR_PER_USD).toFixed(6)),
+    incomplete: incomplete ? 1 : 0,
+    unpriced: price ? 0 : 1,
+    [`kind_${kind}`]: 1,
+  };
+}
+
 const asMillis = (v) => {
   if (typeof v === 'number') return v;
   if (v && typeof v.toMillis === 'function') return v.toMillis();

@@ -1,7 +1,7 @@
 // The only place that reaches Anthropic. Every call passes the cap first.
 // Any failure before the reservation refuses the call. Never fail open.
 import {
-  CAPS, LIMITS, assignmentsLeft, decideCall, periodKeys, refreshDate,
+  CAPS, LIMITS, assignmentsLeft, decideCall, ledgerEntry, periodKeys, refreshDate,
   resolvePlan, trimUserText, undoCall, validAssignment,
 } from './coach-caps.mjs';
 
@@ -12,7 +12,7 @@ const json = (obj, status) => new Response(JSON.stringify(obj), {
   status, headers: { 'Content-Type': 'application/json' },
 });
 
-export function firestoreUsageStore(db) {
+export function firestoreUsageStore(db, increment) {
   const refs = (uid, keys) => ({
     day: db.doc(`usage/${uid}/days/${keys.day}`),
     month: db.doc(`usage/${uid}/months/${keys.month}`),
@@ -55,6 +55,19 @@ export function firestoreUsageStore(db) {
           s.rebuildsSeen + (call.kind === 'rebuild' ? 1 : 0));
         return { call, used };
       });
+    },
+    // Increments, so these busy totals never need a transaction.
+    record(uid, keys, plan, orgId, entry) {
+      const fields = Object.fromEntries(Object.entries(entry).map(([k, v]) => [k, increment(v)]));
+      const batch = db.batch();
+      const paths = [
+        `usage/${uid}/months/${keys.month}`,
+        `ledger/${keys.month}/plans/${plan}`,
+        `ledger/${keys.month}/days/${keys.day}`,
+      ];
+      if (orgId) paths.push(`ledger/${keys.month}/orgs/${orgId}`);
+      paths.forEach((p) => batch.set(db.doc(p), fields, { merge: true }));
+      return batch.commit();
     },
     release(uid, keys, call, outcome) {
       const r = refs(uid, keys);
@@ -107,9 +120,11 @@ export function createCoachHandler({ verify, store, fetchImpl = fetch, env = pro
       return json({ error: 'Bad request.' }, 400);
     }
 
-    let plan, spot;
+    let plan, spot, orgId;
     try {
-      plan = resolvePlan(await store.entitlement(uid), now);
+      const entitlement = await store.entitlement(uid);
+      plan = resolvePlan(entitlement, now);
+      orgId = plan === 'b2b' && typeof entitlement.orgId === 'string' ? entitlement.orgId : null;
       spot = await store.reserve(uid, keys, CAPS[plan], {
         purpose,
         key: typeof assignmentKey === 'string' ? assignmentKey.slice(0, 80) : '',
@@ -152,14 +167,21 @@ export function createCoachHandler({ verify, store, fetchImpl = fetch, env = pro
     }
 
     const d = await r.json();
+    // Anthropic billed this reply, so it enters the ledger whatever happens next.
+    const ledger = async (incomplete) => {
+      try { await store.record(uid, keys, plan, orgId, ledgerEntry(d, spot.call.kind, incomplete)); }
+      catch (e) { console.error('coach ledger failed', e); }
+    };
     const content = (d.content || []).filter((b) => b.type === 'text' && b.text);
     const text = content.map((b) => b.text).join('\n');
     const isBuild = purpose !== 'feedback';
     if (!content.length || d.stop_reason === 'max_tokens' || d.stop_reason === 'refusal'
         || (isBuild && !validAssignment(text))) {
       console.error('coach incomplete', d.stop_reason, JSON.stringify(d.usage || {}));
+      await ledger(true);
       return refuse('incomplete', 'incomplete');
     }
+    await ledger(false);
     console.log('coach usage', JSON.stringify({
       kind: spot.call.kind,
       model: d.model,
