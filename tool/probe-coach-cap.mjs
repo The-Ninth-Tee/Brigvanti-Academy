@@ -38,7 +38,7 @@ if (!email || !password) {
       fail(`The coach did not refuse a capped account. Status ${capped.status}, code ${body.code}.`);
     }
 
-    for (const path of [`entitlements/${auth.localId}`, `usage/${auth.localId}/months/probe`]) {
+    for (const path of [`entitlements/${auth.localId}`, `usage/${auth.localId}/months/probe`, 'ledger/probe/plans/probe']) {
       const w = await fetch(`${FIRESTORE}/${path}?updateMask.fieldPaths=probeWrite`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.idToken}` },

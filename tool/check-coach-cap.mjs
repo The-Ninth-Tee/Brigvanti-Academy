@@ -47,6 +47,19 @@ function fakeDb(seed = {}) {
       queue = run.catch(() => {});
       return run;
     },
+    batch() {
+      const ops = [];
+      return {
+        set: (r, data) => ops.push([r.path, data]),
+        commit: async () => {
+          for (const [p, data] of ops) {
+            const doc = { ...(docs.get(p) || {}) };
+            for (const [k, v] of Object.entries(data)) doc[k] = (doc[k] || 0) + v;
+            docs.set(p, doc);
+          }
+        },
+      };
+    },
   };
 }
 
@@ -64,7 +77,7 @@ async function harness({ seed, env = ENV, reply = okReply, store } = {}) {
   const sent = [];
   const handler = createCoachHandler({
     verify: async (t) => { if (t !== 'good') throw new Error('bad'); return { sub: 'u1' }; },
-    store: store || firestoreUsageStore(db),
+    store: store || firestoreUsageStore(db, (n) => n),
     fetchImpl: async (url, init) => { sent.push(JSON.parse(init.body)); return reply(); },
     env, clock: () => NOW,
   });
@@ -103,7 +116,7 @@ check('cap numbers and token limits match the locked values', async () => {
 check('the coach function goes through the gate', () => {
   const c = read('netlify/functions/coach.mjs');
   assert.match(c, /export default createCoachHandler\(\{/);
-  assert.match(c, /store: firestoreUsageStore\(db\)/);
+  assert.match(c, /store: firestoreUsageStore\(db, FieldValue\.increment\)/);
   assert.equal((c.match(/export default/g) || []).length, 1);
   assert.ok(!/export const config/.test(c) || !/path:/.test(c), 'no alternate route on coach');
 });
@@ -282,6 +295,57 @@ check('the key injected by the Netlify AI Gateway does not lock the coach', asyn
   const { call, sent } = await harness({ env: { ...ENV, ANTHROPIC_API_KEY: 'gateway', ANTHROPIC_BASE_URL: 'https://gateway' } });
   assert.equal((await call('brief')).status, 200);
   assert.equal(sent.length, 1);
+});
+
+const LEDGER_PLAN = 'ledger/202611/plans/b2b';
+const measured = (stop = 'end_turn') => new Response(JSON.stringify({
+  model: 'claude-opus-5-5', stop_reason: stop, content: [{ type: 'text', text: BRIEF }],
+  usage: { input_tokens: 1000, output_tokens: 2000, output_tokens_details: { thinking_tokens: 1500 } },
+}));
+
+check('the ledger records tokens and cost per person, plan, day and company', async () => {
+  const { call, db } = await harness({ seed: seedFor({ product: 'b2b', orgId: 'acme', validUntil: FUTURE }), reply: measured });
+  await call('brief');
+  await call('brief');
+  for (const p of [LEDGER_PLAN, 'ledger/202611/days/20261102', 'ledger/202611/orgs/acme', MONTH]) {
+    const d = db.docs.get(p);
+    assert.equal(d.calls, 2, p);
+    assert.equal(d.input, 2000, p);
+    assert.equal(d.output, 4000, p);
+    assert.equal(d.thinking, 3000, p);
+    assert.ok(Math.abs(d.costEur - 0.079042) < 0.000002, p);
+    assert.equal(d.kind_new, 1, p);
+    assert.equal(d.kind_rebuild, 1, p);
+  }
+});
+
+check('the ledger holds numbers only', async () => {
+  const { call, db } = await harness({ reply: measured });
+  await call('brief', { user: 'SECRET TEXT', system: 'SECRET RULES' });
+  const all = JSON.stringify([...db.docs.entries()].filter(([k]) => k.startsWith('ledger/')));
+  assert.ok(all.includes('calls') && !all.includes('SECRET'));
+});
+
+check('billed failures enter the ledger, unbilled failures do not', async () => {
+  const seed = seedFor({ product: 'b2b', validUntil: FUTURE });
+  const cut = await harness({ seed, reply: () => measured('max_tokens') });
+  await cut.call('brief');
+  assert.equal(cut.db.docs.get(LEDGER_PLAN).incomplete, 1);
+  assert.equal(cut.db.docs.get(LEDGER_PLAN).calls, 1);
+  const down = await harness({ seed, reply: () => new Response('no', { status: 500 }) });
+  await down.call('brief');
+  assert.equal(down.db.docs.get(LEDGER_PLAN), undefined);
+});
+
+check('a free user never writes to a company, and a broken ledger keeps the reply', async () => {
+  const free = await harness({ seed: seedFor({ orgId: 'acme' }), reply: measured });
+  await free.call('brief');
+  assert.equal(free.db.docs.get('ledger/202611/orgs/acme'), undefined);
+  assert.equal(free.db.docs.get('ledger/202611/plans/free').calls, 1);
+  const { firestoreUsageStore } = await import(join(ROOT, GATE));
+  const store = { ...firestoreUsageStore(fakeDb(), (n) => n), record: async () => { throw new Error('down'); } };
+  const broken = await harness({ store });
+  assert.equal((await broken.call('brief')).status, 200);
 });
 
 check('no sign in, no call', async () => {
