@@ -2,8 +2,9 @@
 // Any failure before the reservation refuses the call. Never fail open.
 import {
   CAPS, LIMITS, assignmentsLeft, decideCall, ledgerEntry, periodKeys, refreshDate,
-  resolvePlan, trimUserText, undoCall, validAssignment,
+  resolvePlan, readAssignment, trimUserText, undoCall,
 } from './coach-caps.mjs';
+import { buildPrompt, splitAttempt } from './coach-prompts.mjs';
 
 const KEY_VAR = 'BRIGVANTI_COACH_KEY';
 const RETIRED_KEY_VAR = 'ANTHROPIC_API_KEY';
@@ -114,11 +115,13 @@ export function createCoachHandler({ verify, store, fetchImpl = fetch, env = pro
 
     let body;
     try { body = await req.json(); } catch (e) { return json({ error: 'Bad request.' }, 400); }
-    const { system, user, purpose, assignmentKey, fresh } = body || {};
-    if (typeof system !== 'string' || typeof user !== 'string' || !user.trim()
-        || system.length > LIMITS.maxSystemChars) {
-      return json({ error: 'Bad request.' }, 400);
+    // Prompts are built here only. A browser that sends its own is refused.
+    if (!body || 'system' in body || 'messages' in body || 'user' in body) {
+      return json({ code: 'browser_prompt', error: 'Bad request.' }, 400);
     }
+    const { purpose, assignmentKey, fresh } = body;
+    const built = buildPrompt(body);
+    if (!built) return json({ error: 'Bad request.' }, 400);
 
     let plan, spot, orgId;
     try {
@@ -154,8 +157,8 @@ export function createCoachHandler({ verify, store, fetchImpl = fetch, env = pro
           model: env.COACH_MODEL || LIMITS.model,
           max_tokens: LIMITS.maxOutputTokens,
           output_config: { effort: LIMITS.effort },
-          system,
-          messages: [{ role: 'user', content: trimUserText(user, system.length) }],
+          system: built.system,
+          messages: [{ role: 'user', content: trimUserText(built.user, built.system.length) }],
         }),
       });
     } catch (e) {
@@ -168,20 +171,25 @@ export function createCoachHandler({ verify, store, fetchImpl = fetch, env = pro
 
     const d = await r.json();
     // Anthropic billed this reply, so it enters the ledger whatever happens next.
-    const ledger = async (incomplete) => {
-      try { await store.record(uid, keys, plan, orgId, ledgerEntry(d, spot.call.kind, incomplete)); }
+    const ledger = async (incomplete, notAttempt) => {
+      try { await store.record(uid, keys, plan, orgId, ledgerEntry(d, spot.call.kind, incomplete, notAttempt)); }
       catch (e) { console.error('coach ledger failed', e); }
     };
-    const content = (d.content || []).filter((b) => b.type === 'text' && b.text);
-    const text = content.map((b) => b.text).join('\n');
+    const text = (d.content || []).filter((b) => b.type === 'text' && b.text).map((b) => b.text).join('\n');
     const isBuild = purpose !== 'feedback';
-    if (!content.length || d.stop_reason === 'max_tokens' || d.stop_reason === 'refusal'
-        || (isBuild && !validAssignment(text))) {
+    const brief = isBuild ? readAssignment(text) : null;
+    if (brief && brief.offTask) {
+      await ledger(false);
+      const used = await release('incomplete');
+      return json({ code: 'off_task', message: brief.offTask, ...summary(plan, used) }, 422);
+    }
+    if (!text || d.stop_reason === 'max_tokens' || d.stop_reason === 'refusal' || (brief && !brief.ok)) {
       console.error('coach incomplete', d.stop_reason, JSON.stringify(d.usage || {}));
       await ledger(true);
       return refuse('incomplete', 'incomplete');
     }
-    await ledger(false);
+    const reply = isBuild ? { text, attempt: null } : splitAttempt(text);
+    await ledger(false, reply.attempt === false);
     console.log('coach usage', JSON.stringify({
       kind: spot.call.kind,
       model: d.model,
@@ -189,6 +197,6 @@ export function createCoachHandler({ verify, store, fetchImpl = fetch, env = pro
       output: d.usage?.output_tokens,
       thinking: d.usage?.output_tokens_details?.thinking_tokens,
     }));
-    return json({ content, ...summary(plan, spot.used) }, 200);
+    return json({ content: [{ type: 'text', text: reply.text }], ...summary(plan, spot.used) }, 200);
   };
 }

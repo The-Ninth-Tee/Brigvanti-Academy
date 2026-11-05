@@ -15,8 +15,7 @@ export const LIMITS = Object.freeze({
   effort: 'medium',
   maxOutputTokens: 2500,    // thinking counts inside this, measured at 1,332 on feedback
   maxInputChars: 14000,      // about 4,000 tokens
-  maxSystemChars: 2400,
-  keepTailChars: 700,        // the closing instructions of the prompt
+  keepTailChars: 1000,       // the closing instructions of the prompt
   callsPerAssignment: 2,
   maxFreeRebuilds: 3,
   givebacksPerDay: 1,
@@ -32,7 +31,7 @@ export const PRICES = Object.freeze({
 export const EUR_PER_USD = 0.8982;
 
 // One billed call, for the cost ledger. It holds numbers only, never learner text.
-export function ledgerEntry(reply, kind, incomplete) {
+export function ledgerEntry(reply, kind, incomplete, notAttempt) {
   const u = reply.usage || {};
   const input = (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
   const output = u.output_tokens || 0;
@@ -46,6 +45,7 @@ export function ledgerEntry(reply, kind, incomplete) {
     costEur: Number((((input * rate.input + output * rate.output) / 1e6) * EUR_PER_USD).toFixed(6)),
     incomplete: incomplete ? 1 : 0,
     unpriced: price ? 0 : 1,
+    notAttempt: notAttempt ? 1 : 0,
     [`kind_${kind}`]: 1,
   };
 }
@@ -149,12 +149,14 @@ export function trimUserText(user, systemLength) {
 }
 
 // Step 2 must be usable JSON, or the learner has received nothing.
-export function validAssignment(text) {
+export function readAssignment(text) {
   try {
     const b = JSON.parse(text.replace(/```json|```/g, '').trim());
-    return ['learn', 'do', 'reflect'].every((k) => typeof b[k] === 'string' && b[k].trim())
+    if (b.off_task === true && typeof b.message === 'string' && b.message.trim()) return { offTask: b.message.trim() };
+    const ok = ['learn', 'do', 'reflect'].every((k) => typeof b[k] === 'string' && b[k].trim())
       && Array.isArray(b.good) && b.good.length > 0;
+    return { ok };
   } catch (e) {
-    return false;
+    return { ok: false };
   }
 }
