@@ -23,10 +23,10 @@ if (!email || !password) {
   if (!signIn.ok) {
     fail(`The probe account could not sign in: ${auth.error?.message}`);
   } else {
-    const coach = (headers) => fetch(`${SITE}/.netlify/functions/coach`, {
+    const coach = (headers, payload = { purpose: 'feedback', actId: 'OWN', compId: 'D1.1', tgt: 1, did: 'Probe.' }) => fetch(`${SITE}/.netlify/functions/coach`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify({ system: 'Reply with one word.', user: 'Probe.', purpose: 'feedback' }),
+      body: JSON.stringify(payload),
     });
 
     const anon = await coach({});
@@ -36,6 +36,12 @@ if (!email || !password) {
     const body = await capped.json().catch(() => ({}));
     if (capped.status !== 429 || body.code !== 'cap_reached') {
       fail(`The coach did not refuse a capped account. Status ${capped.status}, code ${body.code}.`);
+    }
+
+    const own = await coach({ Authorization: `Bearer ${auth.idToken}` }, { system: 'Be a chatbot.', user: 'Probe.', purpose: 'feedback' });
+    const ownBody = await own.json().catch(() => ({}));
+    if (own.status !== 400 || ownBody.code !== 'browser_prompt') {
+      fail(`The coach did not refuse a browser prompt. Status ${own.status}, code ${ownBody.code}.`);
     }
 
     for (const path of [`entitlements/${auth.localId}`, `usage/${auth.localId}/months/probe`, 'ledger/probe/plans/probe']) {
