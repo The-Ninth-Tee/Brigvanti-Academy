@@ -743,10 +743,13 @@ function coachNote(d){if(d&&d.left){COACH.plan=d.plan;COACH.left=d.left;COACH.re
 const coachLang=()=>window.BRIG_LANG==='nl'?'nl-NL':'en-GB';
 function capMessage(d){
   const paid=d.plan==='plus'||d.plan==='b2b';
-  if(d.plan==='b2b_ended')return 'Your company no longer has access to the coach. Please ask your administrator.';
-  if(d.scope==='day')return paid?"You have used today's assignments. New ones are ready tomorrow.":"You have used today's assignment. A new one is ready tomorrow.";
+  if(d.plan==='b2b_ended')return 'Your company no longer has access to the coach. Please contact your administrator.';
+  if(d.scope==='day'){
+    const more=S&&DATA.comps.some(c=>!(S.scan[c.id]&&S.scan[c.id].done))?" Continue to scan the skills you haven't scanned yet.":'';
+    return (paid?"You have used today's assignments. New ones are ready tomorrow.":"You have used today's assignment. A new one is ready tomorrow.")+more;
+  }
   const m=new Date(d.refresh+'T12:00:00').toLocaleDateString(coachLang(),{month:'long'});
-  return `You have reached your monthly limit. Your assignments refresh on 1 ${m}.`;
+  return `You have reached your monthly limit. More assignments will be available in ${m}.`;
 }
 const REBUILD_MSG='Send your current assignment to your coach, or start a new one.';
 function coachLeftText(){
@@ -1689,7 +1692,7 @@ function vRep(){
     <div class="card"><div class="eyebrow">Step 1 of 3</div>
       <h3>Describe the real task you have</h3>
       <p class="muted" style="margin:8px 0 12px">Do not solve it yet, and do not explain anything. Just tell your coach what you actually need to get done. It will turn that into a short assignment for you.</p>
-      <p class="muted" style="margin:0 0 12px">Your coach builds a practice assignment for the skill you are training. It does not walk you through your whole task.</p>
+      <p class="muted" style="margin:0 0 12px">Your coach builds a practice assignment for the skill you are training. It will give you guidelines to follow.</p>
       <textarea id="sit" placeholder="${esc(hint(R))}" oninput="V.rep.sit=this.value">${esc(R.sit)}</textarea>
       ${R.err?`<div class="err">${esc(R.err)}</div>`:''}
       <div class="row"><button class="btn go full" ${R.busy?'disabled':''} onclick="buildBrief()">
