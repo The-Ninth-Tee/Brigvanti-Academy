@@ -779,74 +779,23 @@ async function coachRefresh(){
 }
 function coachSoon(){setTimeout(()=>{coachPaint();coachRefresh();},0);}
 const coachErr=(e,fallback)=>e&&e.coachMessage?e.coachMessage:fallback;
-async function claude(system,user,purpose,json,meta){
-  if(window.BRIG_LANG==='nl')system+='\n\nWrite every text in your reply in Dutch, with informal "je". Never refer to AI as "hij" or "zij". Keep any JSON keys in English.';
+async function claude(body,json){
   const tok=window.brigvantiAuth?await window.brigvantiAuth.token():null;
   const r=await fetch("/.netlify/functions/coach",{
     method:"POST",
     headers:Object.assign({"Content-Type":"application/json"},tok?{"Authorization":"Bearer "+tok}:{}),
-    body:JSON.stringify(Object.assign({system,user,purpose},meta||{}))});
+    body:JSON.stringify(Object.assign({lang:window.BRIG_LANG==='nl'?'nl':'en'},body))});
   if(r.status===401) throw new Error('Please sign in again to use the coach.');
   const d=await r.json();
   coachNote(d);
   if(d.code==='cap_reached'){const e=new Error('cap');e.coachMessage=capMessage(d);throw e;}
+  if(d.code==='off_task'){const e=new Error('off');e.coachMessage=d.message;throw e;}
   if(d.code==='rebuild_limit'){const e=new Error('rebuild');e.coachMessage=REBUILD_MSG;e.rebuildLimit=true;throw e;}
   if(!r.ok)throw new Error(d.error||'coach');
   let t=(d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n");
   if(json){t=t.replace(/```json|```/g,"").trim();return JSON.parse(t);}
   return t;
 }
-const RULES=`You are the Brigvanti practice coach for adult learners.
-Rules you never break:
-1. You advise. You never score, grade, rate or certify the person.
-2. You never say pass, fail, correct or incorrect about the person.
-3. You never tell someone what level they are.
-4. Write short, clear sentences. Keep most sentences under 15 words.
-5. Never use a dash or a hyphen as punctuation between clauses. Use a comma or a full stop.
-6. Write plain English. No jargon. Speak directly to the person as "you".
-7. Use the real situation the person described. Refer to their own words.
-8. Never ask for private or sensitive data. If you see any, tell them to remove it.`;
-
-async function genBrief(act,comp,tgt,sit,meta){
-  return await claude(RULES+`\nReturn only JSON. No extra text. No code fences.`,
-`Build one practice assignment.
-
-Task: ${act.a} (topic: ${act.t})
-Skill: ${comp.n}
-Level being trained: ${LV[tgt]}
-What this level looks like: ${comp.ld[tgt-1]||comp.ld[0]}
-The person's real situation, in their words: "${sit}"
-
-Return JSON with these keys:
-"learn": two or three sentences that teach the idea for this level.
-"do": the assignment, written for the situation above. Two to four sentences. It must be something they do for real today.
-"good": an array of three short strings. Each names one thing a strong attempt clearly shows.
-"reflect": one short reflection question.`,'brief',true,meta);
-}
-async function genCoach(comp,tgt,sit,brief,f){
-  const parts=[];
-  if(f.prompt&&f.prompt.trim())parts.push(`The prompt they wrote:\n"""${f.prompt.trim().slice(0,2500)}"""`);
-  if(f.back&&f.back.trim())parts.push(`What the tool gave back:\n"""${f.back.trim().slice(0,7000)}"""`);
-  if(f.did&&f.did.trim())parts.push(`What they did with it, and what they noticed:\n"""${f.did.trim().slice(0,2500)}"""`);
-  return await claude(RULES,
-`Give coaching feedback on this practice assignment.
-
-Skill: ${comp.n}. Level trained: ${LV[tgt]}.
-What this level looks like: ${comp.ld[tgt-1]||comp.ld[0]}
-Their real task: "${sit}"
-The assignment they were given: ${brief.do}
-What a strong attempt shows: ${(brief.good||[]).join(" | ")}
-
-What they handed in:
-${parts.join("\n\n")}
-
-Write 110 to 160 words of plain prose. No headings. No bullet points.
-First, name one specific thing they did well. Quote a few of their own words.
-Second, name the single most useful thing to sharpen, and how.
-Third, suggest one harder version to try in a few days, in their own context.
-If they left the prompt out, do not mention that it is missing.`,'feedback');
-}
-
 /* ---------- navigation ---------- */
 const TITLE=['Sign in','Set up','Insight scan','Where you stand','Practice','Level up','Your progress','Privacy and legal','Portfolio','Your account'];
 function go(n){
@@ -1756,7 +1705,7 @@ async function buildBrief(fresh){
   const R=V.rep;
   if(!R.sit||R.sit.trim().length<12){R.err='Please write one full sentence about the real task.';render();return;}
   R.err='';R.ceiling=false;R.busy=true;render();
-  try{R.brief=await genBrief(R.a,R.c,R.tgt,R.sit.trim(),{assignmentKey:`${R.a.id}:${R.c.id}:${R.tgt}`,fresh:fresh===true});R.step='do';}
+  try{R.brief=await claude({purpose:'brief',actId:R.a.id,compId:R.c.id,tgt:R.tgt,sit:R.sit.trim(),assignmentKey:`${R.a.id}:${R.c.id}:${R.tgt}`,fresh:fresh===true},true);R.step='do';}
   catch(e){R.ceiling=!!e.rebuildLimit;R.err=coachErr(e,'Your coach could not be reached. Check your connection and try again.');}
   R.busy=false;render();
 }
@@ -1767,7 +1716,7 @@ async function submitRep(){
   if((R.back+R.did).trim().length<15){
     R.err='Please fill in box 2 or box 3 before sending. Box 1 is optional.';render();return;}
   R.err='';R.busy=true;render();
-  try{R.coach=await genCoach(R.c,R.tgt,R.sit,R.brief,{prompt:R.prompt,back:R.back,did:R.did});R.step='coach';}
+  try{R.coach=await claude({purpose:'feedback',actId:R.a.id,compId:R.c.id,tgt:R.tgt,sit:R.sit,assignment:R.brief.do,good:R.brief.good,prompt:R.prompt,back:R.back,did:R.did});R.step='coach';}
   catch(e){R.err=coachErr(e,'Your coach could not be reached. Your work is safe. Please try again.');}
   R.busy=false;render();
 }
