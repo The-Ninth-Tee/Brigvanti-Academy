@@ -3,6 +3,7 @@
 // Do not call Anthropic from here. tool/check-coach-cap.mjs blocks such a deploy.
 
 import crypto from "node:crypto";
+import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../lib/firebase-admin.mjs";
 import { createCoachHandler, firestoreUsageStore } from "../lib/coach-gate.mjs";
 
@@ -59,5 +60,5 @@ async function verifyIdToken(token) {
 
 export default createCoachHandler({
   verify: verifyIdToken,
-  store: firestoreUsageStore(db)
+  store: firestoreUsageStore(db, FieldValue.increment)
 });
