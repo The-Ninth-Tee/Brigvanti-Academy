@@ -812,7 +812,7 @@ async function claude(body,json){
 const TITLE=['Sign in','Set up','Insight scan','Where you stand','Practice','Level up','Your progress','Privacy and legal','Portfolio','Your account'];
 function go(n){
   if(n===8)V.pf=null;
-  if(n===S.stage&&!V.rep&&!V.ru)return;
+  if(n===S.stage&&!V.rep&&!V.ru){if(V.menu){V={};render();}return;}
   if(n!==S.stage){NAV.push(S.stage);if(NAV.length>60)NAV.shift();}
   S.stage=n;V={};save();render();
 }
@@ -829,9 +829,13 @@ function back(){
   if(V.ru){V.ru=null;render();return;}
   if(V.lvArea){V.lvArea=null;render();return;}
   if(V.pf){V.pf=null;render();return;}
+  /* After a finished scan, sign in, setup and the scan are behind the learner. Back leads home. */
+  if(anyDomDone())while(NAV.length&&NAV[NAV.length-1]<=2)NAV.pop();
   if(NAV.length){S.stage=NAV.pop();V={};save();render();return;}
+  if(anyDomDone()&&S.stage!==6){S.stage=6;V={};save();render();return;}
   V.leaving=true;render();
 }
+const anyDomDone=()=>DK.some(d=>domDone(d));
 function setupDone(){ return !!(S&&S.name&&S.name.trim()&&S.consent&&Object.keys(S.targets||{}).length); }
 /* ---------- reminders ----------
    Push belongs to a device, so each device keeps its own switch under
@@ -1035,6 +1039,7 @@ function menuPanel(){
   if(!S.signed||!V.menu)return '';
   return `<div class="menu-bg" onclick="V.menu=false;render()"></div>
   <nav class="menu" aria-label="Menu">
+    ${anyDomDone()?`<button onclick="go(6)">Your progress</button>`:''}
     <button onclick="practiseDom('')">Assignments</button>
     <button onclick="menuDo(exportPortfolioDoc)">Download my work<span class="sub">Your assignments as a page to read or print.</span></button>
     <button onclick="menuDo(exportLog)">Download record<span class="sub">Your levels and assignments as a spreadsheet.</span></button>
