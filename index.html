@@ -640,6 +640,7 @@ const fmtDate=d=>d.toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{w
 function canLevelUp(cid){
   const r=S.scan[cid];if(!r||!r.done||r.skipped)return false;
   const c=byId[cid],t=(r.confirmed||0)+1;
+  if(!skillOpen(c)||rungWall(cid))return false;
   return t<=4&&t>=c.fl&&formsAt(cid,t).length>0&&repsFor(cid).length>=(t-1);
 }
 function rungState(cid){if(!S.rung[cid])S.rung[cid]={};return S.rung[cid];}
@@ -739,7 +740,17 @@ function badgeBanner(){
 
 /* ---------- live coach ---------- */
 const COACH={plan:null,left:null,refresh:null,at:0,busy:false};
-function coachNote(d){if(d&&d.left){COACH.plan=d.plan;COACH.left=d.left;COACH.refresh=d.refresh;COACH.at=Date.now();}}
+function coachNote(d){if(d&&d.left){COACH.plan=d.plan;if(S)S.plan=d.plan;COACH.left=d.left;COACH.refresh=d.refresh;COACH.at=Date.now();}}
+/* Plans. The server enforces the coach. These checks only shape what a learner sees. */
+const FREE_AREAS=['D1','D2','D6'];
+const PLUS_MSG='Practice in this area is part of Plus.';
+const plan=()=>COACH.plan||(S&&S.plan)||'free';
+const isFree=()=>plan()==='free';
+const areaOpen=d=>!isFree()||FREE_AREAS.includes(d);
+const skillOpen=c=>areaOpen(c.d)&&(c.id!=='D7.4'||plan().startsWith('b2b'));
+const rungWall=cid=>isFree()&&!!(S.rung[cid]&&S.rung[cid].passed);
+const practiceLevel=c=>{const cur=(S.scan[c.id]&&S.scan[c.id].confirmed)||0;
+  return rungWall(c.id)?Math.max(cur,c.fl):Math.min(Math.max(cur+1,c.fl),4);};
 const coachLang=()=>window.BRIG_LANG==='nl'?'nl-NL':'en-GB';
 function capMessage(d){
   const paid=d.plan==='plus'||d.plan==='b2b';
@@ -758,10 +769,10 @@ function coachLeftText(){
   return `${day} assignment${day===1?'':'s'} left today, ${month} left this month`;
 }
 function practiceCounter(){
-  const show=COACH.plan==='free'||(COACH.left&&COACH.left.month<10);
+  const show=isFree()||(COACH.left&&COACH.left.month<10);
   return show?coachLeftText():'';
 }
-const planName=()=>({plus:'Plus',b2b:'Company',b2b_ended:'Company'})[COACH.plan]||'Free';
+const planName=()=>({plus:'Plus',b2b:'Company',b2b_ended:'Company'})[plan()]||'Free';
 function coachPaint(){
   const p=document.getElementById('coachLeftPractice');if(p){const t=practiceCounter();p.textContent=t;p.style.display=t?'':'none';}
   const a=document.getElementById('coachLeftAccount');if(a){const t=coachLeftText();a.textContent=t||planName();}
@@ -773,7 +784,7 @@ async function coachRefresh(){
   try{
     const tok=await window.brigvantiAuth.token();
     if(tok){const r=await fetch("/.netlify/functions/coach",{headers:{"Authorization":"Bearer "+tok}});
-      if(r.ok){coachNote(await r.json());coachPaint();}}
+      if(r.ok){const was=plan();coachNote(await r.json());coachPaint();if(plan()!==was&&!V.rep&&!V.ru)render();}}
   }catch(e){}
   COACH.busy=false;
 }
@@ -789,6 +800,7 @@ async function claude(body,json){
   const d=await r.json();
   coachNote(d);
   if(d.code==='cap_reached'){const e=new Error('cap');e.coachMessage=capMessage(d);throw e;}
+  if(d.code==='locked_area'){const e=new Error('locked');e.coachMessage=PLUS_MSG;throw e;}
   if(d.code==='off_task'){const e=new Error('off');e.coachMessage=d.message;throw e;}
   if(d.code==='rebuild_limit'){const e=new Error('rebuild');e.coachMessage=REBUILD_MSG;e.rebuildLimit=true;throw e;}
   if(!r.ok)throw new Error(d.error||'coach');
@@ -1559,7 +1571,7 @@ function vStand(){
   <div class="row"><button class="btn sec full" onclick="go(6)">Your progress</button></div>`,
   {crumb:'Your profile',pct:Math.round(scanned()/DATA.comps.length*100)});
 }
-function practiseDom(d){if(S.stage!==4){NAV.push(S.stage);if(NAV.length>60)NAV.shift();}S.focus=d||'';S.stage=4;V={};save();render();}
+function practiseDom(d){if(d&&!areaOpen(d)){toast(PLUS_MSG);return;}if(S.stage!==4){NAV.push(S.stage);if(NAV.length>60)NAV.shift();}S.focus=d||'';S.stage=4;V={};save();render();}
 function scanDom(d){
   if(S.stage!==2){NAV.push(S.stage);if(NAV.length>60)NAV.shift();}
   S.dom=d;S.stage=2;V={};save();render();
@@ -1571,14 +1583,14 @@ function vPractice(){
   if(V.rep)return vRep();
   const g=gaps(),prio=g.length?g.map(x=>x.d):DK;
   const placed=DATA.comps.filter(c=>S.scan[c.id]&&S.scan[c.id].done&&!S.scan[c.id].skipped);
-  const avail=DK.filter(d=>placed.some(c=>c.d===d));
+  const avail=DK.filter(d=>areaOpen(d)&&placed.some(c=>c.d===d));
   if(S.focus&&avail.indexOf(S.focus)<0)S.focus='';
   /* Biggest gaps rise first. Within the same gap size, chosen topics win. */
   const gapOf={};DK.forEach(d=>{const c=domLevel(d),t=domTarget(d);
     gapOf[d]=(c===null||!t)?0:Math.max(0,t-c);});
   const rank=d=>{const i=prio.indexOf(d);return i<0?99:i;};
   const tp=a=>(S.topics&&S.topics.indexOf(a.t)>=0)?0:1;
-  const pool=DATA.acts.filter(a=>placed.some(c=>c.id===a.c))
+  const pool=DATA.acts.filter(a=>placed.some(c=>c.id===a.c)&&skillOpen(byId[a.c]))
     .filter(a=>!S.focus||a.d===S.focus)
     .sort((a,b)=>(gapOf[b.d]-gapOf[a.d])||(tp(a)-tp(b))||(rank(a.d)-rank(b.d)));
   const tabs=avail.length>1?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
@@ -1588,15 +1600,17 @@ function vPractice(){
   const st=streak();
   const cards=pool.slice(0,12).map(a=>{
     const c=byId[a.c];if(!c)return'';
-    const cur=S.scan[a.c].confirmed||0,tgt=Math.min(Math.max(cur+1,c.fl),4);
+    const tgt=practiceLevel(c);
     const n=repsFor(a.c).length;
     return `<button class="opt" onclick="openRep('${a.id}')">
       <b style="font-size:16.5px">${esc(a.a)}</b>
       <span class="sub">${esc(c.ld[tgt-1]||c.n)}</span>
       <span style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap">
         <span class="chip">${esc(a.t)}</span>
-        <span class="chip a">&#8593; ${LV[tgt]}</span>
+        <span class="chip a">${rungWall(a.c)?'':'&#8593; '}${LV[tgt]}</span>
         ${n?`<span class="chip t">${n} done</span>`:''}</span></button>`;}).join('');
+  const locked=DK.filter(d=>!areaOpen(d)).map(d=>`<div class="opt" style="opacity:.7"><b>&#128274; ${esc(DATA.doms[d])}</b>
+    <span class="sub">${PLUS_MSG}</span></div>`).join('');
   return shell(`<h1>Practise on real tasks</h1>
   <p class="lede">${S.focus?`You are practising <b>${esc(DATA.doms[S.focus])}</b>. Pick something you actually have to do this week.`
     :'Pick something you actually have to do this week. The assignment is the task itself.'}</p>
@@ -1608,24 +1622,23 @@ function vPractice(){
   <button class="opt" onclick="openOwn()" style="background:var(--indigo-l);box-shadow:none">
     <b>None of these fit my week</b>
     <span class="sub">Describe a task you actually have, and your coach builds the assignment around it.</span></button>
-  <div style="margin-top:14px">${cards||`<div class="card"><p class="muted">${S.focus?'No ready made tasks for this area yet. Use the option above to describe your own.':'Place at least one area in the scan first.'}</p></div>`}</div>`);
+  <div style="margin-top:14px">${cards||`<div class="card"><p class="muted">${S.focus?'No ready made tasks for this area yet. Use the option above to describe your own.':'Place at least one area in the scan first.'}</p></div>`}</div>
+  ${locked?`<div style="margin-top:14px">${locked}</div>`:''}`);
 }
 function setFocus(d){S.focus=d;save();render();}
 function openRep(aid){
   const a=DATA.acts.find(x=>x.id===aid),c=byId[a.c];
-  const cur=(S.scan[a.c]&&S.scan[a.c].confirmed)||0;
-  V.rep={a,c,tgt:Math.min(Math.max(cur+1,c.fl),4),step:'sit',sit:'',brief:null,prompt:'',back:'',did:'',coach:'',reflect:'',busy:false,err:''};
+  V.rep={a,c,tgt:practiceLevel(c),step:'sit',sit:'',brief:null,prompt:'',back:'',did:'',coach:'',reflect:'',busy:false,err:''};
   render();
 }
 function openOwn(){
   const g=gaps();
   const d=S.focus||(g.length?g[0].d:DK.find(x=>domLevel(x)!==null));
-  const cand=DATA.comps.filter(c=>c.d===d&&S.scan[c.id]&&S.scan[c.id].done&&!S.scan[c.id].skipped);
-  if(!cand.length)return;
+  const cand=DATA.comps.filter(c=>c.d===d&&skillOpen(c)&&S.scan[c.id]&&S.scan[c.id].done&&!S.scan[c.id].skipped);
+  if(!cand.length){toast(PLUS_MSG);return;}
   const c=cand.sort((a,b)=>(S.scan[a.id].confirmed||0)-(S.scan[b.id].confirmed||0))[0];
-  const cur=S.scan[c.id].confirmed||0;
   V.rep={a:{a:'Your own task',t:'Your choice',id:'OWN',c:c.id,d:c.d},c,
-    tgt:Math.min(Math.max(cur+1,c.fl),4),step:'sit',sit:'',brief:null,prompt:'',back:'',did:'',coach:'',reflect:'',busy:false,err:''};
+    tgt:practiceLevel(c),step:'sit',sit:'',brief:null,prompt:'',back:'',did:'',coach:'',reflect:'',busy:false,err:''};
   render();
 }
 function vRep(){
@@ -1751,7 +1764,7 @@ function vRung(){
   <p class="lede">Pick an area, then a skill that is ready. Both parts of the test must be clear. Questions are checked against a fixed answer key. The real task you confirm yourself. Your coach decides neither.</p>
   ${list.map(x=>`<button class="opt" onclick="V.lvArea='${x.d}';render()">
     <b>${esc(DATA.doms[x.d])}</b>
-    <span class="sub">${x.ready?`${x.ready} skill${x.ready>1?'s':''} ready to test`:'Practise a skill to open a test'}</span>
+    <span class="sub">${!areaOpen(x.d)?'Level up in this area is part of Plus.':x.ready?`${x.ready} skill${x.ready>1?'s':''} ready to test`:'Practise a skill to open a test'}</span>
     <span style="display:flex;gap:7px;margin-top:11px"><span class="chip ${x.ready?'a':''}">${x.ready?'&#8593; '+x.ready+' ready':'in progress'}</span><span class="arrow">&#8594;</span></span></button>`).join('')}`);
 }
 function vRungArea(d){
@@ -1760,14 +1773,17 @@ function vRungArea(d){
     const cur=S.scan[c.id].confirmed||0,t=cur+1,st=rungState(c.id);
     const atTop=t>4||t<c.fl||formsAt(c.id,t).length===0;
     const need=Math.max(t-1,0),have=repsFor(c.id).length,ready=canLevelUp(c.id);
-    const state=(st.passed&&atTop)?'<span class="chip i">at your target</span>'
+    const plus=!skillOpen(c)||rungWall(c.id);
+    const state=plus?'<span class="chip">&#128274; part of Plus</span>'
+      :(st.passed&&atTop)?'<span class="chip i">at your target</span>'
       :atTop?'<span class="chip">nothing higher to test</span>'
       :ready?`<span class="chip a">&#8593; test to ${LV[t]}</span>`
       :`<span class="chip">${have} of ${need} practised</span>`;
     return `<button class="opt" ${ready?`onclick="openRung('${c.id}')"`:''} ${ready?'':'style="opacity:.9"'}>
       <b>${esc(c.n)}</b>
       <span style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap"><span class="chip t">${LV[cur]}</span>${state}</span>
-      ${(!ready&&!atTop)?`<span class="sub" style="margin-top:8px">Practise ${need-have} more to open the test.</span>`:''}</button>`;
+      ${plus?`<span class="sub" style="margin-top:8px">${rungWall(c.id)?'You can keep practising at this level. The next test is part of Plus.':'Level up in this area is part of Plus.'}</span>`
+        :(!ready&&!atTop)?`<span class="sub" style="margin-top:8px">Practise ${need-have} more to open the test.</span>`:''}</button>`;
   }).join('');
   return shell(`<h1>${esc(DATA.doms[d])}</h1>
   <p class="lede">Tap a skill that is ready to take its level up test. The rest open as you practise.</p>
@@ -1781,10 +1797,11 @@ function vGrowScreen(){
   <p class="lede">${cur!=null?`You are at ${LV[cur]} here. `:''}${gap>0?`${aimWord()} ${LV[tgt]}, ${gap} level${gap>1?'s':''} to grow.`:'You are at or above what you are aiming for.'}</p>
   <div class="card">
     <h3>Two ways to grow</h3>
+    ${!areaOpen(d)?`<p class="muted" style="margin:6px 0 0">${PLUS_MSG} Your scan result stays yours to see.</p>`:`
     <p class="muted" style="margin:6px 0 14px">Practise on a real task to sharpen a skill. When a skill has enough practice behind it, its level up test opens.</p>
     <div class="row"><button class="btn go full" onclick="practiseDom('${d}')">Practise on real tasks</button></div>
     <div class="row" style="margin-top:10px">${ready?`<button class="btn sec full" onclick="openAreaLevelUp('${d}')">Level up, ${ready} ready</button>`
-      :`<button class="btn sec full" onclick="practiseDom('${d}')">Level up, practise first to open a test</button>`}</div>
+      :`<button class="btn sec full" onclick="practiseDom('${d}')">Level up, practise first to open a test</button>`}</div>`}
   </div>`,{crumb:'Grow'});
 }
 function areaTap(d){
@@ -1916,9 +1933,20 @@ function vProgress(){
   const avgLv=avgN==null?null:Math.round(avgN);
   if(V.grow)return vGrowScreen();
   if(V.skills){
+    if(isFree())return shell(`<h1>Your skills</h1>
+  <p class="lede">Your level per area is yours to see. The level per skill, your growth over time and your growth path are part of Plus.</p>
+  <div class="card">${DK.filter(d=>domLevel(d)!==null).map(d=>`<div class="line"><div class="nm">${esc(DATA.doms[d])}</div>
+    <span class="chip t">${LV[domLevel(d)]}</span></div>`).join('')||'<p class="muted">Nothing placed yet. Scan an area from Your progress to begin.</p>'}</div>`,{crumb:'Your skills'});
+    const grown=(S.rewards||[]).slice().sort((a,b)=>b.t-a.t).slice(0,10).map(r=>`<div class="line"><div class="nm">${esc(byId[r.c]?byId[r.c].n:r.c)}
+      <span>${new Date(r.t).toLocaleDateString(coachLang())}</span></div><span class="chip a">&#8593; ${LV[r.lv]}</span></div>`).join('');
+    const path=placed.filter(c=>skillOpen(c)&&(S.scan[c.id].confirmed||0)<4).sort((a,b)=>(S.scan[a.id].confirmed||0)-(S.scan[b.id].confirmed||0)).slice(0,5)
+      .map(c=>`<div class="line"><div class="nm">${esc(c.n)}<span>${esc(DATA.doms[c.d])}</span></div>
+      <span class="chip">${LV[(S.scan[c.id].confirmed||0)+1]} next</span></div>`).join('');
     return shell(`<h1>Your skills</h1>
   <p class="lede">Every skill you have placed, with its level.</p>
-  <div class="card">${rows||'<p class="muted">Nothing placed yet. Scan an area from Your progress to begin.</p>'}</div>`,{crumb:'Your skills'});
+  <div class="card">${rows||'<p class="muted">Nothing placed yet. Scan an area from Your progress to begin.</p>'}</div>
+  ${path?`<div class="card"><h3>Your growth path</h3><p class="muted" style="margin:6px 0 10px">These skills have the most room to grow.</p>${path}</div>`:''}
+  ${grown?`<div class="card"><h3>Your growth over time</h3>${grown}</div>`:''}`,{crumb:'Your skills'});
   }
   const doms=scanOrder().map(d=>{
     const cur=domLevel(d),tgt=domTarget(d),n=domCount(d),tot=compsOf(d).length;
@@ -2134,7 +2162,8 @@ function vAccount(){
   <div class="rows" data-no-i18n><div class="rw"><div class="ic">&#127760;</div><div class="tx"><b>Taal / Language</b><span>${window.BRIG_LANG==='nl'?'Nederlands':'English'}</span></div><button class="btn sec" style="padding:8px 14px" onclick="setLang('${window.BRIG_LANG==='nl'?'en':'nl'}')">${window.BRIG_LANG==='nl'?'English':'Nederlands'}</button></div></div>
 
   <div class="sect">Subscription</div>
-  <div class="rows"><div class="rw"><div class="ic c">&#11088;</div><div class="tx"><b>Current plan</b><span id="coachLeftAccount">Free</span></div><span class="pill" id="coachPlan">Free</span></div></div>
+  <div class="rows"><div class="rw"><div class="ic c">&#11088;</div><div class="tx"><b>Current plan</b><span id="coachLeftAccount">${planName()}</span></div><span class="pill" id="coachPlan">${planName()}</span></div>
+    ${isFree()?`<div class="rw"><div class="ic">&#128275;</div><div class="tx"><b>Plus</b><span style="white-space:normal">All 7 areas, unlimited level ups and deeper insight. €13.99 per month or €89.99 per year. Plus is coming soon.</span></div></div>`:''}</div>
 
   <div class="sect">Your areas</div>
   <details class="fold" open><summary>Areas <span class="pill ok">${doneCount}/${total}</span><span class="chev">&#8250;</span></summary>
@@ -2148,6 +2177,7 @@ function vAccount(){
 }
 /* ---------- render ---------- */
 function render(){
+  coachSoon();
   if(window.__brigAuthPending){
     var a=document.getElementById('app');
     if(a)a.innerHTML='<div class="app"><p class="muted" style="padding:56px 0 20px">Connecting...</p></div>';
