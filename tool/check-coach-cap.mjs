@@ -351,6 +351,32 @@ check('a free user never writes to a company, and a broken ledger keeps the repl
   assert.equal((await broken.call('brief')).status, 200);
 });
 
+check('PLANS: the server refuses locked areas before any charge', async () => {
+  const { FREE_AREAS } = await import(join(ROOT, 'netlify/lib/coach-caps.mjs'));
+  assert.deepEqual([...FREE_AREAS], ['D1', 'D2', 'D6']);
+  const area = { compId: 'D4.1', actId: 'OWN' };
+  const free = await harness();
+  const r = await free.call('brief', area);
+  assert.equal(r.status, 403);
+  assert.equal((await r.json()).code, 'locked_area');
+  assert.equal(free.sent.length, 0);
+  assert.deepEqual(free.used(), [0, 0]);
+  for (const ok of [{ compId: 'D1.1', actId: 'OWN' }, { compId: 'D6.1', actId: 'OWN', assignmentKey: 'a6' }]) {
+    const h = await harness();
+    assert.equal((await h.call('brief', ok)).status, 200);
+  }
+  const plus = await harness({ seed: seedFor({ product: 'b2c', tier: 'plus', validUntil: FUTURE }) });
+  assert.equal((await plus.call('brief', area)).status, 200);
+});
+
+check('PLANS: D7.4 is for B2B only', async () => {
+  const skill = { compId: 'D7.4', actId: 'OWN' };
+  const plus = await harness({ seed: seedFor({ product: 'b2c', tier: 'plus', validUntil: FUTURE }) });
+  assert.equal((await plus.call('brief', skill)).status, 403);
+  const b2b = await harness({ seed: seedFor({ product: 'b2b', validUntil: FUTURE }) });
+  assert.equal((await b2b.call('brief', skill)).status, 200);
+});
+
 check('no sign in, no call', async () => {
   const { call, sent } = await harness();
   assert.equal((await call('feedback', {}, 'bad')).status, 401);
