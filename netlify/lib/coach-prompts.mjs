@@ -56,11 +56,13 @@ export function buildPrompt(body) {
   if (!found) return null;
   const { lang, comp, act, level, looks } = found;
   const end = lang === 'nl' ? DUTCH : '';
+  const scope = { area: comp.d, skill: comp.id };
 
   if (body.purpose !== 'feedback') {
     const sit = text(body.sit, 1500);
     if (!sit) return null;
     return {
+      ...scope,
       system: SYSTEM + BRIEF_FORMAT + end,
       user: `Build one practice assignment.
 
@@ -92,6 +94,7 @@ Return JSON with these keys:
   if (did) parts.push(`What they did with it, and what they noticed:\n${wrap(did)}`);
   const good = (Array.isArray(body.good) ? body.good : []).slice(0, 5).map((g) => text(g, 300)).join(' | ');
   return {
+    ...scope,
     system: SYSTEM + end,
     user: `Give coaching feedback on this practice assignment.
 

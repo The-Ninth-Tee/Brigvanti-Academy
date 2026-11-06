@@ -1,7 +1,7 @@
 // The only place that reaches Anthropic. Every call passes the cap first.
 // Any failure before the reservation refuses the call. Never fail open.
 import {
-  CAPS, LIMITS, assignmentsLeft, decideCall, ledgerEntry, periodKeys, refreshDate,
+  CAPS, LIMITS, assignmentsLeft, decideCall, ledgerEntry, periodKeys, planAllows, refreshDate,
   resolvePlan, readAssignment, trimUserText, undoCall,
 } from './coach-caps.mjs';
 import { buildPrompt, splitAttempt } from './coach-prompts.mjs';
@@ -128,6 +128,10 @@ export function createCoachHandler({ verify, store, fetchImpl = fetch, env = pro
       const entitlement = await store.entitlement(uid);
       plan = resolvePlan(entitlement, now);
       orgId = plan === 'b2b' && typeof entitlement.orgId === 'string' ? entitlement.orgId : null;
+      if (!planAllows(plan, built.area, built.skill)) {
+        const used = (await store.status(uid, keys)).used;
+        return json({ code: 'locked_area', ...summary(plan, used) }, 403);
+      }
       spot = await store.reserve(uid, keys, CAPS[plan], {
         purpose,
         key: typeof assignmentKey === 'string' ? assignmentKey.slice(0, 80) : '',

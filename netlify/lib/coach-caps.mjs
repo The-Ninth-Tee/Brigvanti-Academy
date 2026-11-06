@@ -50,6 +50,13 @@ export function ledgerEntry(reply, kind, incomplete, notAttempt) {
   };
 }
 
+// Plans decide the areas the coach may work in. D7.4 belongs to B2B only.
+export const FREE_AREAS = Object.freeze(['D1', 'D2', 'D6']);
+export function planAllows(plan, area, skill) {
+  if (skill === 'D7.4' && plan !== 'b2b' && plan !== 'b2b_ended') return false;
+  return plan !== 'free' || FREE_AREAS.includes(area);
+}
+
 const asMillis = (v) => {
   if (typeof v === 'number') return v;
   if (v && typeof v.toMillis === 'function') return v.toMillis();
