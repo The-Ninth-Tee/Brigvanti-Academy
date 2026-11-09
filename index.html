@@ -80,6 +80,29 @@ try{if(localStorage.getItem('brigvanti_theme')==='light')document.documentElemen
 .menu button.sep{border-top:1px solid var(--line);margin-top:6px;padding-top:16px}
 @media(hover:hover){.menu button:hover{background:var(--soft)}}
 .menu button .sub{display:block;font-size:12.5px;font-weight:400;color:var(--ink3);margin-top:2px}
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:45;background:var(--card);border-top:1.5px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+.tabbar-in{max-width:560px;margin:0 auto;display:flex}
+.tabbar button{flex:1 1 0;min-height:60px;font-size:12px;font-weight:700;color:var(--ink2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.tabbar button svg{width:22px;height:22px}
+.tabbar button[aria-current="page"]{color:var(--lime)}
+[data-theme="light"] .tabbar button[aria-current="page"]{color:var(--violet-t)}
+.tabs-on .abar{bottom:calc(60px + env(safe-area-inset-bottom))}
+.tabs-on .toast{bottom:calc(82px + env(safe-area-inset-bottom))}
+.msheet{--ink:#F5F5F7;--ink2:#B9B9C6;--line:#2E2E40;--soft:#1E1E2B;position:fixed;inset:0;z-index:80;background:#15151F;color:var(--ink);overflow-y:auto;padding:20px 20px calc(24px + env(safe-area-inset-bottom))}
+.msheet-in{max-width:560px;margin:0 auto}
+.msheet-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.msheet-hd h2{margin:0;font-size:30px;color:var(--ink)}
+.msheet-x{min-height:44px;padding:0 18px;border:1.5px solid var(--ink);border-radius:var(--r-pill);color:var(--ink);font-weight:700;font-size:15px}
+.mtiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.mtiles button{min-height:96px;text-align:left;padding:14px;border-radius:16px;color:var(--on-tile);font-size:15px;font-weight:800;line-height:1.25}
+.mtiles button span{display:block;margin-top:4px;font-size:12.5px;font-weight:500}
+.mrows{margin-top:16px;border-top:1.5px solid var(--line);padding-top:6px}
+.mrows>button{display:block;width:100%;min-height:48px;padding:0;text-align:left;color:var(--ink);font-size:15px;font-weight:600}
+.mrow-sw{display:flex;justify-content:space-between;align-items:center;min-height:52px;font-size:15px;font-weight:700}
+.sw{width:52px;height:30px;border-radius:var(--r-pill);border:1.5px solid #8C8CA0;background:var(--soft);padding:3px;display:flex;justify-content:flex-start;flex:0 0 auto}
+.sw i{width:22px;height:22px;border-radius:50%;background:var(--ink2)}
+.sw[aria-pressed="true"]{border-color:#7357F6;background:#7357F6;justify-content:flex-end}
+.sw[aria-pressed="true"] i{background:#FFFFFF}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
 body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.55}
@@ -1055,22 +1078,69 @@ function analyticsBar(){
       <button class="btn go" onclick="setAnalytics(true)">Allow</button>
     </div></div></div>`;
 }
+/* The tab bar and the full menu show once the learner has placed at least one area.
+   Setup, the scan, an open assignment and a level up test keep the screen to themselves. */
+function tabsOn(){
+  return !!(S&&S.signed&&setupDone()&&anyDomDone()&&S.stage>=3&&!V.rep&&!V.ru);
+}
 function menuBtn(){
-  if(!S.signed)return '';
-  return `<button class="hb" onclick="V.menu=!V.menu;render()" aria-label="Menu" aria-expanded="${V.menu?'true':'false'}"><i></i></button>`;
+  if(!S.signed||tabsOn())return '';
+  return `<button class="hb" onclick="openMenu()" aria-label="Menu" aria-expanded="${V.menu?'true':'false'}"><i></i></button>`;
+}
+const TAB_IC={
+  6:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  3:'<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',
+  4:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  5:'<path d="M12 19V5M5 12l7-7 7 7"/>',
+  m:'<path d="M4 7h16M4 12h16M4 17h16"/>'};
+function tabBar(){
+  if(!tabsOn())return '';
+  const t=(st,label,act)=>{
+    const cur=V.menu?st==='m':st===S.stage;
+    return `<button onclick="${act}" ${cur?'aria-current="page"':''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TAB_IC[st]}</svg>${label}</button>`;};
+  return `<nav class="tabbar" aria-label="Main"><div class="tabbar-in">
+    ${t(6,'Progress','tabGo(6)')}${t(3,'Areas','tabGo(3)')}${t(4,'Practice',"V.menu=false;practiseDom('')")}${t(5,'Level up','tabGo(5)')}${t('m','Menu','openMenu()')}
+  </div></nav>`;
+}
+function tabGo(n){if(n===S.stage){V={};save();render();return;}V.menu=false;go(n);}
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&V&&V.menu)closeMenu();});
+function openMenu(){V.menu=true;render();var x=document.querySelector('.msheet-x');if(x)x.focus();}
+function closeMenu(){V.menu=false;render();}
+function setTheme(t){
+  if(t==='light')document.documentElement.setAttribute('data-theme','light');
+  else document.documentElement.removeAttribute('data-theme');
+  try{localStorage.setItem('brigvanti_theme',t);}catch(e){}
+  var m=document.querySelector('meta[name="theme-color"]');
+  if(m)m.content=t==='light'?'#FAFAF7':'#0B0B14';
+}
+const isLight=()=>document.documentElement.getAttribute('data-theme')==='light';
+function toggleTheme(){setTheme(isLight()?'dark':'light');render();}
+function openBadges(){
+  tabGo(6);
+  var d=document.getElementById('badges');if(d){d.open=true;d.scrollIntoView({block:'start'});}
 }
 function menuPanel(){
   if(!S.signed||!V.menu)return '';
-  return `<div class="menu-bg" onclick="V.menu=false;render()"></div>
-  <nav class="menu" aria-label="Menu">
-    ${anyDomDone()?`<button onclick="go(6)">Your progress</button>`:''}
-    <button onclick="practiseDom('')">Assignments</button>
-    <button onclick="menuDo(exportPortfolioDoc)">Download my work<span class="sub">Your assignments as a page to read or print.</span></button>
-    <button onclick="menuDo(exportLog)">Download record<span class="sub">Your levels and assignments as a spreadsheet.</span></button>
-    <button onclick="go(7)">Privacy &amp; legal</button>
-    <button onclick="go(9)">Account settings</button>
-    <button class="sep" onclick="V.menu=false;signOutUser()">Log out</button>
-  </nav>`;
+  const tile=(bg,n,sub,act)=>`<button style="background:var(${bg})" onclick="${act}">${n}<span>${sub}</span></button>`;
+  const scanLeft=scanned()<DATA.comps.length;
+  return `<div class="msheet" role="dialog" aria-modal="true" aria-label="Menu"><div class="msheet-in">
+    <div class="msheet-hd"><h2>Menu</h2><button class="msheet-x" onclick="closeMenu()">Close</button></div>
+    <div class="mtiles">
+      ${anyDomDone()?tile('--tile-lime','Your progress','Level, streak and latest work','tabGo(6)'):''}
+      ${anyDomDone()?tile('--tile-lilac','Your areas','All 7 areas and their skills','tabGo(3)'):''}
+      ${scanLeft?tile('--tile-mint','Continue scan','Pick up where you left off','V.menu=false;goScan()'):''}
+      ${tile('--tile-sky','Your portfolio','Your work in order','tabGo(8)')}
+      ${tile('--tile-sand','Your badges',`${earnedCount()} of ${BADGES.length} earned`,'openBadges()')}
+      ${tile('--tile-coral','Account','Plan, profile and settings','tabGo(9)')}
+    </div>
+    <div class="mrows">
+      <div class="mrow-sw"><span id="lmLbl">Light mode</span><button class="sw" onclick="toggleTheme()" aria-pressed="${isLight()?'true':'false'}" aria-labelledby="lmLbl"><i></i></button></div>
+      <button onclick="menuDo(exportPortfolioDoc)">Download my work</button>
+      <button onclick="menuDo(exportLog)">Download record</button>
+      <button onclick="tabGo(7)">Privacy &amp; legal</button>
+      <button onclick="V.menu=false;signOutUser()">Log out</button>
+    </div>
+  </div></div>`;
 }
 function menuDo(fn){V.menu=false;render();fn();}
 function shell(inner,opts){
@@ -1080,7 +1150,8 @@ function shell(inner,opts){
       <div class="crumb">${esc(o.crumb||TITLE[S.stage])}</div>${menuBtn()}<div class="cmark"><span class="emblem" role="img" aria-label="Brigvanti"></span></div></div>
     ${o.pct!=null?`<div class="track"><i style="width:${o.pct}%"></i></div>`:''}`;
   const showAB=ANALYTICS_LIVE&&S.signed&&S.consent&&(S.analytics===null||S.analytics===undefined);
-  return `<div class="app"${showAB?' style="padding-bottom:150px"':''}><div class="top">${bar}${menuPanel()}</div>${badgeBanner()}${inner}${showAB?analyticsBar():''}</div>`;
+  const pad=(showAB?150:110)+(tabsOn()?60:0);
+  return `<div class="app" style="padding-bottom:${pad}px"><div class="top">${bar}</div>${badgeBanner()}${inner}${showAB?analyticsBar():''}${tabBar()}${menuPanel()}</div>`;
 }
 /* Enter the scan from the account page. First run needs consent and setup.
    A returning user with both goes straight to where they left off. */
@@ -2036,7 +2107,7 @@ function vProgress(){
     <b>Your portfolio</b>
     <span class="sub">${S.reps.length?`${S.reps.length} piece${S.reps.length>1?'s':''} of your own work, kept in order.`:'Your work appears here once you hand something in.'}</span>
     <span class="sub" style="color:var(--indigo);font-weight:700;margin-top:6px">Tap to open your portfolio &#8250;</span></button>
-  <details class="fold">
+  <details class="fold" id="badges">
     <summary>Your badges <span class="fx">${earnedCount()} of ${BADGES.length} earned &#9662;</span></summary>
     <div class="fb"><p class="muted" style="margin:0 0 14px">Every one of them is for doing something real.</p>
     ${FAMS.map(f=>`<div style="margin-bottom:16px">
@@ -2218,6 +2289,8 @@ function render(){
      Android Chrome could leave a stale picture of a long screen below a shorter one. */
   if(moved)window.scrollTo(0,0);
   app.innerHTML=v()+(V.leaving?leavingOverlay():'')+(V.instHelp?installHelp():'');
+  document.body.classList.toggle('tabs-on',!!app.querySelector('.tabbar'));
+  document.body.style.overflow=V.menu?'hidden':'';
   if(moved){
     LAST=S.stage;window.scrollTo(0,0);
     app.style.opacity='0.999';
