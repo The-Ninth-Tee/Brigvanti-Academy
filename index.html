@@ -243,6 +243,16 @@ label.fl{display:block;font-size:12px;font-weight:700;margin:0 0 6px;text-transf
 .mtiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}
 .mtile{background:var(--card);border:1.5px solid var(--line);border-radius:var(--r);padding:18px 12px;text-align:center;cursor:pointer;font:inherit;color:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:100px;transition:background .15s ease,border-color .15s ease,transform .06s ease}
 .mtile:hover{background:var(--soft)}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.nextstep{background:var(--violet);color:var(--on-violet);border-color:var(--violet)}
+.nextstep .eyebrow,.nextstep h3{color:var(--on-violet)}
+.nextstep .btn.sec{color:var(--on-violet);box-shadow:inset 0 0 0 1.5px var(--on-violet)}
+.arow2{display:flex;width:100%;align-items:center;gap:10px;min-height:48px;border-top:1.5px solid var(--line);text-align:left;color:var(--ink);font-size:15px}
+.arow2:first-of-type{margin-top:8px}
+.arow2>span:first-child{flex:1}
+.ptag{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--violet-t)}
+.ptag.plus{color:var(--amber-d)}
+.claimnote{display:block;font-size:12.5px;color:var(--ink3);margin-top:2px}
 .agrp{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--violet-t);margin:18px 4px 8px}
 .agrp.plus{color:var(--amber-d)}
 .acard{background:var(--card);border:1.5px solid var(--line);border-radius:var(--r);margin-bottom:10px;overflow:hidden}
@@ -678,12 +688,6 @@ const scanned=()=>DATA.comps.filter(c=>S.scan[c.id]&&S.scan[c.id].done).length;
 function gaps(){
   return DK.map(d=>({d,cur:domLevel(d),tgt:domTarget(d)}))
     .filter(x=>x.cur!==null&&x.tgt>x.cur).sort((a,b)=>(b.tgt-b.cur)-(a.tgt-a.cur));
-}
-function claimGap(){
-  return DATA.comps.filter(c=>{const r=S.scan[c.id];return r&&r.done&&r.claimed!=null&&!r.skipped;})
-   .map(c=>({id:c.id,n:c.n,claimed:S.scan[c.id].claimed,conf:S.scan[c.id].confirmed,
-             gap:S.scan[c.id].claimed-S.scan[c.id].confirmed}))
-   .sort((a,b)=>b.gap-a.gap);
 }
 
 /* ---------- practice assignments ---------- */
@@ -1678,11 +1682,7 @@ function hint(R){
   return m[R.c.d]||'Describe the task you actually have this week';
 }
 
-/* ---------- 3. where you stand ---------- */
-function steps(cur,tgt){
-  return `<div class="steps">${[1,2,3,4].map(l=>
-    `<span class="step ${l<=cur?'f':(l<=tgt?'g':'')}"></span>`).join('')}</div>`;
-}
+/* ---------- 3. your areas ---------- */
 function vStand(){
   const card=d=>{
     const cs=compsOf(d),lv=domLevel(d),n=domCount(d),open=V.area===d,plus=!areaOpen(d);
@@ -1694,7 +1694,9 @@ function vStand(){
       const right=!done?`<button class="alink" onclick="scanSkill('${c.id}')">Scan this skill &#8250;</button>`
         :r.skipped?`<button class="alink" onclick="scanSkill('${c.id}')">Skipped, scan it &#8250;</button>`
         :`<span class="asub">${LV[r.confirmed||0]}</span>`;
-      return `<div class="arow"><span>${esc(c.n)}</span>${right}</div>`;}).join('')
+      const diff=done&&!r.skipped&&r.claimed!=null&&r.claimed>(r.confirmed||0)
+        ?`<span class="claimnote">You chose ${LV[r.claimed]}. Placed at ${LV[r.confirmed||0]}.</span>`:'';
+      return `<div class="arow"><span>${esc(c.n)}${diff}</span>${right}</div>`;}).join('')
       +(domDone(d)?`<div class="arow"><span></span><button class="alink" onclick="openAreaLevelUp('${d}')">Level up in this area &#8250;</button></div>`:''):'';
     return `<div class="acard${plus?' plus':''}">
       <button class="ahead" onclick="${lv===null&&!open?`scanDom('${d}')`:`V.area=${open?'null':`'${d}'`};render()`}" aria-expanded="${open?'true':'false'}">
@@ -2059,80 +2061,55 @@ function vProgress(){
   const avgN=placed.length?placed.reduce((a,c)=>a+(S.scan[c.id].confirmed||0),0)/placed.length:null;
   const avgLv=avgN==null?null:Math.round(avgN);
   if(V.skills){
-    if(isFree())return shell(`<h1>Your skills</h1>
-  <p class="lede">Your level per area is yours to see. The level per skill, your growth over time and your growth path are part of Plus.</p>
+    if(isFree())return shell(`<h1>Your growth</h1>
+  <p class="lede">Your level per area and per skill is yours to see. Your growth over time and your growth path are part of Plus.</p>
   <div class="card">${DK.filter(d=>domLevel(d)!==null).map(d=>`<div class="line"><div class="nm">${esc(DATA.doms[d])}</div>
-    <span class="chip t">${LV[domLevel(d)]}</span></div>`).join('')||'<p class="muted">Nothing placed yet. Scan an area from Your progress to begin.</p>'}</div>`,{crumb:'Your skills'});
+    <span class="chip t">${LV[domLevel(d)]}</span></div>`).join('')||'<p class="muted">Nothing placed yet. Scan an area from Your progress to begin.</p>'}</div>`,{crumb:'Your growth'});
     const grown=(S.rewards||[]).slice().sort((a,b)=>b.t-a.t).slice(0,10).map(r=>`<div class="line"><div class="nm">${esc(byId[r.c]?byId[r.c].n:r.c)}
       <span>${new Date(r.t).toLocaleDateString(coachLang())}</span></div><span class="chip a">&#8593; ${LV[r.lv]}</span></div>`).join('');
     const path=placed.filter(c=>skillOpen(c)&&(S.scan[c.id].confirmed||0)<4).sort((a,b)=>(S.scan[a.id].confirmed||0)-(S.scan[b.id].confirmed||0)).slice(0,5)
       .map(c=>`<div class="line"><div class="nm">${esc(c.n)}<span>${esc(DATA.doms[c.d])}</span></div>
       <span class="chip">${LV[(S.scan[c.id].confirmed||0)+1]} next</span></div>`).join('');
-    return shell(`<h1>Your skills</h1>
+    return shell(`<h1>Your growth</h1>
   <p class="lede">Every skill you have placed, with its level.</p>
   <div class="card">${rows||'<p class="muted">Nothing placed yet. Scan an area from Your progress to begin.</p>'}</div>
   ${path?`<div class="card"><h3>Your growth path</h3><p class="muted" style="margin:6px 0 10px">These skills have the most room to grow.</p>${path}</div>`:''}
-  ${grown?`<div class="card"><h3>Your growth over time</h3>${grown}</div>`:''}`,{crumb:'Your skills'});
+  ${grown?`<div class="card"><h3>Your growth over time</h3>${grown}</div>`:''}`,{crumb:'Your growth'});
   }
-  const doms=scanOrder().map(d=>{
-    const cur=domLevel(d),tgt=domTarget(d),n=domCount(d),tot=compsOf(d).length;
-    if(cur===null)return `<button class="dom" onclick="areaTap('${d}')">
-      <div class="dom-h"><b>${esc(DATA.doms[d])}</b><span class="arrow">&#8594;</span></div>
-      <div class="muted">Not scanned yet. Tap to start this area.</div></button>`;
-    const gg=tgt-cur;
-    return `<button class="dom" onclick="areaTap('${d}')">
-      <div class="dom-h"><b>${esc(DATA.doms[d])}</b>
-        <span class="chip t">${LV[cur]}</span><span class="arrow">&#8594;</span></div>
-      ${steps(cur,tgt)}
-      <div class="muted" style="margin-top:9px">${
-        !domDone(d)?`${n} of ${tot} skills placed. Tap to continue.`
-        :gg>0?`${aimWord()} ${LV[tgt]}. ${gg} level${gg>1?'s':''} to grow.`
-        :'You are at or above what you are aiming for.'}</div></button>`;
-  }).join('');
-  const over=claimGap().filter(x=>x.gap>0).slice(0,3);
-  const gp=gaps();
   const elig=DATA.comps.filter(c=>canLevelUp(c.id));
-  return shell(`<h1>Your progress</h1>
-  <p class="lede">What you have built so far. It grows every time you hand something in.</p>
+  const nx=elig[0],nxT=nx?(S.scan[nx.id].confirmed||0)+1:0;
+  const areaRows=DK.map(d=>{
+    const lv=domLevel(d),tag=isFree()?(areaOpen(d)?'<span class="ptag">Free</span>':'<span class="ptag plus">Plus</span>'):'';
+    return `<button class="arow2" onclick="areaTap('${d}')"><span>${esc(DATA.doms[d])}</span>${tag}
+      ${lv===null?'<span class="chip">Not scanned</span>':`<span class="chip t">${LV[lv]}</span>`}</button>`;}).join('');
+  const latest=S.reps.slice().sort((x,y)=>y.t-x.t).slice(0,3).map(r=>`<div class="line"><div class="nm">${esc(r.act)}
+      <span>${shortDate(r.t)}, ${esc(DATA.doms[byId[r.c]?byId[r.c].d:'']||'')}</span></div></div>`).join('');
+  return shell(`<h1>${avgLv==null?'Your progress':`You are at <b style="color:var(--violet-t);font-weight:800">${LV[avgLv]}</b>`}</h1>
+  <p class="lede">${avgLv==null?'Scan an area to see where you stand.':'This level is advisory. It moves as you practise.'}</p>
   ${brigPWA.standalone()?pushInvite():''}
   <div class="card effort">
     <b>${effortXP()}</b><span class="et">effort points</span>
     <span class="es">Earned by handing in work and levelling up, never by being right.</span>
   </div>
-  <div class="grid">
+  <div class="grid g3">
     <div class="tile coral"><b>${streak()}</b><span>day streak</span></div>
-    <div class="tile sky"><b>${S.reps.length}</b><span>assignments handed in</span></div>
-    <div class="tile mint"><b>${placed.length}</b><span>skills placed</span></div>
-    <div class="tile lilac"><b>${earned}</b><span>levels earned</span></div>
-    <div class="tile sand"><b>${earnedCount()}</b><span>badges earned</span></div>
-    <div class="tile"><b>${DATA.comps.length}</b><span>skills in total</span></div>
+    <div class="tile sky"><b>${S.reps.length}</b><span>handed in</span></div>
+    <div class="tile sand"><b>${earnedCount()}</b><span>badges</span></div>
   </div>
-  <button class="opt" onclick="V.skills=true;render()" style="display:flex;align-items:center;gap:14px;background:var(--teal-l);box-shadow:none">
-    <div style="flex:1"><b style="display:block">Your AI-literacy level</b>
-      <span class="sub">${avgLv==null?'Not placed yet. Scan an area to begin.':`Across ${placed.length} placed skill${placed.length>1?'s':''}. Tap for the breakdown.`}</span></div>
-    <span style="font-size:18px;font-weight:800;color:var(--teal-d);white-space:nowrap">${avgLv==null?'&#8212;':LV[avgLv]}</span>
-    <span class="arrow" style="color:var(--ink3)">&#8594;</span></button>
-  ${elig.length?`<button class="opt" onclick="go(5)" style="display:flex;align-items:center;gap:14px;background:var(--amber-l);box-shadow:none;margin-top:12px">
-    <div style="flex:1"><b style="display:block">Level up</b>
-      <span class="sub">${elig.length} skill${elig.length>1?'s':''} ready for a level-up test.</span></div>
-    <span class="arrow" style="color:var(--amber-d)">&#8594;</span></button>`:''}
-  <details class="fold" open style="margin-top:14px"><summary>Where you stand <span class="fx">tap an area to scan or practise &#9662;</span></summary>
-    <div class="fb"><p class="muted" style="margin:0 0 12px">A mirror, not a verdict. It moves as you practise.</p>
-    ${doms}
-    ${over.length?`<div class="card" style="margin-top:16px;box-shadow:none;border:1px solid var(--line)"><h3>Where you judged yourself differently</h3>
-      <p class="muted" style="margin:6px 0 10px">You picked a higher statement than the questions showed. That is normal and useful.</p>
-      ${over.map(x=>`<div class="line"><div class="nm">${esc(x.n)}
-        <span>You chose ${LV[x.claimed]}. Placed at ${LV[x.conf]}.</span></div></div>`).join('')}</div>`:''}
-    ${gp.length?`<div class="card tint" style="box-shadow:none"><h3>Where practice pays off most</h3>
-      <p class="muted" style="margin:6px 0 12px">Choose the area you want to practise now.</p>
-      ${gp.slice(0,4).map(x=>`<button class="opt" onclick="practiseDom('${x.d}')">
-        <b>${esc(DATA.doms[x.d])}</b>
-        <span class="sub">${LV[x.cur]} now. ${aimWord()} ${LV[x.tgt]}.</span></button>`).join('')}</div>`:''}
-    <div class="row" style="margin-top:6px"><button class="btn go full" onclick="practiseDom('')">Practise on real tasks</button></div></div></details>
-  <button class="opt" onclick="go(8)" style="background:var(--indigo-l);box-shadow:none">
-    <b>Your portfolio</b>
-    <span class="sub">${S.reps.length?`${S.reps.length} piece${S.reps.length>1?'s':''} of your own work, kept in order.`:'Your work appears here once you hand something in.'}</span>
-    <span class="sub" style="color:var(--indigo);font-weight:700;margin-top:6px">Tap to open your portfolio &#8250;</span></button>
+  ${nx?`<div class="card nextstep"><div class="eyebrow">Next step</div>
+    <h3>Your level up test is ready</h3>
+    <p style="margin:6px 0 14px">${esc(nx.n)}, test for ${LV[nxT]}.</p>
+    <button class="btn sec" onclick="go(5);openRung('${nx.id}')">Start the test</button></div>`:''}
+  <div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><h3>Level per area</h3>
+    <button class="alink" onclick="go(3)">See all skills &#8250;</button></div>${areaRows}</div>
+  <button class="opt" onclick="V.skills=true;render()" style="display:flex;align-items:center;gap:14px">
+    <div style="flex:1"><b style="display:block">Your growth</b>
+      <span class="sub">${isFree()?'Your level per area, and what Plus adds.':'Your growth path and your growth over time.'}</span></div>
+    <span class="arrow">&#8594;</span></button>
+  <div class="card"><h3>Your latest work</h3>
+    ${latest||'<p class="muted" style="margin:8px 0 0">Your work appears here once you hand something in.</p>'}
+    <div class="row" style="margin-top:12px"><button class="btn sec" style="flex:1" onclick="go(8)">Portfolio</button>
+      <button class="btn sec" style="flex:1" onclick="openBadges()">Badges</button></div></div>
   <details class="fold" id="badges">
     <summary>Your badges <span class="fx">${earnedCount()} of ${BADGES.length} earned &#9662;</span></summary>
     <div class="fb"><p class="muted" style="margin:0 0 14px">Every one of them is for doing something real.</p>
