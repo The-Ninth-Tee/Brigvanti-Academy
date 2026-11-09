@@ -698,5 +698,7 @@ window.BRIG_STRINGS = {
 "Badges": "Badges",
 "Your growth over time": "Je groei door de tijd",
 "Your growth path": "Je groeipad",
-"Your level per area and per skill is yours to see. Your growth over time and your growth path are part of Plus.": "Je level per onderdeel en per vaardigheid kun je altijd zien. Je groei door de tijd en je groeipad horen bij Plus."
+"Your level per area and per skill is yours to see. Your growth over time and your growth path are part of Plus.": "Je level per onderdeel en per vaardigheid kun je altijd zien. Je groei door de tijd en je groeipad horen bij Plus.",
+"Every skill you have placed, with its level. Your growth over time and your growth path are part of Plus.": "Elke vaardigheid die je hebt geplaatst, met het level ervan. Je groei door de tijd en je groeipad horen bij Plus.",
+"You have earned {0} of {1}. Each badge rewards real work.": "Je hebt {0} van de {1} verdiend. Elke badge beloont echt werk."
 };

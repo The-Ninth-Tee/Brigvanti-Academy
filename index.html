@@ -253,6 +253,12 @@ label.fl{display:block;font-size:12px;font-weight:700;margin:0 0 6px;text-transf
 .ptag{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--violet-t)}
 .ptag.plus{color:var(--amber-d)}
 .claimnote{display:block;font-size:12.5px;color:var(--ink3);margin-top:2px}
+.bgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0 18px}
+.badge{min-height:104px;border-radius:16px;padding:10px;display:flex;flex-direction:column;gap:6px;color:var(--ink3);border:1.5px dashed var(--line)}
+.badge b{font-size:13px;line-height:1.2;color:var(--ink2)}
+.badge span{font-size:11.5px;line-height:1.3}
+.badge.got{border:0;color:var(--on-tile)}
+.badge.got b{color:var(--on-tile)}
 .agrp{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--violet-t);margin:18px 4px 8px}
 .agrp.plus{color:var(--amber-d)}
 .acard{background:var(--card);border:1.5px solid var(--line);border-radius:var(--r);margin-bottom:10px;overflow:hidden}
@@ -716,7 +722,7 @@ function canLevelUp(cid){
   const r=S.scan[cid];if(!r||!r.done||r.skipped)return false;
   const c=byId[cid],t=(r.confirmed||0)+1;
   if(!skillOpen(c)||rungWall(cid))return false;
-  return t<=4&&t>=c.fl&&formsAt(cid,t).length>0&&repsFor(cid).length>=(t-1);
+  return t<=4&&t>=c.fl&&formsAt(cid,t).length>0&&repsFor(cid).length>=Math.max(t-1,1);
 }
 function rungState(cid){if(!S.rung[cid])S.rung[cid]={};return S.rung[cid];}
 function pickForms(cid,t){
@@ -906,7 +912,7 @@ async function claude(body,json){
   return t;
 }
 /* ---------- navigation ---------- */
-const TITLE=['Sign in','Set up','Insight scan','Your areas','Practice','Level up','Your progress','Privacy and legal','Portfolio','Your account'];
+const TITLE=['Sign in','Set up','Insight scan','Your areas','Practice','Level up','Your progress','Privacy and legal','Portfolio','Your account','Your badges'];
 function go(n){
   if(n===8)V.pf=null;
   if(n===S.stage&&!V.rep&&!V.ru){if(V.menu){V={};render();}return;}
@@ -1165,10 +1171,7 @@ function setTheme(t){
 }
 const isLight=()=>document.documentElement.getAttribute('data-theme')==='light';
 function toggleTheme(){setTheme(isLight()?'dark':'light');render();}
-function openBadges(){
-  tabGo(6);
-  var d=document.getElementById('badges');if(d){d.open=true;d.scrollIntoView({block:'start'});}
-}
+function openBadges(){tabGo(10);}
 function menuPanel(){
   if(!S.signed||!V.menu)return '';
   const tile=(bg,n,sub,act)=>`<button style="background:var(${bg})" onclick="${act}">${n}<span>${sub}</span></button>`;
@@ -1477,6 +1480,17 @@ function vAllDone(){
   {crumb:'Scan complete',pct:100});
 }
 
+/* ---------- 10. badges ---------- */
+function vBadges(){
+  const tone=['--tile-sky','--tile-coral','--tile-lilac','--tile-mint'];
+  return shell(`<h1>Your badges</h1>
+  <p class="lede">You have earned ${earnedCount()} of ${BADGES.length}. Each badge rewards real work.</p>
+  ${FAMS.map((f,fi)=>`<div class="eyebrow">${f}</div><div class="bgrid">
+    ${BADGES.filter(b=>b.f===f).map(b=>{const got=S.badges&&S.badges[b.id];
+      return `<div class="badge${got?' got':''}" ${got?`style="background:var(${tone[fi%tone.length]})"`:''}>
+        ${ic('star',22)}<b>${b.n}</b><span>${b.d}</span></div>`;}).join('')}</div>`).join('')}`,
+  {crumb:'Your badges'});
+}
 /* ---------- 7. legal and privacy ---------- */
 const LEGAL_UPDATED=new Date(2026,9,6).toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'});
 function vLegal(){
@@ -1915,7 +1929,7 @@ function vRungArea(d){
   const rows=skills.map(c=>{
     const cur=S.scan[c.id].confirmed||0,t=cur+1,st=rungState(c.id);
     const atTop=t>4||t<c.fl||formsAt(c.id,t).length===0;
-    const need=Math.max(t-1,0),have=repsFor(c.id).length,ready=canLevelUp(c.id);
+    const need=Math.max(t-1,1),have=repsFor(c.id).length,ready=canLevelUp(c.id);
     const plus=!skillOpen(c)||rungWall(c.id);
     const state=plus?`<span class="chip">${ic('lock',14)} part of Plus</span>`
       :(st.passed&&atTop)?'<span class="chip i">at your target</span>'
@@ -2062,9 +2076,8 @@ function vProgress(){
   const avgLv=avgN==null?null:Math.round(avgN);
   if(V.skills){
     if(isFree())return shell(`<h1>Your growth</h1>
-  <p class="lede">Your level per area and per skill is yours to see. Your growth over time and your growth path are part of Plus.</p>
-  <div class="card">${DK.filter(d=>domLevel(d)!==null).map(d=>`<div class="line"><div class="nm">${esc(DATA.doms[d])}</div>
-    <span class="chip t">${LV[domLevel(d)]}</span></div>`).join('')||'<p class="muted">Nothing placed yet. Scan an area from Your progress to begin.</p>'}</div>`,{crumb:'Your growth'});
+  <p class="lede">Every skill you have placed, with its level. Your growth over time and your growth path are part of Plus.</p>
+  <div class="card">${rows||'<p class="muted">Nothing placed yet. Scan an area from Your progress to begin.</p>'}</div>`,{crumb:'Your growth'});
     const grown=(S.rewards||[]).slice().sort((a,b)=>b.t-a.t).slice(0,10).map(r=>`<div class="line"><div class="nm">${esc(byId[r.c]?byId[r.c].n:r.c)}
       <span>${new Date(r.t).toLocaleDateString(coachLang())}</span></div><span class="chip a">&#8593; ${LV[r.lv]}</span></div>`).join('');
     const path=placed.filter(c=>skillOpen(c)&&(S.scan[c.id].confirmed||0)<4).sort((a,b)=>(S.scan[a.id].confirmed||0)-(S.scan[b.id].confirmed||0)).slice(0,5)
@@ -2109,20 +2122,8 @@ function vProgress(){
   <div class="card"><h3>Your latest work</h3>
     ${latest||'<p class="muted" style="margin:8px 0 0">Your work appears here once you hand something in.</p>'}
     <div class="row" style="margin-top:12px"><button class="btn sec" style="flex:1" onclick="go(8)">Portfolio</button>
-      <button class="btn sec" style="flex:1" onclick="openBadges()">Badges</button></div></div>
-  <details class="fold" id="badges">
-    <summary>Your badges <span class="fx">${earnedCount()} of ${BADGES.length} earned &#9662;</span></summary>
-    <div class="fb"><p class="muted" style="margin:0 0 14px">Every one of them is for doing something real.</p>
-    ${FAMS.map(f=>`<div style="margin-bottom:16px">
-      <div class="eyebrow">${f}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px">
-      ${BADGES.filter(b=>b.f===f).map(b=>{const got=S.badges&&S.badges[b.id];
-        return `<div style="flex:1 1 132px;min-width:132px;text-align:center;padding:14px 10px;border-radius:14px;
-          background:${got?'var(--tile-sand)':'transparent'};color:${got?'var(--on-tile)':'var(--ink3)'};border:1.5px ${got?'solid var(--tile-sand)':'dashed var(--line)'}">
-          ${ic('star',24)}
-          <b style="display:block;font-size:13.5px;margin-top:6px">${b.n}</b>
-          <span style="font-size:12px;line-height:1.35;display:block;margin-top:3px;opacity:.85">${b.d}</span></div>`;}).join('')}
-      </div></div>`).join('')}</div></details>
+      <button class="btn sec" style="flex:1" onclick="go(10)">Badges</button></div></div>
+
 `,{noBack:true});
 }
 /* The file is not on screen, so the translation layer cannot reach it. T() looks the text up directly. */
@@ -2286,7 +2287,7 @@ function render(){
     window.__brigRendered=true;return;
   }
   if(!S.signed&&S.stage!==7)S.stage=0;
-  const v=[vAccess,vStart,vScan,vStand,vPractice,vRung,vProgress,vLegal,vPortfolio,vAccount][S.stage]||vAccess;
+  const v=[vAccess,vStart,vScan,vStand,vPractice,vRung,vProgress,vLegal,vPortfolio,vAccount,vBadges][S.stage]||vAccess;
   const y=window.scrollY, moved=S.stage!==LAST, app=document.getElementById('app');
   /* On a screen change, scroll up before swapping content and nudge a repaint.
      Android Chrome could leave a stale picture of a long screen below a shorter one. */
