@@ -259,6 +259,21 @@ label.fl{display:block;font-size:12px;font-weight:700;margin:0 0 6px;text-transf
 .badge span{font-size:11.5px;line-height:1.3}
 .badge.got{border:0;color:var(--on-tile)}
 .badge.got b{color:var(--on-tile)}
+.sgrp{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--violet-t);margin:22px 0 4px}
+.srow{display:flex;width:100%;justify-content:space-between;align-items:center;gap:12px;min-height:52px;padding:8px 0;border-top:1.5px solid var(--line);text-align:left;color:var(--ink);font-size:15px}
+.srow>span:first-child{flex:1;min-width:0}
+.srow small{display:block;font-size:12.5px;color:var(--ink3);margin-top:2px}
+.srow .v{flex:0 0 auto;font-size:14px;color:var(--ink3);display:inline-flex;align-items:center;gap:6px;max-width:60%;text-align:right}
+.srow .vbtn{min-height:44px;color:var(--violet-t);font-weight:700}
+.srow.off{opacity:.6}
+.srow.danger>span:first-child{color:var(--rose)}
+.srow.edit input{flex:1}
+.sconfirm{border-top:1.5px solid var(--line);padding:14px 0}
+.sconfirm b{color:var(--rose);font-size:15px}
+.sconfirm p{margin:6px 0 0;font-size:14px;color:var(--ink2)}
+.btn.danger{background:var(--rose);color:#0B0B14}
+[data-theme="light"] .btn.danger{color:#FFFFFF}
+.card.plan b{font-size:16px}
 .agrp{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--violet-t);margin:18px 4px 8px}
 .agrp.plus{color:var(--amber-d)}
 .acard{background:var(--card);border:1.5px solid var(--line);border-radius:var(--r);margin-bottom:10px;overflow:hidden}
@@ -464,8 +479,7 @@ function installCard(){
 }
 function installRow(){
   if(!brigPWA.offer())return '';
-  return `<div class="sect">App</div>
-  <div class="rows"><button class="rw" onclick="brigPWA.install()"><div class="ic c">${ic('phone')}</div><div class="tx"><b>Install the app</b><span>Add Brigvanti to your home screen</span></div><span class="chev">&#8250;</span></button></div>`;
+  return `<button class="srow" onclick="brigPWA.install()"><span>Install the app<small>Add Brigvanti to your home screen</small></span><span class="v">&#8250;</span></button>`;
 }
 function installHelp(){
   const steps=brigPWA.ios()
@@ -912,7 +926,7 @@ async function claude(body,json){
   return t;
 }
 /* ---------- navigation ---------- */
-const TITLE=['Sign in','Set up','Insight scan','Your areas','Practice','Level up','Your progress','Privacy and legal','Portfolio','Your account','Your badges'];
+const TITLE=['Sign in','Set up','Insight scan','Your areas','Practice','Level up','Your progress','Privacy and legal','Portfolio','Account','Your badges'];
 function go(n){
   if(n===8)V.pf=null;
   if(n===S.stage&&!V.rep&&!V.ru){if(V.menu){V={};render();}return;}
@@ -1066,20 +1080,17 @@ function pushInvite(){
 }
 function remindRows(){
   const st=pushSupport(),on=pushOnHere(),others=RM.devices.filter(d=>d.on&&d.id!==deviceId()).length;
-  const wrap='style="white-space:normal"';
-  let sub;
-  if(!RM.loaded)sub='Loading your reminder settings.';
-  else if(st==='ios-install'&&!on)sub='On iPhone, install the app first. Then switch this on inside the app.';
-  else if(st==='none'&&!on)sub='This browser cannot show push reminders.';
-  else if(st==='denied'&&!on)sub='Notifications are blocked for Brigvanti in your phone or browser settings.';
-  else sub=on?'On. Reminders arrive around 9:00 on your practice days.':'Get a reminder on your practice days.';
+  let note='';
+  if(!RM.loaded)note='Loading your reminder settings.';
+  else if(st==='ios-install'&&!on)note='On iPhone, install the app first. Then switch this on inside the app.';
+  else if(st==='none'&&!on)note='This browser cannot show push reminders.';
+  else if(st==='denied'&&!on)note='Notifications are blocked for Brigvanti in your phone or browser settings.';
+  else if(on)note='Reminders arrive around 9:00 on your practice days.';
   const can=RM.loaded&&(st==='ok'||on);
-  return `<div class="rows">
-    <div class="rw"><div class="ic c">${ic('bell')}</div><div class="tx"><b>Push on this device</b><span ${wrap}>${sub}</span></div>
-      ${can?`<button class="tgl ${on?'on':''}" ${V.pushBusy?'disabled':''} onclick="pushToggle(${on?'false':'true'})" aria-label="Push reminders on this device"><i></i></button>`:''}</div>
-    ${others?`<button class="rw" onclick="pushOffEverywhere()"><div class="ic">${ic('phone')}</div><div class="tx"><b>${others} other device${others>1?'s':''} with push on</b><span ${wrap}>Tap to switch push off on all your devices</span></div><span class="chev">&#8250;</span></button>`:''}
-    <div class="rw" style="opacity:.6"><div class="ic">${ic('mail')}</div><div class="tx"><b>Email reminders</b><span ${wrap}>Arrives in a later update.</span></div></div>
-  </div>`;
+  return `<div class="srow"><span>Push reminders<small>${note}</small></span>
+      ${can?`<button class="tgl ${on?'on':''}" ${V.pushBusy?'disabled':''} onclick="pushToggle(${on?'false':'true'})" aria-pressed="${on?'true':'false'}" aria-label="Push reminders on this device"><i></i></button>`:`<span class="v">${on?'On':'Off'}</span>`}</div>
+    ${others?`<button class="srow" onclick="pushOffEverywhere()"><span>${others} other device${others>1?'s':''} with push on<small>Tap to switch push off on all your devices</small></span><span class="v">Off &#8250;</span></button>`:''}
+    <div class="srow off"><span>Email reminders</span><span class="v">Later</span></div>`;
 }
 function saveName(){ if(!(S.name||'').trim()){ toast('A name is required.'); return; } save(); if(V)V.editName=false; render(); }
 async function doPasswordReset(){ try{ await window.brigvantiSendReset(); toast('Reset link sent to your email.'); }catch(e){ toast('Could not send the reset email. Try again.'); } }
@@ -2229,54 +2240,45 @@ function vAccount(){
     </div>`,
     {crumb:'Account settings'});
   }
-  const rows=DK.map(d=>{
-    if(domDone(d))return `<div class="opt" style="opacity:.55"><b>${esc(DATA.doms[d])}</b><span class="sub">Scanned</span></div>`;
-    return `<button class="opt" onclick="areaTap('${d}')"><b>${esc(DATA.doms[d])}</b><span class="sub">Scan this area</span></button>`;
-  }).join('');
   const isG=S.authProvider==='google.com';
   const modeLbl={work:'At work',personal:'In my own life',both:'Work and life'}[S.mode]||'Not set';
   const focusSub=S.role?esc(S.role):modeLbl;
   const nameRow=V.editName
-    ?`<div class="rw"><div class="ic a">${ic('user')}</div><div class="nedit"><input id="anm" value="${esc(S.name)}" placeholder="Your name" oninput="S.name=this.value" onkeydown="if(event.key==='Enter')saveName()"><button class="iconbtn" onclick="saveName()" aria-label="Save">${ic('check',16)}</button></div></div><p class="pdw" style="margin:0 16px 12px">Do not enter private or sensitive data.</p>`
-    :`<div class="rw"><div class="ic a">${ic('user')}</div><div class="tx"><b>Your name</b><span>${esc(S.name||'Not set')}</span></div><button class="iconbtn" onclick="V.editName=true;render()" aria-label="Edit name">${ic('pencil',16)}</button></div>`;
-  const secRows=isG
-    ?`<div class="rw"><div class="ic">${ic('key')}</div><div class="tx"><b>Google Sign-In</b><span>${esc(S.email||'')}</span></div><span class="pill ok">Connected</span></div>`
-    :`<button class="rw" onclick="doPasswordReset()"><div class="ic">${ic('lock')}</div><div class="tx"><b>Change password</b><span>A secure reset link is emailed to you</span></div><span class="chev">&#8250;</span></button>`;
-  const resetRows=V.reset
-    ?`<div class="rows" style="margin-top:22px"><div class="rw"><div class="ic c">${ic('warn')}</div><div class="tx"><b style="color:var(--rose)">Reset your account?</b><span style="white-space:normal">This deletes your levels, badges, streak and your whole portfolio, from this device and from our storage. It cannot be undone. Your sign in stays, so you can start again. Download your record first if you want to keep it.</span></div></div><div class="rw" style="gap:10px"><button class="btn sec" style="flex:1" onclick="V.reset=false;render()">Keep it</button><button class="btn" style="flex:1;background:var(--rose)" ${V.busyReset?'disabled':''} onclick="resetAccount()">${V.busyReset?'Resetting':'Reset'}</button></div></div>`
-    :`<div class="rows" style="margin-top:22px"><button class="rw" onclick="V.reset=true;render()"><div class="ic">${ic('reset')}</div><div class="tx"><b style="color:var(--rose)">Reset account</b><span>Erase all progress and start again</span></div><span class="chev">&#8250;</span></button></div>`;
-  const delRows=V.del
-    ?`<div class="rows" style="margin-top:22px"><div class="rw"><div class="ic c">${ic('warn')}</div><div class="tx"><b style="color:var(--rose)">Delete your account?</b><span>This erases everything. It cannot be undone.</span></div></div><div class="rw" style="gap:10px"><button class="btn sec" style="flex:1" onclick="V.del=false;render()">Keep it</button><button class="btn" style="flex:1;background:var(--rose)" onclick="doDelete()">Delete</button></div></div>`
-    :`<div class="rows" style="margin-top:22px"><button class="rw" onclick="V.del=true;render()"><div class="ic">${ic('trash')}</div><div class="tx"><b style="color:var(--rose)">Delete my account</b><span>Erase everything, permanently</span></div><span class="chev">&#8250;</span></button></div>`;
-  return shell(`<div class="sect">Personal</div>
-  <div class="rows">${nameRow}
-    <div class="rw"><div class="ic">${ic('mail')}</div><div class="tx"><b>Email</b><span>${esc(S.email||'Not set')}</span></div></div>
-    <button class="rw" onclick="go(1)"><div class="ic">${ic('target')}</div><div class="tx"><b>Your focus</b><span>${focusSub}</span></div><span class="chev">&#8250;</span></button></div>
+    ?`<div class="srow edit"><label class="sr" for="anm">Your name</label><input id="anm" value="${esc(S.name)}" placeholder="Your name" oninput="S.name=this.value" onkeydown="if(event.key==='Enter')saveName()"><button class="iconbtn" onclick="saveName()" aria-label="Save">${ic('check',16)}</button></div>${PDW_NAME}`
+    :`<button class="srow" onclick="V.editName=true;render()"><span>Your name</span><span class="v">${esc(S.name||'Not set')} ${ic('pencil',14)}</span></button>`;
+  const pwRow=isG
+    ?`<div class="srow"><span>Sign in</span><span class="v">Google</span></div>`
+    :`<button class="srow" onclick="doPasswordReset()"><span>Password<small>A secure reset link is emailed to you</small></span><span class="v">Change &#8250;</span></button>`;
+  const confirm=(title,body,keep,act,label)=>`<div class="sconfirm"><b>${title}</b><p>${body}</p>
+    <div class="row" style="margin-top:12px"><button class="btn sec" style="flex:1" onclick="${keep}">Keep it</button><button class="btn danger" style="flex:1" ${act}>${label}</button></div></div>`;
+  const resetRow=V.reset
+    ?confirm('Reset your account?','This deletes your levels, badges, streak and your whole portfolio, from this device and from our storage. It cannot be undone. Your sign in stays, so you can start again. Download your record first if you want to keep it.','V.reset=false;render()',`${V.busyReset?'disabled':''} onclick="resetAccount()"`,V.busyReset?'Resetting':'Reset')
+    :`<button class="srow" onclick="V.reset=true;render()"><span>Reset account<small>Erase all progress and start again</small></span><span class="v">&#8250;</span></button>`;
+  const delRow=V.del
+    ?confirm('Delete your account?','This erases everything. It cannot be undone.','V.del=false;render()','onclick="doDelete()"','Delete')
+    :`<button class="srow danger" onclick="V.del=true;render()"><span>Delete my account<small>Erase everything, permanently</small></span><span class="v">&#8250;</span></button>`;
+  return shell(`<h1>Account</h1>
+  <div class="card plan"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>Your plan</b><span class="lvchip" id="coachPlan">${planName()}</span></div>
+    <p class="muted" id="coachLeftAccount" style="margin:6px 0 0">${planName()}</p>
+    ${isFree()?`<p class="muted" style="margin:8px 0 0">Plus opens all 7 areas. €13.99 a month or €89.99 a year. Payments open soon.</p>`:''}</div>
 
-  <div class="sect">Security</div>
-  <div class="rows">${secRows}</div>
+  <div class="sgrp">Personal</div>
+  ${nameRow}
+  <div class="srow"><span>Email</span><span class="v">${esc(S.email||'Not set')}</span></div>
+  <button class="srow" onclick="go(1)"><span>Your focus</span><span class="v">${focusSub} &#8250;</span></button>
 
-  <div class="sect">Notifications</div>
+  <div class="sgrp">Settings</div>
   ${remindRows()}
-
   ${installRow()}
+  <button class="srow" data-no-i18n onclick="setLang('${window.BRIG_LANG==='nl'?'en':'nl'}')"><span>Taal / Language<small>${window.BRIG_LANG==='nl'?'Tik om over te schakelen naar English':'Tap to switch to Nederlands'}</small></span><span class="v">${window.BRIG_LANG==='nl'?'Nederlands':'English'} &#8250;</span></button>
+  ${pwRow}
 
-  <div class="sect">Language</div>
-  <div class="rows" data-no-i18n><div class="rw"><div class="ic">${ic('globe')}</div><div class="tx"><b>Taal / Language</b><span>${window.BRIG_LANG==='nl'?'Nederlands':'English'}</span></div><button class="btn sec" style="padding:8px 14px" onclick="setLang('${window.BRIG_LANG==='nl'?'en':'nl'}')">${window.BRIG_LANG==='nl'?'English':'Nederlands'}</button></div></div>
-
-  <div class="sect">Subscription</div>
-  <div class="rows"><div class="rw"><div class="ic c">${ic('star')}</div><div class="tx"><b>Current plan</b><span id="coachLeftAccount">${planName()}</span></div><span class="pill" id="coachPlan">${planName()}</span></div>
-    ${isFree()?`<div class="rw"><div class="ic">${ic('unlock')}</div><div class="tx"><b>Plus</b><span style="white-space:normal">All 7 areas, unlimited level ups and deeper insight. €13.99 per month or €89.99 per year. Plus is coming soon.</span></div></div>`:''}</div>
-
-  <div class="sect">Your areas</div>
-  <details class="fold" open><summary>Areas <span class="pill ok">${doneCount}/${total}</span><span class="chev">&#8250;</span></summary>
-    <div class="fbody"><p class="muted" style="margin:2px 0 12px">Pick an area to scan, or continue where you left off.</p>
-    ${rows}
-    ${doneCount<total?`<div class="row" style="margin-top:8px"><button class="btn go full" onclick="goScan()">Continue the scan</button></div>`:''}</div></details>
-
-  ${resetRows}
-  ${delRows}`,
-  {crumb:'Account settings'});
+  <div class="sgrp">Account</div>
+  <button class="srow" onclick="go(7)"><span>Privacy &amp; legal</span><span class="v">&#8250;</span></button>
+  ${resetRow}
+  ${delRow}
+  <button class="srow" onclick="signOutUser()"><span>Log out</span><span class="v">&#8250;</span></button>`,
+  {crumb:'Account'});
 }
 /* ---------- render ---------- */
 function render(){
