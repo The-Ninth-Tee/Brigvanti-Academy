@@ -700,5 +700,16 @@ window.BRIG_STRINGS = {
 "Your growth path": "Je groeipad",
 "Your level per area and per skill is yours to see. Your growth over time and your growth path are part of Plus.": "Je level per onderdeel en per vaardigheid kun je altijd zien. Je groei door de tijd en je groeipad horen bij Plus.",
 "Every skill you have placed, with its level. Your growth over time and your growth path are part of Plus.": "Elke vaardigheid die je hebt geplaatst, met het level ervan. Je groei door de tijd en je groeipad horen bij Plus.",
-"You have earned {0} of {1}. Each badge rewards real work.": "Je hebt {0} van de {1} verdiend. Elke badge beloont echt werk."
+"You have earned {0} of {1}. Each badge rewards real work.": "Je hebt {0} van de {1} verdiend. Elke badge beloont echt werk.",
+"Your plan": "Je abonnement",
+"Settings": "Instellingen",
+"Push reminders": "Pushmeldingen",
+"Reminders arrive around 9:00 on your practice days.": "Je krijgt rond 9:00 een melding op je oefendagen.",
+"Later": "Later",
+"Google": "Google",
+"Change ›": "Wijzigen ›",
+"On": "Aan",
+"Off": "Uit",
+"Off ›": "Uit ›",
+"Plus opens all 7 areas. €13.99 a month or €89.99 a year. Payments open soon.": "Plus opent alle 7 onderdelen. €13,99 per maand of €89,99 per jaar. Betalen kan binnenkort."
 };
