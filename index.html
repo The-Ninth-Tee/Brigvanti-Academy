@@ -2084,7 +2084,7 @@ function vProgress(){
       ${lv===null?'<span class="chip">Not scanned</span>':`<span class="chip t">${LV[lv]}</span>`}</button>`;}).join('');
   const latest=S.reps.slice().sort((x,y)=>y.t-x.t).slice(0,3).map(r=>`<div class="line"><div class="nm">${esc(r.act)}
       <span>${shortDate(r.t)}, ${esc(DATA.doms[byId[r.c]?byId[r.c].d:'']||'')}</span></div></div>`).join('');
-  return shell(`<h1>${avgLv==null?'Your progress':`You are at <b style="color:var(--violet-t);font-weight:800">${LV[avgLv]}</b>`}</h1>
+  return shell(`<h1>${!avgLv?'Your progress':`You are at <b style="color:var(--violet-t);font-weight:800">${LV[avgLv]}</b>`}</h1>
   <p class="lede">${avgLv==null?'Scan an area to see where you stand.':'This level is advisory. It moves as you practise.'}</p>
   ${brigPWA.standalone()?pushInvite():''}
   <div class="card effort">
