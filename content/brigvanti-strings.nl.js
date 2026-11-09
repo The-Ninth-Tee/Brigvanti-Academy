@@ -667,5 +667,16 @@ window.BRIG_STRINGS = {
 "{0} skills, all scanned": "{0} vaardigheden, alle gescand",
 "{0} skills, {1} scanned": "{0} vaardigheden, {1} gescand",
 "{0} skills, none scanned": "{0} vaardigheden, nog niet gescand",
-"Plus opens practice and level up in all 7 areas. Payments open soon.": "Met Plus oefen je en doe je level up in alle 7 onderdelen. Betalen kan binnenkort."
+"Plus opens practice and level up in all 7 areas. Payments open soon.": "Met Plus oefen je en doe je level up in alle 7 onderdelen. Betalen kan binnenkort.",
+"Leave out names, emails and other personal details.": "Laat namen, e-mailadressen en andere persoonsgegevens weg.",
+"Do not enter private or sensitive data.": "Vul geen privé- of gevoelige gegevens in.",
+"Go to the next area": "Ga naar het volgende onderdeel",
+"effort points": "inspanningspunten",
+"You are at <b>{0}</b> here. This level is advisory.": "Je bent hier <b>{0}</b>. Dit level is een advies.",
+"You have a full picture now. Each level is advisory and moves as you practise.": "Je hebt nu het volledige overzicht. Elk level is een advies en groeit mee als je oefent.",
+"This level is advisory. It moves as you practise.": "Dit level is een advies. Het groeit mee als je oefent.",
+"Scanned": "Gescand",
+"Scan this area": "Scan dit onderdeel",
+"Pick an area to scan, or continue where you left off.": "Kies een onderdeel om te scannen, of ga verder waar je gebleven was.",
+"part of Plus": "hoort bij Plus"
 };
