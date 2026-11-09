@@ -14,31 +14,44 @@
 <meta name="apple-mobile-web-app-title" content="Brigvanti">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#F8FAFC" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0F172A" media="(prefers-color-scheme: dark)">
+<script>
+try{if(localStorage.getItem('brigvanti_theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}
+</script>
+<meta name="theme-color" content="#0B0B14">
 <style>
+/* Theme B. Dark is the default. Light applies through <html data-theme="light">. */
 :root{
-  --ink:#0F172A; --ink2:#334155; --ink3:#64748B;
-  --bg:#F8FAFC; --card:#FFFFFF; --soft:#F1F5F9;
-  --line:#E2E8F0; --line2:#EEF2F6;
-  --teal:#06B6D4; --teal-d:#0E7490; --teal-l:#ECFEFF;
-  --indigo:#0E7490; --indigo-l:#F1F5F9;
+  --ink:#F5F5F7; --ink2:#B9B9C6; --ink3:#8C8CA0;
+  --bg:#0B0B14; --card:#15151F; --soft:#1E1E2B;
+  --line:#2E2E40; --line2:#1E1E2B;
+  --teal:#7357F6; --teal-d:#B3A1FF; --teal-l:#221C45;
+  --indigo:#B3A1FF; --indigo-l:#1E1E2B;
+  --amber:#F59E0B; --amber-d:#FBBF24; --amber-l:#2A2110;
+  --rose:#FF8A8A; --rose-l:#2E1518;
+  --slate:#1E1E2B; --slate-h:#2E2E40; --on-slate:#F5F5F7;
+  --lime:#C6F432; --lime-h:#DDFB7A; --on-lime:#0B0B14;
+  --violet:#7357F6; --violet-t:#B3A1FF; --on-violet:#FFFFFF;
+  --tile-lilac:#DCD3FF; --tile-mint:#BDF0DF; --tile-sky:#C7E3FF;
+  --tile-coral:#FFC9B8; --tile-sand:#F3E7C9; --tile-lime:#D9F77A; --on-tile:#0B0B14;
+  --focus:#B3A1FF;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --display:"Bricolage Grotesque",var(--sans);
+  --r:20px; --r-sm:14px; --r-xs:8px; --r-pill:999px;
+  color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --ink:#0B0B14; --ink2:#4A4A58; --ink3:#6B6B7B;
+  --bg:#FAFAF7; --card:#FFFFFF; --soft:#F1F0EA;
+  --line:#E4E2DA; --line2:#EFEDE6;
+  --teal:#5B3FE0; --teal-d:#5B3FE0; --teal-l:#EEEAFF;
+  --indigo:#5B3FE0; --indigo-l:#F1F0EA;
   --amber:#B45309; --amber-d:#92400E; --amber-l:#FBEBDD;
   --rose:#DC2626; --rose-l:#FEF2F2;
-  --slate:#0F172A; --slate-h:#1E293B; --on-slate:#F8FAFC;
-  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-  --r:10px; --r-sm:6px; --r-xs:3px;
+  --slate:#0B0B14; --slate-h:#1E1E2B; --on-slate:#FAFAF7;
+  --violet:#5B3FE0; --violet-t:#5B3FE0;
+  --focus:#5B3FE0;
+  color-scheme:light;
 }
-@media(prefers-color-scheme:dark){:root{
-  --ink:#F8FAFC; --ink2:#CBD5E1; --ink3:#94A3B8;
-  --bg:#0F172A; --card:#1E293B; --soft:#334155;
-  --line:#334155; --line2:#1E293B;
-  --teal:#22D3EE; --teal-d:#22D3EE; --teal-l:#0E2A32;
-  --indigo:#22D3EE; --indigo-l:#334155;
-  --amber:#D97706; --amber-d:#F59E0B; --amber-l:#2A1E10;
-  --rose:#F87171; --rose-l:#2A1414;
-  --slate:#1E293B; --slate-h:#334155; --on-slate:#F8FAFC;
-}}
 .hero-logo{width:104px;height:104px;margin:0 auto 22px;display:grid;place-items:center}
 .hero-logo img{width:100%;height:100%;object-fit:contain}
 .cmark{width:30px;height:30px;flex:0 0 auto;display:grid;place-items:center}
@@ -54,8 +67,9 @@
 .menu button.sep{border-top:1px solid var(--line);margin-top:6px;padding-top:16px}
 @media(hover:hover){.menu button:hover{background:var(--soft)}}
 .menu button .sub{display:block;font-size:12.5px;font-weight:400;color:var(--ink3);margin-top:2px}
-.lm-dark,.cm-dark{display:none}
-@media(prefers-color-scheme:dark){.lm-light,.cm-light{display:none}.lm-dark,.cm-dark{display:block}}
+.lm-light,.cm-light{display:none}.lm-dark,.cm-dark{display:block}
+[data-theme="light"] .lm-light,[data-theme="light"] .cm-light{display:block}
+[data-theme="light"] .lm-dark,[data-theme="light"] .cm-dark{display:none}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
 body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.55}
