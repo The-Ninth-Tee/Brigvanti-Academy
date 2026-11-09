@@ -5,7 +5,7 @@ importScripts('/push-sw.js');
    The cached copy is used only when the network fails or takes longer than NET_TIMEOUT.
    Firebase SDK files are versioned in their URL, so they are served cache first.
    The coach, Netlify functions, Firestore, Auth and Analytics are never cached. */
-const VERSION = 'brigvanti-v1';
+const VERSION = 'brigvanti-v2';
 const NET_TIMEOUT = 4000;
 const SHELL = [
   '/',
@@ -16,7 +16,7 @@ const SHELL = [
   '/Icons/app-icon-192.png',
   '/Icons/apple-touch-icon.png',
   '/Icons/favicon-32.png',
-  '/Icons/favicon-32-dark.png'
+  '/fonts/bricolage-grotesque-latin.woff2'
 ];
 const FIREBASE = [
   'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js',
