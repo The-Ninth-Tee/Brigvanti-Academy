@@ -244,9 +244,6 @@ label.fl{display:block;font-size:12px;font-weight:700;margin:0 0 6px;text-transf
 .effort .et{font-size:15px;font-weight:700}
 .effort .es{flex-basis:100%;font-size:13.5px;opacity:.8}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-.mtiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0}
-.mtile{background:var(--card);border:1.5px solid var(--line);border-radius:var(--r);padding:18px 12px;text-align:center;cursor:pointer;font:inherit;color:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:100px;transition:background .15s ease,border-color .15s ease,transform .06s ease}
-.mtile:hover{background:var(--soft)}
 .g3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .nextstep{background:var(--violet);color:var(--on-violet);border-color:var(--violet)}
 .nextstep .eyebrow,.nextstep h3{color:var(--on-violet)}
@@ -319,10 +316,6 @@ button.rw{cursor:pointer}
 .fold>summary .chev{margin-left:auto;color:var(--ink3);font-size:22px;transition:transform .15s}
 .fold[open]>summary .chev{transform:rotate(90deg)}
 .fold .fbody{padding:0 16px 16px}
-.mtile:active{transform:scale(.97)}
-.mtile .mi{font-size:23px;line-height:1}
-.mtile b{font-size:13.5px;font-weight:700;line-height:1.25}
-.mtile.warn:hover{background:var(--amber-l);border-color:var(--amber)}
 .fold{border:1px solid var(--line);border-radius:var(--r);background:var(--card);margin:14px 0;overflow:hidden}
 .fold>summary{list-style:none;cursor:pointer;padding:17px 18px;display:flex;align-items:center;justify-content:space-between;font-weight:700;font-size:17px}
 .fold>summary::-webkit-details-marker{display:none}
@@ -358,6 +351,45 @@ body.is-offline{padding-top:calc(54px + env(safe-area-inset-top))}
 .isteps{text-align:left;margin:10px 0 16px;padding-left:20px;color:var(--ink2);font-size:14.5px;line-height:1.5}
 .isteps li{margin:6px 0}
 @media(min-width:620px){.app{padding:0 24px 110px}h1{font-size:34px}}
+.sidebar{display:none}
+@media(min-width:1024px){
+  .side-on #app{padding-left:256px}
+  .side-on .app{max-width:808px;padding:0 24px 60px}
+  .side-on .app.wide{max-width:1128px}
+  .side-on .tabbar,.side-on .hb,.side-on .top .cmark{display:none}
+  .side-on .abar{left:256px}
+  .side-on .toast{left:272px}
+  .side-on h1{font-size:44px;line-height:1}
+  .sidebar{display:flex;flex-direction:column;position:fixed;left:0;top:0;bottom:0;width:256px;z-index:50;overflow-y:auto;
+    background:var(--card);border-right:1.5px solid var(--line);padding:24px 16px}
+  .sb-logo{display:flex;align-items:center;gap:10px;padding:0 8px;margin-bottom:28px}
+  .sb-logo b{font-family:var(--display);font-weight:800;font-size:22px;color:var(--ink)}
+  .sb-logo .cmark{width:40px;height:40px;border-radius:12px}
+  .sb-logo .cmark .emblem{width:32px;height:32px}
+  .sb-nav{display:flex;flex-direction:column;gap:2px}
+  .sb-nav button{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border-radius:12px;font-size:15px;font-weight:500;color:var(--ink2);text-align:left}
+  .sb-nav button i{width:8px;height:8px;border-radius:50%;background:transparent;flex:0 0 auto}
+  .sb-nav button[aria-current="page"]{font-weight:700;color:var(--ink);background:var(--teal-l)}
+  .sb-nav button[aria-current="page"] i{background:var(--lime)}
+  [data-theme="light"] .sb-nav button[aria-current="page"] i{background:var(--violet)}
+  @media(hover:hover){.sb-nav button:not([aria-current]):hover{background:var(--soft);color:var(--ink)}}
+  .sb-fill{flex:1;min-height:24px}
+  .sb-plan{background:var(--soft);border-radius:16px;padding:14px;margin-bottom:8px}
+  .sb-plan-h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .sb-plan-h b{font-size:14px;color:var(--ink)}
+  .sb-plan p{margin:6px 0 0;font-size:13px;color:var(--ink2)}
+  .sb-sw{display:flex;justify-content:space-between;align-items:center;min-height:44px;padding:0 12px;font-size:14px;font-weight:600;color:var(--ink)}
+  .sb-foot{display:block;width:100%;min-height:40px;padding:0 12px;text-align:left;font-size:14px;color:var(--ink2)}
+  .statrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,3fr);gap:16px;margin-bottom:24px}
+  .statrow .card,.statrow .grid{margin:0}
+  .pcols{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:0 24px;align-items:start}
+  .pcols>*{grid-column:2}
+  .pcols>.lvl{grid-column:1;grid-row:1/span 4}
+  .agrid.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
+  .pgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+  .pgrid .opt{margin:0;height:100%}
+  .bgrid{grid-template-columns:repeat(5,minmax(0,1fr))}
+}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -898,6 +930,7 @@ function coachPaint(){
   const p=document.getElementById('coachLeftPractice');if(p){const t=practiceCounter();p.textContent=t;p.style.display=t?'':'none';}
   const a=document.getElementById('coachLeftAccount');if(a){const t=coachLeftText();a.textContent=t||planName();}
   const n=document.getElementById('coachPlan');if(n)n.textContent=planName();
+  const sd=document.getElementById('coachLeftSide');if(sd){const t=coachLeftText();sd.textContent=t||planName();}
 }
 async function coachRefresh(){
   if(COACH.busy||Date.now()-COACH.at<30000||!window.brigvantiAuth)return;
@@ -1173,6 +1206,28 @@ function tabBar(){
     ${t(6,'Progress','tabGo(6)')}${t(3,'Areas','tabGo(3)')}${t(4,'Practice',"V.menu=false;practiseDom('')")}${t(5,'Level up','tabGo(5)')}${t('m','Menu','openMenu()')}
   </div></nav>`;
 }
+/* Desktop sidebar. It shows from 1024 px once one area is placed, also during an
+   assignment and a level up test, as on the desktop boards. CSS hides it on phones. */
+function sideOn(){return !!(S&&S.signed&&setupDone()&&anyDomDone());}
+function sideBar(){
+  if(!sideOn())return '';
+  const cur=S.stage;
+  const it=(st,label)=>`<button onclick="tabGo(${st})" ${cur===st?'aria-current="page"':''}><i></i>${label}</button>`;
+  const left=coachLeftText();
+  return `<aside class="sidebar" aria-label="Main">
+    <div class="sb-logo"><span class="cmark"><span class="emblem" role="img" aria-label="Brigvanti emblem"></span></span><b>Brigvanti</b></div>
+    <nav class="sb-nav">${it(6,'Your progress')}${it(3,'Your areas')}
+      <button onclick="V.menu=false;practiseDom('')" ${cur===4?'aria-current="page"':''}><i></i>Practice</button>
+      ${it(5,'Level up')}${it(8,'Portfolio')}${it(10,'Badges')}${it(9,'Account')}</nav>
+    <div class="sb-fill"></div>
+    <div class="sb-plan"><div class="sb-plan-h"><b>Your plan</b><span class="lvchip">${planName()}</span></div>
+      <p id="coachLeftSide">${left||planName()}</p></div>
+    <div class="sb-sw"><span id="sbLm">Light mode</span><button class="sw" onclick="toggleTheme()" aria-pressed="${isLight()?'true':'false'}" aria-labelledby="sbLm"><i></i></button></div>
+    <button class="sb-foot" onclick="exportPortfolioDoc()">Download my work</button>
+    <button class="sb-foot" onclick="tabGo(7)">Privacy &amp; legal</button>
+    <button class="sb-foot" onclick="signOutUser()">Log out</button>
+  </aside>`;
+}
 function tabGo(n){if(n===S.stage){V={};save();render();return;}V.menu=false;go(n);}
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&V&&V.menu)closeMenu();});
 function openMenu(){V.menu=true;render();var x=document.querySelector('.msheet-x');if(x)x.focus();}
@@ -1219,7 +1274,7 @@ function shell(inner,opts){
     ${o.pct!=null?`<div class="track"><i style="width:${o.pct}%"></i></div>`:''}`;
   const showAB=ANALYTICS_LIVE&&S.signed&&S.consent&&(S.analytics===null||S.analytics===undefined);
   const pad=(showAB?150:110)+(tabsOn()?60:0);
-  return `<div class="app" style="padding-bottom:${pad}px"><div class="top">${bar}</div>${badgeBanner()}${inner}${showAB?analyticsBar():''}${tabBar()}${menuPanel()}</div>`;
+  return `<div class="app${o.wide?' wide':''}" style="padding-bottom:${pad}px"><div class="top">${bar}</div>${badgeBanner()}${inner}${showAB?analyticsBar():''}${tabBar()}${menuPanel()}</div>${sideBar()}`;
 }
 /* Enter the scan from the account page. First run needs consent and setup.
    A returning user with both goes straight to where they left off. */
@@ -1504,7 +1559,7 @@ function vBadges(){
     ${BADGES.filter(b=>b.f===f).map(b=>{const got=S.badges&&S.badges[b.id];
       return `<div class="badge${got?' got':''}" ${got?`style="background:var(${tone[fi%tone.length]})"`:''}>
         ${ic('star',22)}<b>${b.n}</b><span>${b.d}</span></div>`;}).join('')}</div>`).join('')}`,
-  {crumb:'Your badges'});
+  {crumb:'Your badges',wide:true});
 }
 /* ---------- 7. legal and privacy ---------- */
 const LEGAL_UPDATED=new Date(2026,9,6).toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'});
@@ -1735,11 +1790,12 @@ function vStand(){
   const free=DK.filter(d=>areaOpen(d)),locked=DK.filter(d=>!areaOpen(d));
   return shell(`<h1>Your 7 areas</h1>
   <p class="lede">You can scan every area. Tap an area to see its skills.</p>
+  <div class="agrid${locked.length?' two':''}"><section>
   ${isFree()?`<div class="agrp">Included in Free</div>`:''}
-  ${free.map(card).join('')}
-  ${locked.length?`<div class="agrp plus">Part of Plus</div>${locked.map(card).join('')}
-    <p class="muted" style="margin:6px 4px 0">Plus opens practice and level up in all 7 areas. Payments open soon.</p>`:''}`,
-  {crumb:'Your areas'});
+  ${free.map(card).join('')}</section>
+  ${locked.length?`<section><div class="agrp plus">Part of Plus</div>${locked.map(card).join('')}
+    <p class="muted" style="margin:6px 4px 0">Plus opens practice and level up in all 7 areas. Payments open soon.</p></section>`:''}</div>`,
+  {crumb:'Your areas',wide:true});
 }
 /* Start the scan at one chosen skill. A skill already in progress keeps priority. */
 function scanSkill(cid){S.scanPick=cid;scanDom(byId[cid].d);}
@@ -1794,8 +1850,8 @@ function vPractice(){
   <button class="opt" onclick="openOwn()" style="background:var(--indigo-l);box-shadow:none">
     <b>None of these fit my week</b>
     <span class="sub">Describe a task you actually have, and your coach builds the assignment around it.</span></button>
-  <div style="margin-top:14px">${cards||`<div class="card"><p class="muted">${S.focus?'No ready made tasks for this area yet. Use the option above to describe your own.':'Place at least one area in the scan first.'}</p></div>`}</div>
-  ${locked?`<div style="margin-top:14px">${locked}</div>`:''}`);
+  <div class="pgrid" style="margin-top:14px">${cards||`<div class="card"><p class="muted">${S.focus?'No ready made tasks for this area yet. Use the option above to describe your own.':'Place at least one area in the scan first.'}</p></div>`}</div>
+  ${locked?`<div style="margin-top:14px">${locked}</div>`:''}`,{wide:true});
 }
 function setFocus(d){S.focus=d;save();render();}
 function openRep(aid){
@@ -2115,7 +2171,7 @@ function vProgress(){
   return shell(`<h1>${!avgLv?'Your progress':`You are at <b style="color:var(--violet-t);font-weight:800">${LV[avgLv]}</b>`}</h1>
   <p class="lede">${avgLv==null?'Scan an area to see where you stand.':'This level is advisory. It moves as you practise.'}</p>
   ${brigPWA.standalone()?pushInvite():''}
-  <div class="card effort">
+  <div class="statrow"><div class="card effort">
     <b>${effortXP()}</b><span class="et">effort points</span>
     <span class="es">Earned by handing in work and levelling up, never by being right.</span>
   </div>
@@ -2123,12 +2179,13 @@ function vProgress(){
     <div class="tile coral"><b>${streak()}</b><span>day streak</span></div>
     <div class="tile sky"><b>${S.reps.length}</b><span>handed in</span></div>
     <div class="tile sand"><b>${earnedCount()}</b><span>badges</span></div>
-  </div>
+  </div></div>
+  <div class="pcols">
   ${nx?`<div class="card nextstep"><div class="eyebrow">Next step</div>
     <h3>Your level up test is ready</h3>
     <p style="margin:6px 0 14px">${esc(nx.n)}, test for ${LV[nxT]}.</p>
     <button class="btn sec" onclick="go(5);openRung('${nx.id}')">Start the test</button></div>`:''}
-  <div class="card"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><h3>Level per area</h3>
+  <div class="card lvl"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><h3>Level per area</h3>
     <button class="alink" onclick="go(3)">See all skills &#8250;</button></div>${areaRows}</div>
   <button class="opt" onclick="V.skills=true;render()" style="display:flex;align-items:center;gap:14px">
     <div style="flex:1"><b style="display:block">Your growth</b>
@@ -2138,8 +2195,9 @@ function vProgress(){
     ${latest||'<p class="muted" style="margin:8px 0 0">Your work appears here once you hand something in.</p>'}
     <div class="row" style="margin-top:12px"><button class="btn sec" style="flex:1" onclick="go(8)">Portfolio</button>
       <button class="btn sec" style="flex:1" onclick="go(10)">Badges</button></div></div>
+  </div>
 
-`,{noBack:true});
+`,{noBack:true,wide:true});
 }
 /* The file is not on screen, so the translation layer cannot reach it. T() looks the text up directly. */
 function T(t){const x=window.brigI18n&&window.brigI18n.tr(t);return x||t;}
@@ -2238,11 +2296,10 @@ function vAccount(){
     <div class="card"><h3>First, the scan</h3>
       <p class="muted" style="margin:6px 0 0">Let us start with a short scan. After your first area, you can come back here and edit your account details.</p></div>
     <div class="row"><button class="btn go full" onclick="goScan()">Go to the scan</button></div>
-    <div class="mtiles">
-      <button class="mtile" onclick="go(7)"><span class="mi">${ic('lock',24)}</span><b>Privacy &amp; legal</b></button>
-      <button class="mtile" onclick="signOutUser()"><span class="mi">${ic('logout')}</span><b>Log out</b></button>
-    </div>`,
-    {crumb:'Account settings'});
+    <div class="sgrp">Account</div>
+    <button class="srow" onclick="go(7)"><span>Privacy &amp; legal</span><span class="v">&#8250;</span></button>
+    <button class="srow" onclick="signOutUser()"><span>Log out</span><span class="v">&#8250;</span></button>`,
+    {crumb:'Account'});
   }
   const isG=S.authProvider==='google.com';
   const modeLbl={work:'At work',personal:'In my own life',both:'Work and life'}[S.mode]||'Not set';
@@ -2285,6 +2342,14 @@ function vAccount(){
   {crumb:'Account'});
 }
 /* ---------- render ---------- */
+/* A sub screen counts as a new screen, so it opens at the top. Opening an area
+   in place or showing a checked answer keeps the scroll position. */
+function viewKey(){
+  const r=V.rep,u=V.ru;
+  return [S.stage,V.skills?'skills':'',V.pf||'',V.lvArea||'',
+    r?'rep:'+r.step:'',u?'ru:'+u.step+':'+u.ix:'',
+    S.stage===2?(S.dom||'')+':'+scanned():''].join('|');
+}
 function render(){
   coachSoon();
   if(window.__brigAuthPending){
@@ -2294,15 +2359,16 @@ function render(){
   }
   if(!S.signed&&S.stage!==7)S.stage=0;
   const v=[vAccess,vStart,vScan,vStand,vPractice,vRung,vProgress,vLegal,vPortfolio,vAccount,vBadges][S.stage]||vAccess;
-  const y=window.scrollY, moved=S.stage!==LAST, app=document.getElementById('app');
+  const key=viewKey(), y=window.scrollY, moved=key!==LAST, app=document.getElementById('app');
   /* On a screen change, scroll up before swapping content and nudge a repaint.
      Android Chrome could leave a stale picture of a long screen below a shorter one. */
   if(moved)window.scrollTo(0,0);
   app.innerHTML=v()+(V.leaving?leavingOverlay():'')+(V.instHelp?installHelp():'');
   document.body.classList.toggle('tabs-on',!!app.querySelector('.tabbar'));
+  document.body.classList.toggle('side-on',!!app.querySelector('.sidebar'));
   document.body.style.overflow=V.menu?'hidden':'';
   if(moved){
-    LAST=S.stage;window.scrollTo(0,0);
+    LAST=key;window.scrollTo(0,0);
     app.style.opacity='0.999';
     requestAnimationFrame(function(){app.style.opacity='';});
   }
