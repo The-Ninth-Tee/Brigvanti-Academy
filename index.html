@@ -578,10 +578,15 @@ const SETTINGS=['name','email','mode','role','ambition','topics','targets','r1',
 function serialize(s){ const c=Object.assign({},s); delete c.pw; return JSON.stringify(c); }
 function parseBlob(str){ if(str==null) return null; try{ const o=JSON.parse(str); return (o&&o.scan)?o:null; }catch(e){ return null; } }
 function mmax(a,b){ const o=Object.assign({},a); Object.keys(b||{}).forEach(function(k){ o[k]=Math.max(o[k]||0,b[k]||0); }); return o; }
-function mergeScan(a,b){
+/* A done record without a keyed test (skipped, or "None of these fit" before 10 November 2026)
+   counts as not scanned. Dropping it here stops a stored copy from bringing it back over a scan
+   in progress. A passed level up test keeps the record. */
+function untested(r,k,rung){return !!(r&&r.done&&(r.skipped||!(r.log&&r.log.length))&&!(rung&&rung[k]&&rung[k].passed));}
+function mergeScan(a,b,rung){
   const out={},keys=new Set(Object.keys(a||{}).concat(Object.keys(b||{})));
   keys.forEach(function(k){
-    const x=a[k],y=b[k];
+    const x=untested(a[k],k,rung)?null:a[k],y=untested(b[k],k,rung)?null:b[k];
+    if(!x&&!y)return;
     if(!x){out[k]=y;return;} if(!y){out[k]=x;return;}
     const xd=!!x.done,yd=!!y.done; let base=x,other=y;
     if(yd&&!xd){base=y;other=x;}
@@ -641,10 +646,10 @@ function mergeState(base,inc){
   out.consent=!!(base.consent||inc.consent);
   out.signed=!!(base.signed||inc.signed);
   if(inc.started&&(!base.started||inc.started<base.started)) out.started=inc.started;
-  out.scan=mergeScan(base.scan||{},inc.scan||{});
+  out.rung=mergeRung(base.rung||{},inc.rung||{});
+  out.scan=mergeScan(base.scan||{},inc.scan||{},out.rung);
   out.seen=Object.assign({},inc.seen||{},base.seen||{});
   out.domSeen=mmax(base.domSeen||{},inc.domSeen||{});
-  out.rung=mergeRung(base.rung||{},inc.rung||{});
   out.badges=mergeBadges(base.badges||{},inc.badges||{});
   out.flags=mergeFlags(base.flags||{},inc.flags||{});
   out.reps=mergeArr(base.reps||[],inc.reps||[],function(r){return r.c+'|'+r.aid+'|'+r.t;});
@@ -2385,7 +2390,7 @@ function viewKey(){
 function dropUntested(){
   if(!S||!S.scan)return;
   Object.keys(S.scan).forEach(id=>{const r=S.scan[id];
-    if(r&&r.done&&(r.skipped||!(r.log&&r.log.length))&&!(S.rung[id]&&S.rung[id].passed))delete S.scan[id];});
+    if(untested(r,id,S.rung))delete S.scan[id];});
 }
 function render(){
   coachSoon();
