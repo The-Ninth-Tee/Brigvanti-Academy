@@ -1503,6 +1503,8 @@ function vProve(c,d,cs){
 function submitProbe(cid){if(V.pick==null)return;const{ok}=answerProbe(cid,V.pick);V.shown=true;V.ok=ok;save();render();}
 function mirrorTick(cid){
   const r=S.scan[cid];if(!r||r.skipped||r.claimed==null)return;
+  /* "None of these fit me yet" is never tested, so it neither counts nor breaks the run. */
+  if(r.claimed<byId[cid].fl)return;
   if(!S.flags)S.flags={};
   S.flags.mirror=(r.claimed===r.confirmed)?(S.flags.mirror||0)+1:0;
   S.flags.mirrorBest=Math.max(S.flags.mirrorBest||0,S.flags.mirror);
@@ -1798,7 +1800,9 @@ function vStand(){
   {crumb:'Your areas',wide:true});
 }
 /* Start the scan at one chosen skill. A skill already in progress keeps priority. */
-function scanSkill(cid){S.scanPick=cid;scanDom(byId[cid].d);}
+function scanSkill(cid){if(S.scan[cid]&&S.scan[cid].skipped)delete S.scan[cid];S.scanPick=cid;scanDom(byId[cid].d);}
+/* A skipped skill counts as done, so it is cleared before the area scan picks it up again. */
+function scanRest(d){compsOf(d).forEach(c=>{if(S.scan[c.id]&&S.scan[c.id].skipped)delete S.scan[c.id];});scanDom(d);}
 function practiseDom(d){if(d&&!areaOpen(d)){toast(PLUS_MSG);return;}if(S.stage!==4){NAV.push(S.stage);if(NAV.length>60)NAV.shift();}S.focus=d||'';S.stage=4;V={};save();render();}
 function scanDom(d){
   if(S.stage!==2){NAV.push(S.stage);if(NAV.length>60)NAV.shift();}
@@ -1997,25 +2001,40 @@ function vRung(){
 }
 function vRungArea(d){
   const skills=compsOf(d).filter(c=>S.scan[c.id]&&S.scan[c.id].done&&!S.scan[c.id].skipped);
+  const unscanned=compsOf(d).filter(c=>!(S.scan[c.id]&&S.scan[c.id].done)||S.scan[c.id].skipped);
+  let anyReady=false;
   const rows=skills.map(c=>{
     const cur=S.scan[c.id].confirmed||0,t=cur+1,st=rungState(c.id);
     const atTop=t>4||t<c.fl||formsAt(c.id,t).length===0;
     const need=Math.max(t-1,1),have=repsFor(c.id).length,ready=canLevelUp(c.id);
     const plus=!skillOpen(c)||rungWall(c.id);
+    if(ready&&!plus)anyReady=true;
     const state=plus?`<span class="chip">${ic('lock',14)} part of Plus</span>`
       :(st.passed&&atTop)?'<span class="chip i">at your target</span>'
       :atTop?'<span class="chip">nothing higher to test</span>'
       :ready?`<span class="chip a">&#8593; test to ${LV[t]}</span>`
       :`<span class="chip">${have} of ${need} practised</span>`;
-    return `<button class="opt" ${ready?`onclick="openRung('${c.id}')"`:''} ${ready?'':'style="opacity:.9"'}>
+    const act=plus?`toast(PLUS_MSG)`
+      :atTop?`toast('There is nothing higher to test in this skill.')`
+      :ready?`openRung('${c.id}')`
+      :`practiseDom('${d}');toast('Practise this skill first. One handed in assignment opens its test.')`;
+    return `<button class="opt" onclick="${act}">
       <b>${esc(c.n)}</b>
       <span style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap"><span class="chip t">${LV[cur]}</span>${state}</span>
       ${plus?`<span class="sub" style="margin-top:8px">${rungWall(c.id)?'You can keep practising at this level. The next test is part of Plus.':'Level up in this area is part of Plus.'}</span>`
-        :(!ready&&!atTop)?`<span class="sub" style="margin-top:8px">Practise ${need-have} more to open the test.</span>`:''}</button>`;
+        :(!ready&&!atTop)?`<span class="sub" style="margin-top:8px">Practise ${need-have} more to open the test. Tap to practise.</span>`:''}</button>`;
   }).join('');
+  const open=areaOpen(d);
+  const guide=!skills.length
+    ?`<div class="card"><h3>Scan first</h3><p class="muted" style="margin:6px 0 14px">Scan this area to place your skills. Then practise, and the level up tests open.</p>
+      <button class="btn go full" onclick="scanDom('${d}')">Scan this area</button></div>`
+    :(!anyReady&&open)?`<div class="card"><h3>Practise first</h3><p class="muted" style="margin:6px 0 14px">No test is ready yet. Hand in one assignment on a skill to open its level up test.</p>
+      <button class="btn go full" onclick="practiseDom('${d}')">Practise this area</button></div>`:'';
+  const scanNote=skills.length&&unscanned.length?`<div class="card"><p class="muted" style="margin:0 0 12px">${unscanned.length} skill${unscanned.length>1?'s':''} in this area ${unscanned.length>1?'are':'is'} not scanned yet.</p>
+      <button class="btn sec full" onclick="scanRest('${d}')">Scan ${unscanned.length>1?'them':'it'} now</button></div>`:'';
   return shell(`<h1>${esc(DATA.doms[d])}</h1>
   <p class="lede">Tap a skill that is ready to take its level up test. The rest open as you practise.</p>
-  ${rows||'<div class="card"><p class="muted">No placed skills in this area yet.</p></div>'}`,{crumb:'Level up'});
+  ${guide}${rows}${scanNote}`,{crumb:'Level up'});
 }
 function areaTap(d){
   if(domDone(d)){ openAreaLevelUp(d); return; }
