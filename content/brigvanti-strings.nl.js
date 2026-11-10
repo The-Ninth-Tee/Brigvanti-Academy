@@ -723,5 +723,7 @@ window.BRIG_STRINGS = {
 "{0} skill in this area is not scanned yet.": "{0} vaardigheid in dit onderdeel is nog niet gescand.",
 "{0} skills in this area are not scanned yet.": "{0} vaardigheden in dit onderdeel zijn nog niet gescand.",
 "Scan it now": "Nu scannen",
-"Scan them now": "Nu scannen"
+"Scan them now": "Nu scannen",
+"No level yet": "Nog geen level",
+"No level yet in this area. Practise a skill, then take its level up test.": "Nog geen level in dit onderdeel. Oefen met een vaardigheid en doe daarna de level up test."
 };

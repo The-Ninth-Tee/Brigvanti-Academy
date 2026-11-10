@@ -285,6 +285,7 @@ label.fl{display:block;font-size:12px;font-weight:700;margin:0 0 6px;text-transf
 .arow .asub{display:inline;font-size:14px;color:var(--ink2)}
 .alink{flex:0 0 auto;color:var(--violet-t);font-weight:700;font-size:14px;min-height:44px;display:inline-flex;align-items:center}
 .lvchip{flex:0 0 auto;background:var(--violet);color:var(--on-violet);border-radius:var(--r-pill);padding:4px 12px;font-size:12px;font-weight:700}
+.lvchip.none{background:var(--soft);color:var(--ink2);box-shadow:inset 0 0 0 1.5px var(--line)}
 .arow{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 16px;padding:4px 0;min-height:48px;border-top:1.5px solid var(--line);font-size:14px;color:var(--ink2)}
 .sect{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--ink3);margin:22px 4px 8px}
 .rows{background:var(--card);border:1.5px solid var(--line);border-radius:var(--r);overflow:hidden}
@@ -535,7 +536,11 @@ function installHelp(){
 /* Content lives in /content/brigvanti-content.js. Update it with tools/build_content.py. */
 if(!window.BRIG_CONTENT){document.getElementById('app').innerHTML='<p style="padding:24px">The content could not load. Please refresh the page.</p>';throw new Error('brigvanti content missing');}
 const DATA = window.BRIG_CONTENT;
-const LV=['Not yet','Aware','Explorer','Integrator','Creator'];
+const LV=['No level yet','Aware','Explorer','Integrator','Creator'];
+/* Violet marks a level the learner has shown. "No level yet" stays neutral, so it never reads as a level. */
+const lvc=n=>n?'chip t':'chip';
+/* The first level a skill can be tested at. Skills with a higher floor start there. */
+const nextLv=cid=>{const c=byId[cid],cur=(S.scan[cid]&&S.scan[cid].confirmed)||0;return Math.max(cur+1,c.fl);};
 const KEY='brigvanti_pilot_v2';
 let REMIND_GO=(function(){try{const q=new URLSearchParams(location.search),k=q.get('remind');
   if(k){q.delete('remind');history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:''));}return k;}catch(e){return null;}})();
@@ -770,9 +775,9 @@ const fmtDate=d=>d.toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{w
 /* ---------- level up ---------- */
 function canLevelUp(cid){
   const r=S.scan[cid];if(!r||!r.done||r.skipped)return false;
-  const c=byId[cid],t=(r.confirmed||0)+1;
+  const c=byId[cid],t=nextLv(cid);
   if(!skillOpen(c)||rungWall(cid))return false;
-  return t<=4&&t>=c.fl&&formsAt(cid,t).length>0&&repsFor(cid).length>=Math.max(t-1,1);
+  return t<=4&&formsAt(cid,t).length>0&&repsFor(cid).length>=Math.max(t-1,1);
 }
 function rungState(cid){if(!S.rung[cid])S.rung[cid]={};return S.rung[cid];}
 function pickForms(cid,t){
@@ -982,6 +987,7 @@ function back(){
   if(V.rep){V.rep=null;render();return;}
   if(V.ru){V.ru=null;render();return;}
   if(V.lvArea){V.lvArea=null;render();return;}
+  if(V.areaDone){V.areaDone=null;render();return;}
   if(V.pf){V.pf=null;render();return;}
   /* After a finished scan, sign in, setup and the scan are behind the learner. Back leads home. */
   if(anyDomDone())while(NAV.length&&NAV[NAV.length-1]<=2)NAV.pop();
@@ -1417,6 +1423,7 @@ function pickRole(i){const r=DATA.roles[i];S.role=r.r;S.ambition=null;S.targets=
 /* ---------- 2. scan ---------- */
 function vScan(){
   if((S.r1===null||S.r2===null)&&!scanned())return vRoute();
+  if(V.areaDone)return vDomDone(V.areaDone);
   if(!S.dom||domDone(S.dom))S.dom=nextDomain();
   if(!S.dom)return vAllDone();
   const d=S.dom,cs=compsOf(d);
@@ -1475,7 +1482,7 @@ function claim(cid,l){
   const r=rec(cid),c=byId[cid];
   V.earned=null;
   r.claimed=l;
-  if(l<c.fl){r.confirmed=Math.max(0,c.fl-1);r.done=true;noteDomain(cid);mirrorTick(cid);checkBadges();}
+  if(l<c.fl){r.claimed=0;r.confirmed=0;r.done=true;noteDomain(cid);mirrorTick(cid);checkBadges();if(domDone(c.d))V.areaDone=c.d;}
   else startProbe(cid,Math.min(l,entryFor(cid)===l?l:l));
   save();render();
 }
@@ -1514,7 +1521,7 @@ function nextProbe(cid){
   if(r.done){noteDomain(cid);mirrorTick(cid);}
   /* Clear the view state on every step. A badge earned as this skill completes
      shows on the next screen, then clears when the learner moves on. */
-  V={};if(r.done)checkBadges();
+  V={};if(r.done){checkBadges();if(domDone(byId[cid].d))V.areaDone=byId[cid].d;}
   save();render();
 }
 
@@ -1522,14 +1529,14 @@ function vDomDone(d){
   const cs=compsOf(d).filter(c=>S.scan[c.id]&&!S.scan[c.id].skipped);
   const cur=domLevel(d);
   const rows=cs.map(c=>`<div class="line"><div class="nm">${esc(c.n)}</div>
-    <span class="chip t">${LV[S.scan[c.id].confirmed||0]}</span></div>`).join('');
+    <span class="${lvc(S.scan[c.id].confirmed||0)}">${LV[S.scan[c.id].confirmed||0]}</span></div>`).join('');
   const earned=(V.earned||[]).slice(); V.earned=null;
   const badge=earned.length?byBadge[earned[0]]:null;
   const next=DK.filter(x=>!domDone(x))[0];
   return shell(`<div class="card pop" style="text-align:center">
     <div class="itile mint" style="margin:0 auto 12px">${ic('check',28)}</div>
     <h2>${esc(DATA.doms[d])} is scanned</h2>
-    <p class="muted" style="margin:8px 0 0">You are at <b style="color:var(--ink)">${LV[cur||0]}</b> here. This level is advisory.</p></div>
+    <p class="muted" style="margin:8px 0 0">${cur?`You are at <b style="color:var(--ink)">${LV[cur]}</b> here. This level is advisory.`:'No level yet in this area. Practise a skill, then take its level up test.'}</p></div>
   ${badge?`<div class="card" style="display:flex;gap:14px;align-items:center;background:var(--tile-sand);color:var(--on-tile);border-color:var(--tile-sand)">
     ${ic('star',26)}<div><div class="eyebrow" style="color:var(--on-tile)">Badge earned</div>
     <b style="font-size:16px">${badge.n}</b><div style="font-size:14px">${badge.d}</div></div></div>`:''}
@@ -1677,7 +1684,7 @@ function vPortfolio(){
       <b>${esc(c.n)}</b>
       <span class="sub">${esc(DATA.doms[c.d])}</span>
       <span style="display:flex;gap:7px;margin-top:11px;flex-wrap:wrap">
-        <span class="chip t">${LV[(S.scan[id]&&S.scan[id].confirmed)||0]}</span>
+        <span class="${lvc((S.scan[id]&&S.scan[id].confirmed)||0)}">${LV[(S.scan[id]&&S.scan[id].confirmed)||0]}</span>
         ${rs.length?`<span class="chip">${rs.length} piece${rs.length>1?'s':''}</span>`:''}
         ${up.passed?'<span class="chip a">&#8593; level earned</span>':''}</span>
       ${first&&last&&rs.length>1?`<span class="sub" style="margin-top:9px">From ${shortDate(first.t)} to ${shortDate(last.t)}</span>`:''}
@@ -1714,7 +1721,7 @@ function vPortfolioSkill(){
   return shell(`<h2>${esc(c.n)}</h2>
   <div style="display:flex;gap:7px;margin:9px 0 16px;flex-wrap:wrap">
     <span class="chip">${esc(DATA.doms[c.d])}</span>
-    <span class="chip t">${LV[(S.scan[id]&&S.scan[id].confirmed)||0]}</span></div>
+    <span class="${lvc((S.scan[id]&&S.scan[id].confirmed)||0)}">${LV[(S.scan[id]&&S.scan[id].confirmed)||0]}</span></div>
   ${up.passed?`<div class="card warm"><h3>${ic('star',18)} Level earned, ${LV[up.at]}</h3>
     <p class="muted" style="margin:6px 0 8px">Confirmed on ${shortDate(up.t)}.</p>
     <div class="why"><b>What you made</b>${esc(up.ev||'')}</div>${up.grew?`<div class="why"><b>What changed</b>${esc(up.grew)}</div>`:''}</div>`:''}
@@ -1774,7 +1781,7 @@ function vStand(){
     const cs=compsOf(d),lv=domLevel(d),n=domCount(d),open=V.area===d,plus=!areaOpen(d);
     const head=lv===null
       ?`<span class="alink">Scan this area &#8250;</span>`
-      :`<span class="lvchip">${LV[lv]}</span>`;
+      :`<span class="lvchip${lv?'':' none'}">${LV[lv]}</span>`;
     const skills=open?cs.map(c=>{
       const r=S.scan[c.id],done=r&&r.done;
       const right=!done?`<button class="alink" onclick="scanSkill('${c.id}')">Scan this skill &#8250;</button>`
@@ -2004,8 +2011,8 @@ function vRungArea(d){
   const unscanned=compsOf(d).filter(c=>!(S.scan[c.id]&&S.scan[c.id].done)||S.scan[c.id].skipped);
   let anyReady=false;
   const rows=skills.map(c=>{
-    const cur=S.scan[c.id].confirmed||0,t=cur+1,st=rungState(c.id);
-    const atTop=t>4||t<c.fl||formsAt(c.id,t).length===0;
+    const cur=S.scan[c.id].confirmed||0,t=nextLv(c.id),st=rungState(c.id);
+    const atTop=t>4||formsAt(c.id,t).length===0;
     const need=Math.max(t-1,1),have=repsFor(c.id).length,ready=canLevelUp(c.id);
     const plus=!skillOpen(c)||rungWall(c.id);
     if(ready&&!plus)anyReady=true;
@@ -2020,7 +2027,7 @@ function vRungArea(d){
       :`practiseDom('${d}');toast('Practise this skill first. One handed in assignment opens its test.')`;
     return `<button class="opt" onclick="${act}">
       <b>${esc(c.n)}</b>
-      <span style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap"><span class="chip t">${LV[cur]}</span>${state}</span>
+      <span style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap"><span class="${lvc(cur)}">${LV[cur]}</span>${state}</span>
       ${plus?`<span class="sub" style="margin-top:8px">${rungWall(c.id)?'You can keep practising at this level. The next test is part of Plus.':'Level up in this area is part of Plus.'}</span>`
         :(!ready&&!atTop)?`<span class="sub" style="margin-top:8px">Practise ${need-have} more to open the test. Tap to practise.</span>`:''}</button>`;
   }).join('');
@@ -2043,7 +2050,7 @@ function areaTap(d){
 function openAreaLevelUp(d){ if(S.stage!==5)NAV.push(S.stage); S.stage=5; V={lvArea:d}; save(); render(); }
 function effortXP(){ return (S.reps?S.reps.length:0)*15 + Object.keys(S.rung||{}).filter(k=>S.rung[k]&&S.rung[k].passed).length*50; }
 function openRung(cid){
-  const c=byId[cid],cur=S.scan[cid].confirmed||0,tgt=cur+1;
+  const c=byId[cid],cur=S.scan[cid].confirmed||0,tgt=nextLv(cid);
   V.ru={cid,c,tgt,forms:pickForms(cid,tgt),ix:0,got:[],step:'a',pick:null,shown:false,cond:[],ev:'',grew:'',err:''};
   render();
 }
@@ -2161,7 +2168,7 @@ function vProgress(){
     const lv=S.scan[c.id].confirmed||0,n=repsFor(c.id).length,up=rungState(c.id).passed;
     return `<div class="line"><div class="nm">${esc(c.n)}
       <span>${esc(DATA.doms[c.d])}${n?` &#183; ${n} assignment${n>1?'s':''}`:''}</span></div>
-      <span class="chip ${up?'a':'t'}">${up?'&#8593; ':''}${LV[lv]}</span></div>`;}).join('');
+      <span class="${up?'chip a':lvc(lv)}">${up?'&#8593; ':''}${LV[lv]}</span></div>`;}).join('');
   const avgN=placed.length?placed.reduce((a,c)=>a+(S.scan[c.id].confirmed||0),0)/placed.length:null;
   const avgLv=avgN==null?null:Math.round(avgN);
   if(V.skills){
@@ -2172,7 +2179,7 @@ function vProgress(){
       <span>${new Date(r.t).toLocaleDateString(coachLang())}</span></div><span class="chip a">&#8593; ${LV[r.lv]}</span></div>`).join('');
     const path=placed.filter(c=>skillOpen(c)&&(S.scan[c.id].confirmed||0)<4).sort((a,b)=>(S.scan[a.id].confirmed||0)-(S.scan[b.id].confirmed||0)).slice(0,5)
       .map(c=>`<div class="line"><div class="nm">${esc(c.n)}<span>${esc(DATA.doms[c.d])}</span></div>
-      <span class="chip">${LV[(S.scan[c.id].confirmed||0)+1]} next</span></div>`).join('');
+      <span class="chip">${LV[nextLv(c.id)]} next</span></div>`).join('');
     return shell(`<h1>Your growth</h1>
   <p class="lede">Every skill you have placed, with its level.</p>
   <div class="card">${rows||'<p class="muted">Nothing placed yet. Scan an area from Your progress to begin.</p>'}</div>
@@ -2180,11 +2187,11 @@ function vProgress(){
   ${grown?`<div class="card"><h3>Your growth over time</h3>${grown}</div>`:''}`,{crumb:'Your growth'});
   }
   const elig=DATA.comps.filter(c=>canLevelUp(c.id));
-  const nx=elig[0],nxT=nx?(S.scan[nx.id].confirmed||0)+1:0;
+  const nx=elig[0],nxT=nx?nextLv(nx.id):0;
   const areaRows=DK.map(d=>{
     const lv=domLevel(d),tag=isFree()?(areaOpen(d)?'<span class="ptag">Free</span>':'<span class="ptag plus">Plus</span>'):'';
     return `<button class="arow2" onclick="areaTap('${d}')"><span>${esc(DATA.doms[d])}</span>${tag}
-      ${lv===null?'<span class="chip">Not scanned</span>':`<span class="chip t">${LV[lv]}</span>`}</button>`;}).join('');
+      ${lv===null?'<span class="chip">Not scanned</span>':`<span class="${lvc(lv)}">${LV[lv]}</span>`}</button>`;}).join('');
   const latest=S.reps.slice().sort((x,y)=>y.t-x.t).slice(0,3).map(r=>`<div class="line"><div class="nm">${esc(r.act)}
       <span>${shortDate(r.t)}, ${esc(DATA.doms[byId[r.c]?byId[r.c].d:'']||'')}</span></div></div>`).join('');
   return shell(`<h1>${!avgLv?'Your progress':`You are at <b style="color:var(--violet-t);font-weight:800">${LV[avgLv]}</b>`}</h1>
@@ -2369,8 +2376,16 @@ function viewKey(){
     r?'rep:'+r.step:'',u?'ru:'+u.step+':'+u.ix:'',
     S.stage===2?(S.dom||'')+':'+scanned():''].join('|');
 }
+/* Before 10 November 2026, "None of these fit" on a skill with a higher floor stored the level
+   below the floor without any check. Such records go back to no level. A passed test stays. */
+function fixFloorClaims(){
+  if(!S||!S.scan)return;
+  Object.keys(S.scan).forEach(id=>{const r=S.scan[id],c=byId[id];
+    if(c&&r&&r.done&&!r.skipped&&c.fl>1&&r.claimed!=null&&r.claimed<c.fl&&r.confirmed===c.fl-1&&!(S.rung[id]&&S.rung[id].passed)){r.confirmed=0;r.claimed=0;}});
+}
 function render(){
   coachSoon();
+  fixFloorClaims();
   if(window.__brigAuthPending){
     var a=document.getElementById('app');
     if(a)a.innerHTML='<div class="app"><p class="muted" style="padding:56px 0 20px">Connecting...</p></div>';
