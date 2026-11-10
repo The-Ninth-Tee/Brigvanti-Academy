@@ -700,7 +700,7 @@ const wasSeen=(c,l,f)=>!!S.seen[c+'|'+l+'|'+f];
    First wrong answer ends the level immediately, saving a question. */
 function startProbe(cid,level){
   const c=byId[cid],r=rec(cid),lv=Math.max(level,0);
-  if(lv<c.fl){r.confirmed=Math.max(0,c.fl-1);r.done=true;r.probe=null;return;}
+  if(lv<c.fl){r.confirmed=0;r.done=true;r.probe=null;return;}
   const f=formsAt(cid,lv).filter(x=>x!=='c');
   r.probe={lv,forms:f.length>=2?f.slice(0,2):formsAt(cid,lv).slice(0,2),ix:0,fail:false};
 }
@@ -715,7 +715,7 @@ function answerProbe(cid,pick){
 function advanceProbe(cid){
   const c=byId[cid],r=rec(cid),p=r.probe;
   if(p.fail){
-    if(p.lv-1<c.fl){r.confirmed=Math.max(0,c.fl-1);r.done=true;r.probe=null;}
+    if(p.lv-1<c.fl){r.confirmed=0;r.done=true;r.probe=null;}
     else startProbe(cid,p.lv-1);
     return;
   }
@@ -1471,11 +1471,11 @@ function vClaim(c,d,cs){
   }).join('');
   return shell(`<div class="eyebrow">${esc(DATA.doms[d])}</div>
   <h1>${esc(c.n)}</h1>
-  <p class="lede">Choose the highest statement that is true for you. Then you show it, because the statement alone does not set your level.</p>
+  <p class="lede">Choose the highest statement that is true for you. Then you show it, because the statement alone does not set your level. If none feels true yet, choose the last one.</p>
   <p class="muted" style="margin:-6px 0 14px;font-size:13px">Area ${scanOrder().indexOf(d)+1} of ${DK.length} &#183; ${DK.filter(x=>domDone(x)).length} placed so far.</p>
   <div class="card">${rungs}
-  <button class="opt" onclick="claim('${c.id}',${Math.max(c.fl-1,0)})">None of these fit me yet.</button></div>
-  <div class="row"><button class="btn sec full" onclick="skipComp('${c.id}')">Skip this skill</button></div>`,
+  </div>
+  <p class="muted" style="margin:0">You can stop here and come back. Everything is saved.</p>`,
   {crumb:`Skill ${done+1} of ${cs.length}`,pct});
 }
 function claim(cid,l){
@@ -1486,7 +1486,6 @@ function claim(cid,l){
   else startProbe(cid,Math.min(l,entryFor(cid)===l?l:l));
   save();render();
 }
-function skipComp(cid){const r=rec(cid);r.claimed=null;r.confirmed=null;r.done=true;r.skipped=true;save();render();}
 
 function vProve(c,d,cs){
   const p=S.scan[c.id].probe,it=itemsOf(c.id,p.lv,p.forms[p.ix]);
@@ -1510,7 +1509,7 @@ function vProve(c,d,cs){
 function submitProbe(cid){if(V.pick==null)return;const{ok}=answerProbe(cid,V.pick);V.shown=true;V.ok=ok;save();render();}
 function mirrorTick(cid){
   const r=S.scan[cid];if(!r||r.skipped||r.claimed==null)return;
-  /* "None of these fit me yet" is never tested, so it neither counts nor breaks the run. */
+  /* A claim below the floor was never tested, so it neither counts nor breaks the run. */
   if(r.claimed<byId[cid].fl)return;
   if(!S.flags)S.flags={};
   S.flags.mirror=(r.claimed===r.confirmed)?(S.flags.mirror||0)+1:0;
@@ -1546,7 +1545,7 @@ function vDomDone(d){
       :`<button class="btn go full" onclick="go(6)">Go to your progress</button>`}</div>
   <div class="row">
     ${next?`<button class="btn sec" style="flex:1" onclick="go(6)">Your progress</button>`:''}
-    <button class="btn sec" style="flex:1" onclick="practiseDom('')">Start practising</button></div>
+    <button class="btn sec" style="flex:1" onclick="practiseDom('${d}')">Start practising</button></div>
   <p class="muted" style="margin-top:14px">You can stop here and come back. Everything is saved.</p>`,
   {crumb:'Area complete',pct:100});
 }
@@ -1785,7 +1784,6 @@ function vStand(){
     const skills=open?cs.map(c=>{
       const r=S.scan[c.id],done=r&&r.done;
       const right=!done?`<button class="alink" onclick="scanSkill('${c.id}')">Scan this skill &#8250;</button>`
-        :r.skipped?`<button class="alink" onclick="scanSkill('${c.id}')">Skipped, scan it &#8250;</button>`
         :`<span class="asub">${LV[r.confirmed||0]}</span>`;
       const diff=done&&!r.skipped&&r.claimed!=null&&r.claimed>(r.confirmed||0)
         ?`<span class="claimnote">You chose ${LV[r.claimed]}. Placed at ${LV[r.confirmed||0]}.</span>`:'';
@@ -1807,10 +1805,9 @@ function vStand(){
   {crumb:'Your areas',wide:true});
 }
 /* Start the scan at one chosen skill. A skill already in progress keeps priority. */
-function scanSkill(cid){if(S.scan[cid]&&S.scan[cid].skipped)delete S.scan[cid];S.scanPick=cid;scanDom(byId[cid].d);}
-/* A skipped skill counts as done, so it is cleared before the area scan picks it up again. */
-function scanRest(d){compsOf(d).forEach(c=>{if(S.scan[c.id]&&S.scan[c.id].skipped)delete S.scan[c.id];});scanDom(d);}
-function practiseDom(d){if(d&&!areaOpen(d)){toast(PLUS_MSG);return;}if(S.stage!==4){NAV.push(S.stage);if(NAV.length>60)NAV.shift();}S.focus=d||'';S.stage=4;V={};save();render();}
+function scanSkill(cid){S.scanPick=cid;scanDom(byId[cid].d);}
+
+function practiseDom(d){if(d&&!areaOpen(d)){toast(PLUS_MSG);return;}if(d&&!domDone(d)){toast('Scan this area first. Practice opens when every skill in it is scanned.');scanDom(d);return;}if(S.stage!==4){NAV.push(S.stage);if(NAV.length>60)NAV.shift();}S.focus=d||'';S.stage=4;V={};save();render();}
 function scanDom(d){
   if(S.stage!==2){NAV.push(S.stage);if(NAV.length>60)NAV.shift();}
   S.dom=d;S.stage=2;V={};save();render();
@@ -1822,14 +1819,15 @@ function vPractice(){
   if(V.rep)return vRep();
   const g=gaps(),prio=g.length?g.map(x=>x.d):DK;
   const placed=DATA.comps.filter(c=>S.scan[c.id]&&S.scan[c.id].done&&!S.scan[c.id].skipped);
-  const avail=DK.filter(d=>areaOpen(d)&&placed.some(c=>c.d===d));
+  const avail=DK.filter(d=>areaOpen(d)&&domDone(d));
+  const toScan=DK.filter(d=>areaOpen(d)&&!domDone(d));
   if(S.focus&&avail.indexOf(S.focus)<0)S.focus='';
   /* Biggest gaps rise first. Within the same gap size, chosen topics win. */
   const gapOf={};DK.forEach(d=>{const c=domLevel(d),t=domTarget(d);
     gapOf[d]=(c===null||!t)?0:Math.max(0,t-c);});
   const rank=d=>{const i=prio.indexOf(d);return i<0?99:i;};
   const tp=a=>(S.topics&&S.topics.indexOf(a.t)>=0)?0:1;
-  const pool=DATA.acts.filter(a=>placed.some(c=>c.id===a.c)&&skillOpen(byId[a.c]))
+  const pool=DATA.acts.filter(a=>placed.some(c=>c.id===a.c)&&skillOpen(byId[a.c])&&domDone(a.d))
     .filter(a=>!S.focus||a.d===S.focus)
     .sort((a,b)=>(gapOf[b.d]-gapOf[a.d])||(tp(a)-tp(b))||(rank(a.d)-rank(b.d)));
   const tabs=avail.length>1?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
@@ -1862,6 +1860,10 @@ function vPractice(){
     <b>None of these fit my week</b>
     <span class="sub">Describe a task you actually have, and your coach builds the assignment around it.</span></button>
   <div class="pgrid" style="margin-top:14px">${cards||`<div class="card"><p class="muted">${S.focus?'No ready made tasks for this area yet. Use the option above to describe your own.':'Place at least one area in the scan first.'}</p></div>`}</div>
+  ${toScan.length?`<div class="card" style="margin-top:14px"><h3>Scan first</h3>
+    <p class="muted" style="margin:6px 0 10px">Practice in these areas opens when every skill in them is scanned.</p>
+    ${toScan.map(d=>`<div class="arow" style="margin:0"><span>${esc(DATA.doms[d])}<span class="claimnote">${domCount(d)} of ${compsOf(d).length} skills scanned</span></span>
+      <button class="alink" onclick="scanDom('${d}')">${domCount(d)?'Continue scan':'Scan this area'} &#8250;</button></div>`).join('')}</div>`:''}
   ${locked?`<div style="margin-top:14px">${locked}</div>`:''}`,{wide:true});
 }
 function setFocus(d){S.focus=d;save();render();}
@@ -1872,9 +1874,10 @@ function openRep(aid){
 }
 function openOwn(){
   const g=gaps();
-  const d=S.focus||(g.length?g[0].d:DK.find(x=>domLevel(x)!==null));
-  const cand=DATA.comps.filter(c=>c.d===d&&skillOpen(c)&&S.scan[c.id]&&S.scan[c.id].done&&!S.scan[c.id].skipped);
-  if(!cand.length){toast(PLUS_MSG);return;}
+  const ok=x=>areaOpen(x)&&domDone(x);
+  const d=S.focus||((g.find(x=>ok(x.d))||{}).d)||DK.find(ok)||DK.find(x=>areaOpen(x));
+  const cand=domDone(d)?DATA.comps.filter(c=>c.d===d&&skillOpen(c)&&S.scan[c.id]&&S.scan[c.id].done&&!S.scan[c.id].skipped):[];
+  if(!cand.length){toast(areaOpen(d)?'Scan this area first. Practice opens when every skill in it is scanned.':PLUS_MSG);return;}
   const c=cand.sort((a,b)=>(S.scan[a.id].confirmed||0)-(S.scan[b.id].confirmed||0))[0];
   V.rep={a:{a:'Your own task',t:'Your choice',id:'OWN',c:c.id,d:c.d},c,
     tgt:practiceLevel(c),step:'sit',sit:'',brief:null,prompt:'',back:'',did:'',coach:'',reflect:'',busy:false,err:''};
@@ -2038,7 +2041,7 @@ function vRungArea(d){
     :(!anyReady&&open)?`<div class="card"><h3>Practise first</h3><p class="muted" style="margin:6px 0 14px">No test is ready yet. Hand in one assignment on a skill to open its level up test.</p>
       <button class="btn go full" onclick="practiseDom('${d}')">Practise this area</button></div>`:'';
   const scanNote=skills.length&&unscanned.length?`<div class="card"><p class="muted" style="margin:0 0 12px">${unscanned.length} skill${unscanned.length>1?'s':''} in this area ${unscanned.length>1?'are':'is'} not scanned yet.</p>
-      <button class="btn sec full" onclick="scanRest('${d}')">Scan ${unscanned.length>1?'them':'it'} now</button></div>`:'';
+      <button class="btn sec full" onclick="scanDom('${d}')">Scan ${unscanned.length>1?'them':'it'} now</button></div>`:'';
   return shell(`<h1>${esc(DATA.doms[d])}</h1>
   <p class="lede">Tap a skill that is ready to take its level up test. The rest open as you practise.</p>
   ${guide}${rows}${scanNote}`,{crumb:'Level up'});
@@ -2376,16 +2379,17 @@ function viewKey(){
     r?'rep:'+r.step:'',u?'ru:'+u.step+':'+u.ix:'',
     S.stage===2?(S.dom||'')+':'+scanned():''].join('|');
 }
-/* Before 10 November 2026, "None of these fit" on a skill with a higher floor stored the level
-   below the floor without any check. Such records go back to no level. A passed test stays. */
-function fixFloorClaims(){
+/* Every placed skill must have been tested by keyed questions. Records without a test
+   (skipped, or "None of these fit" before 10 November 2026) count as not scanned.
+   A passed level up test always stays. */
+function dropUntested(){
   if(!S||!S.scan)return;
-  Object.keys(S.scan).forEach(id=>{const r=S.scan[id],c=byId[id];
-    if(c&&r&&r.done&&!r.skipped&&c.fl>1&&r.claimed!=null&&r.claimed<c.fl&&r.confirmed===c.fl-1&&!(S.rung[id]&&S.rung[id].passed)){r.confirmed=0;r.claimed=0;}});
+  Object.keys(S.scan).forEach(id=>{const r=S.scan[id];
+    if(r&&r.done&&(r.skipped||!(r.log&&r.log.length))&&!(S.rung[id]&&S.rung[id].passed))delete S.scan[id];});
 }
 function render(){
   coachSoon();
-  fixFloorClaims();
+  dropUntested();
   if(window.__brigAuthPending){
     var a=document.getElementById('app');
     if(a)a.innerHTML='<div class="app"><p class="muted" style="padding:56px 0 20px">Connecting...</p></div>';

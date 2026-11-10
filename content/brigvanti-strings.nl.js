@@ -725,5 +725,10 @@ window.BRIG_STRINGS = {
 "Scan it now": "Nu scannen",
 "Scan them now": "Nu scannen",
 "No level yet": "Nog geen level",
-"No level yet in this area. Practise a skill, then take its level up test.": "Nog geen level in dit onderdeel. Oefen met een vaardigheid en doe daarna de level up test."
+"No level yet in this area. Practise a skill, then take its level up test.": "Nog geen level in dit onderdeel. Oefen met een vaardigheid en doe daarna de level up test.",
+"Choose the highest statement that is true for you. Then you show it, because the statement alone does not set your level. If none feels true yet, choose the last one.": "Kies de hoogste uitspraak die voor jou klopt. Daarna laat je het zien, want de uitspraak alleen bepaalt je level niet. Klopt er nog geen enkele, kies dan de laatste.",
+"Scan this area first. Practice opens when every skill in it is scanned.": "Scan eerst dit onderdeel. Oefenen gaat open zodra elke vaardigheid erin gescand is.",
+"Practice in these areas opens when every skill in them is scanned.": "Oefenen in deze onderdelen gaat open zodra elke vaardigheid erin gescand is.",
+"{0} of {1} skills scanned": "{0} van {1} vaardigheden gescand",
+"Continue scan ›": "Verder scannen ›"
 };
