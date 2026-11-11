@@ -23,7 +23,8 @@ const mollie = {
   refund: async (id, v) => { calls.push(['refund', id, v]); return {}; },
 };
 const verify = async (t) => { if (t !== 'good') throw new Error('bad'); return { sub: 'u1', email: 'a@b.c', name: 'Nope' }; };
-const h = createPayHandlers({ verify, store, mollie, env: { URL: 'https://app.test' }, clock: () => now });
+const notes = [];
+const h = createPayHandlers({ verify, store, mollie, notify: async (u, k, d) => notes.push([u, k, d]), env: { URL: 'https://app.test' }, clock: () => now });
 const req = (method, body, auth = 'good') => new Request('https://x/', { method, headers: { authorization: 'Bearer ' + auth, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
 const hook = (id) => h.webhook(new Request('https://x/', { method: 'POST', body: 'id=' + id }));
 const plan = () => resolvePlan(docs.eu1, now);
@@ -55,6 +56,17 @@ await hook('tr_r1');
 assert.equal(docs.bu1.periodEnd, addPeriod(addPeriod(Date.UTC(2026, 10, 11, 10), 'month'), 'month'));
 assert.equal((await (await h.manage(req('POST', { action: 'withdraw' }))).json()).code, 'late');
 
+// A failed monthly debit warns once per period, and a later payment clears it
+payments.tr_f1 = { id: 'tr_f1', status: 'failed', amount: { value: '13.99' }, metadata: { uid: 'u1', interval: 'month', kind: 'renew' } };
+await hook('tr_f1'); await hook('tr_f1');
+assert.equal(notes.length, 1); assert.equal(notes[0][1], 'payment_failed');
+assert.equal(notes[0][2].until, docs.bu1.periodEnd + GRACE_DAYS * DAY);
+assert.ok((await (await h.manage(req('GET'))).json()).failedUntil);
+payments.tr_f2 = { id: 'tr_f2', status: 'paid', amount: { value: '13.99' }, metadata: { uid: 'u1', interval: 'month', kind: 'renew' } };
+await hook('tr_f2');
+assert.equal((await (await h.manage(req('GET'))).json()).failedUntil, null);
+assert.equal(plan(), 'plus');
+
 // Cancel keeps access to the paid end, no grace
 await h.manage(req('POST', { action: 'cancel' }));
 assert.ok(calls.some((c) => c[0] === 'cancelSub'));
@@ -79,6 +91,26 @@ assert.equal(r.refund, '89.25'); assert.equal(plan(), 'free');
 payments[yid].amountChargedBack = { value: '89.99' }; docs.eu1.tier = 'plus'; docs.eu1.validUntil = now + DAY * 100;
 await hook(yid); assert.equal(plan(), 'free');
 
+// Yearly renewal in the last 30 days keeps the paid days, withdrawing it keeps the old year
+for (const k of Object.keys(docs)) delete docs[k]; claims.clear();
+now = Date.UTC(2028, 0, 1);
+r = await (await h.start(req('POST', { interval: 'year', consent: true }))).json();
+let y1 = r.checkout.split('/').pop(); Object.assign(payments[y1], { status: 'paid', amount: { value: '89.99' } }); await hook(y1);
+const end1 = docs.bu1.periodEnd;
+now = end1 - 40 * DAY;
+assert.equal((await h.start(req('POST', { interval: 'year', consent: true }))).status, 409, 'too early to renew');
+now = end1 - 10 * DAY;
+assert.equal((await (await h.manage(req('GET'))).json()).canRenew, true);
+r = await (await h.start(req('POST', { interval: 'year', consent: true }))).json();
+assert.equal(docs.bu1.interval, 'year'); assert.equal(docs.bu1.periodEnd, end1, 'nothing changes before payment');
+let y2 = r.checkout.split('/').pop(); Object.assign(payments[y2], { status: 'paid', amount: { value: '89.99' } }); await hook(y2);
+assert.equal(docs.bu1.periodEnd, addPeriod(end1, 'year'), 'renewal starts at the old end');
+now += 2 * DAY;
+r = await (await h.manage(req('POST', { action: 'withdraw' }))).json();
+assert.equal(r.refund, '89.99', 'full refund, the renewal had not started');
+assert.equal(docs.bu1.periodEnd, end1); assert.equal(plan(), 'plus', 'old year still runs');
+now = end1 + 1; assert.equal(plan(), 'free');
+
 // Company accounts cannot buy Plus
 for (const k of Object.keys(docs)) delete docs[k];
 docs.eu1 = { product: 'b2b', validUntil: now + DAY };
@@ -88,3 +120,19 @@ assert.equal((await h.start(req('POST', { interval: 'month', consent: true }))).
 const off = createPayHandlers({ verify, store, mollie: null, env: {}, clock: () => now });
 assert.equal((await off.start(req('POST', { interval: 'month', consent: true }))).status, 503);
 console.log('Payment tests passed.');
+
+// Reminder before a yearly plan ends
+const { dueMark, planEndMessage } = await import('../netlify/lib/plan-remind.mjs');
+const T = Date.UTC(2029, 5, 1), D = 864e5;
+const yb = { status: 'active', interval: 'year', periodEnd: T };
+assert.equal(dueMark(yb, T - 20 * D), null);
+assert.equal(dueMark(yb, T - 13 * D), 14);
+assert.equal(dueMark({ ...yb, endReminded: [14] }, T - 13 * D), null);
+assert.equal(dueMark({ ...yb, endReminded: [14] }, T - 2 * D), 3);
+assert.equal(dueMark(yb, T - 2 * D), 3, 'a late first run sends only the nearest');
+assert.equal(dueMark({ ...yb, interval: 'month' }, T - 2 * D), null);
+assert.equal(dueMark(yb, T + 1), null);
+assert.equal(planEndMessage('nl', T).url, '/?pay=renew');
+const { planMessage } = await import('../netlify/lib/pay-notify.mjs');
+assert.equal(planMessage('en', 'payment_failed', { until: T }).url, '/?pay=status');
+console.log('Reminder tests passed.');
