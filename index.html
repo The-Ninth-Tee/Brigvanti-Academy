@@ -1356,7 +1356,7 @@ async function signOutUser(){
 function vStart(){
   if(!S.consent) return shell(`
   <h1>Three things that stay true</h1>
-  <p class="lede">Read these once. They hold for the whole pilot.</p>
+  <p class="lede">Read these once. They hold for as long as you use Brigvanti.</p>
   <div class="card"><h3>Your level is advice, never a verdict</h3>
     <p class="muted" style="margin:6px 0 0">It is a mirror you may disagree with. It is not a qualification. It decides nothing about your job.</p></div>
   <div class="card"><h3>The coach guides you, it never scores you</h3>
@@ -1737,12 +1737,12 @@ function vLegal(){
     <p class="muted">The Ninth Tee, Rijswijkstraat 199, 1062 XL Amsterdam, the Netherlands.
     Chamber of Commerce number 98566903. Questions and requests: <b>legal@theninthtee.eu</b>.</p>`)}
 
-  ${b('What this pilot is',`
+  ${b('What Brigvanti is',`
     <p>Brigvanti is a learning tool. It shows you an advisory picture of your AI skills and gives you assignments to practise on.</p>
     <p>It is not an assessment, a qualification or an exam. Your level is advice you may disagree with. It is never shared with an employer by us, and it never decides anything about you on its own. No decision with a legal or similar effect is made automatically.</p>`)}
 
   ${b('What we collect',`
-    <p>Only what the pilot needs to work.</p>
+    <p>Only what Brigvanti needs to work.</p>
     <ul style="padding-left:20px;margin:0">
       <li>Your email address, or the account you sign in with</li>
       <li>Your first name, if you give one</li>
@@ -1807,10 +1807,10 @@ function vLegal(){
     <p class="muted" style="margin-top:10px">${S.analytics===true?'Status: analytics allowed.':S.analytics===false?'Status: analytics off.':'Status: not chosen yet, so analytics are off.'}</p>`)}
 
   ${b('Age',`
-    <p>This pilot is for adults. You must be 18 or over to take part.</p>`)}
+    <p>Brigvanti is for adults. You must be 18 or over to use it.</p>`)}
 
-  ${b('Using the pilot',`
-    <p>This is a pilot, so things can change or break. We give no warranty that it is free of errors.</p>
+  ${b('Using Brigvanti',`
+    <p>We keep improving Brigvanti, so things can change. We give no warranty that it is free of errors.</p>
     <p>The coach gives suggestions, not professional advice. Do not rely on it for legal, medical, financial or safety decisions. You stay responsible for what you send, publish or act on.</p>
     <p>You keep ownership of the text you write. You give us permission to process it in order to give you feedback and to show you your own record.</p>
     <p>The framework, questions and assignments are owned by Brigvanti. Please do not copy or redistribute them.</p>`)}
