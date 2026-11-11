@@ -92,7 +92,7 @@ async function signedIn(req, verify) {
 
 const blockedByB2B = (e) => e && e.product === 'b2b';
 
-export function createPayHandlers({ verify, store, mollie, env = process.env, clock = Date.now }) {
+export function createPayHandlers({ verify, store, mollie, notify = async () => {}, env = process.env, clock = Date.now }) {
   const site = () => (env.URL || '').replace(/\/$/, '');
   const hook = () => `${site()}/.netlify/functions/pay-webhook`;
 
@@ -152,6 +152,16 @@ export function createPayHandlers({ verify, store, mollie, env = process.env, cl
       await store.setEntitlement(uid, { product: 'b2c', tier: 'free', validUntil: now, source: 'mollie' });
       return new Response('ok');
     }
+    // A failed monthly debit: Mollie retries, Plus runs on through the grace days.
+    // The learner hears about it once per period, by push and in the app.
+    if (p.status === 'failed' && p.metadata.kind === 'renew' && bill.status === 'active') {
+      if (bill.failNotified !== bill.periodEnd) {
+        await store.setBilling(uid, { failedAt: now, failNotified: bill.periodEnd });
+        try { await notify(uid, 'payment_failed', { until: accessUntil(bill.periodEnd, 'month', false) }); }
+        catch (e) { console.warn('pay notify failed', e.message); }
+      }
+      return new Response('ok');
+    }
     if (p.status !== 'paid') return new Response('ok');
     if (!(await store.claim(uid, id))) return new Response('ok');
 
@@ -161,7 +171,7 @@ export function createPayHandlers({ verify, store, mollie, env = process.env, cl
     const renewing = isStart && bill.status === 'active' && (bill.periodEnd || 0) > now;
     const from = isStart && !renewing ? now : Math.max(bill.periodEnd || 0, now);
     const periodEnd = addPeriod(from, interval);
-    const upd = { status: 'active', interval, periodEnd, lastPaymentId: id, lastAmount: p.amount.value };
+    const upd = { status: 'active', interval, periodEnd, lastPaymentId: id, lastAmount: p.amount.value, failedAt: null };
     if (isStart) Object.assign(upd, {
       startedAt: now, periodStart: from, firstPaymentId: id, cancelled: false, pendingPaymentId: null, endReminded: [],
       prev: renewing ? { interval: bill.interval, periodEnd: bill.periodEnd } : null,
@@ -199,6 +209,7 @@ export function createPayHandlers({ verify, store, mollie, env = process.env, cl
         status: b.status, interval: b.interval, periodEnd: b.periodEnd, cancelled: !!b.cancelled,
         withdrawUntil: canWithdraw ? b.startedAt + WITHDRAW_DAYS * DAY : null,
         canRenew: canRenew(b, now), renewed: !!b.prev,
+        failedUntil: b.failedAt && b.interval === 'month' ? accessUntil(b.periodEnd, 'month', false) : null,
       };
     };
     if (req.method === 'GET') return json(view(bill));

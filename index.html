@@ -1646,9 +1646,9 @@ function vTerms(){
 let PAY={status:null};
 /* ?page=plans and ?page=terms open those public screens directly, for Mollie and for links. */
 let PAGE_GO=(function(){try{const q=new URLSearchParams(location.search),k=q.get('page');return k==='plans'?11:k==='terms'?12:k==='privacy'?7:null;}catch(e){return null;}})();
-let PAY_RETURN=false,PAY_RENEW=false;
-(function(){try{const q=new URLSearchParams(location.search),k=q.get('pay');if(k!=='return'&&k!=='renew')return;
-  PAY_RETURN=k==='return';PAY_RENEW=k==='renew';
+let PAY_RETURN=false,PAY_RENEW=false,PAY_STATUS=false;
+(function(){try{const q=new URLSearchParams(location.search),k=q.get('pay');if(k!=='return'&&k!=='renew'&&k!=='status')return;
+  PAY_RETURN=k==='return';PAY_RENEW=k==='renew';PAY_STATUS=k==='status';
   q.delete('pay');history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:''));}catch(e){}})();
 const DAY_MS=864e5;
 /* Once per visit: a yearly plan that ends within 14 days and is not renewed yet. */
@@ -1668,7 +1668,9 @@ async function payCall(method,body){
 }
 async function payLoad(){try{PAY=await payCall('get');}catch(e){PAY={status:null};}
   if(PAY_RENEW){PAY_RENEW=false;if(PAY.canRenew){openBuy();return;}}
+  if(PAY_STATUS){PAY_STATUS=false;if(S.stage!==9)go(9);}
   yearEndNote();
+  if(PAY.failedUntil&&!window.__brigFailNote){window.__brigFailNote=true;toast(`Your last Plus payment did not go through. Mollie will try again. Check your bank account to keep Plus after ${fmtDay(PAY.failedUntil)}.`);}
   if(S.stage===9&&!V.buy)render();}
 function openBuy(){if(S.stage!==9)go(9);V.buy=true;V.payIv=V.payIv||'';render();}
 async function payStart(){
@@ -1712,7 +1714,8 @@ function planCard(){
   }
   let lines='',acts='';
   const p=PAY.status==='active'?PAY:null;
-  if(p&&p.interval==='month'&&!p.cancelled)lines=`Plus, monthly. Renews on ${fmtDay(p.periodEnd)}.`;
+  if(p&&p.failedUntil)lines='Plus, monthly.';
+  else if(p&&p.interval==='month'&&!p.cancelled)lines=`Plus, monthly. Renews on ${fmtDay(p.periodEnd)}.`;
   else if(p&&p.interval==='month')lines=`Plus ends on ${fmtDay(p.periodEnd)}.`;
   else if(p)lines=`Plus, yearly. Ends on ${fmtDay(p.periodEnd)}.`;
   if(p&&p.canRenew)acts+=`<button class="srow" onclick="openBuy()"><span>Renew Plus<small>Your new period starts when this one ends</small></span><span class="v">&#8250;</span></button>`;
@@ -1723,6 +1726,7 @@ function planCard(){
   return `<div class="card plan"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>Your plan</b><span class="lvchip" id="coachPlan">${planName()}</span></div>
     <p class="muted" id="coachLeftAccount" style="margin:6px 0 0">${planName()}</p>
     ${lines?`<p style="margin:8px 0 0">${lines}</p>`:''}
+    ${p&&p.failedUntil?`<div class="sconfirm" style="margin-top:12px"><b>Your last payment did not go through</b><p>Mollie will try again in the coming days. Check that your bank account can be debited. If the payment still fails, Plus stops on ${fmtDay(p.failedUntil)}.</p></div>`:''}
     ${isFree()?`<p class="muted" style="margin:8px 0 0">Plus opens all 7 areas. €13.99 a month or €89.99 a year.</p>
       <div class="row" style="margin-top:12px"><button class="btn go" style="flex:1" onclick="openBuy()">Get Plus</button><button class="btn sec" style="flex:1" onclick="go(11)">Plans and prices</button></div>`:''}
     ${acts?`<div style="margin-top:10px">${acts}</div>`:''}</div>`;
@@ -1781,6 +1785,7 @@ function vLegal(){
     <p>When push is on, we store a push address for that device, your timezone, your app language and a short schedule. The schedule holds the next reminder time, the kind of reminder and the name of the skill or area it mentions.</p>
     <p>We send at most one reminder a day and three a week. After three reminders without a hand in, we stop until you hand in work again.</p>
     <p>If you have a yearly Plus plan and push is on, we also send a push message 14 days and 3 days before your plan ends.</p>
+    <p>If a monthly payment fails and push is on, we send one push message about it.</p>
     <p>A reminder never holds your assignments, your portfolio or a level. It shows a short title, one sentence and a link to the app.</p>
     <p>You can switch push off in Account or in your phone or browser settings. Push stays on when you sign out. Deleting your account deletes all reminder data.</p>`)}
 
