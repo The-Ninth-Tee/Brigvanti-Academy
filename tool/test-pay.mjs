@@ -136,3 +136,39 @@ assert.equal(planEndMessage('nl', T).url, '/?pay=renew');
 const { planMessage } = await import('../netlify/lib/pay-notify.mjs');
 assert.equal(planMessage('en', 'payment_failed', { until: T }).url, '/?pay=status');
 console.log('Reminder tests passed.');
+
+// Seven year retention of payment records
+const { decide: purge, purgeFrom, cutoff: purgeCutoff } = await import('../netlify/lib/billing-purge.mjs');
+const paid2026 = Date.UTC(2026, 10, 11);
+assert.equal(purgeFrom(paid2026), Date.UTC(2034, 0, 1), 'seven years after the year of payment');
+assert.equal(purge({ status: 'withdrawn', lastPaidAt: paid2026 }, Date.UTC(2033, 11, 31)), 'keep');
+assert.equal(purge({ status: 'withdrawn', lastPaidAt: paid2026 }, Date.UTC(2034, 0, 1)), 'delete');
+assert.equal(purge({ status: 'active', periodEnd: Date.UTC(2035, 0, 1), lastPaidAt: paid2026 }, Date.UTC(2034, 5, 1)), 'keep', 'never while a plan runs');
+assert.equal(purge({ status: 'pending', consent: { at: paid2026 } }, paid2026 + 10 * 864e5), 'keep');
+assert.equal(purge({ status: 'pending', consent: { at: paid2026 } }, paid2026 + 31 * 864e5), 'delete', 'unpaid checkout after 30 days');
+assert.equal(purge({ status: 'pending', consent: { at: paid2026 }, firstPaymentId: 'tr_1', lastPaidAt: paid2026 }, paid2026 + 31 * 864e5), 'keep', 'paid before, new checkout pending');
+assert.equal(purgeCutoff(Date.UTC(2034, 3, 1)), Date.UTC(2027, 0, 1));
+console.log('Retention tests passed.');
+
+// Account deletion removes plan and usage data and the sign in, keeps payment records
+const { createAccountDelete } = await import('../netlify/lib/account-delete.mjs');
+const acct = (bill, failCancel) => {
+  const log = [];
+  const del = createAccountDelete({
+    verify, mollie: { cancelSubscription: async (c, s) => { if (failCancel) throw new Error('down'); log.push(['cancel', s]); } },
+    store: {
+      billing: async () => bill, markCancelled: async () => log.push(['mark']),
+      deleteData: async (u) => log.push(['data', u]), deleteSignIn: async (u) => log.push(['signin', u]),
+    },
+  });
+  return { del, log };
+};
+let a1 = acct({ status: 'active', subscriptionId: 'sub_9', customerId: 'cst_1', cancelled: false });
+assert.equal((await a1.del(req('POST'))).status, 200);
+assert.deepEqual(a1.log.map((x) => x[0]), ['cancel', 'mark', 'signin', 'data'], 'cancel first, sign in before data');
+let a2 = acct({ status: 'active', subscriptionId: 'sub_9', customerId: 'cst_1', cancelled: false }, true);
+assert.equal((await a2.del(req('POST'))).status, 502); assert.equal(a2.log.length, 0, 'nothing deleted when cancel fails');
+let a3 = acct(null);
+assert.equal((await a3.del(req('POST'))).status, 200); assert.deepEqual(a3.log.map((x) => x[0]), ['signin', 'data']);
+assert.equal((await a3.del(req('POST', null, 'bad'))).status, 401);
+console.log('Account delete tests passed.');

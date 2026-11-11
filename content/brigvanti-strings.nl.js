@@ -655,7 +655,6 @@ window.BRIG_STRINGS = {
 "badges": "badges",
 "Plans and prices": "Abonnementen en prijzen",
 "Terms and conditions": "Algemene voorwaarden",
-"Your Plus plan could not be cancelled, so your account was not deleted. Please try again.": "We konden je Plus-abonnement niet opzeggen, dus je account is niet verwijderd. Probeer het opnieuw.",
 "By continuing you agree to the terms and to how we handle your data.": "Als je verdergaat, ga je akkoord met de algemene voorwaarden en met hoe we met je gegevens omgaan.",
 "The Ninth Tee, Rijswijkstraat 199, 1062 XL Amsterdam, the Netherlands. Chamber of Commerce number 98566903. Support: <b>support@theninthtee.eu</b>. Payments and privacy: <b>legal@theninthtee.eu</b>.": "The Ninth Tee, Rijswijkstraat 199, 1062 XL Amsterdam, Nederland. KvK-nummer 98566903. Support: <b>support@theninthtee.eu</b>. Betalingen en privacy: <b>legal@theninthtee.eu</b>.",
 "Brigvanti is an AI literacy app. You build real AI skill on tasks from your own work, with feedback from an AI coach. Your level is advice, never a qualification.": "Brigvanti is een app voor AI-geletterdheid. Je bouwt AI-vaardigheid op in de praktijk, met taken uit je eigen werk en feedback van een AI-coach. Je level is een advies, nooit een kwalificatie.",
@@ -765,5 +764,6 @@ window.BRIG_STRINGS = {
 "Mollie will try again in the coming days. Check that your bank account can be debited. If the payment still fails, Plus stops on {0}.": "Mollie probeert het de komende dagen opnieuw. Controleer of er geld van je rekening kan worden afgeschreven. Mislukt de betaling dan nog steeds, dan stopt Plus op {0}.",
 "If a monthly payment fails and push is on, we send one push message about it.": "Mislukt een maandbetaling en staan pushmeldingen aan, dan sturen we daar één pushmelding over.",
 "Your Plus payment did not go through": "Je Plus-betaling is niet gelukt",
-"Mollie will try again. Check your bank account to keep Plus after {0}.": "Mollie probeert het opnieuw. Controleer je rekening om Plus na {0} te houden."
+"Mollie will try again. Check your bank account to keep Plus after {0}.": "Mollie probeert het opnieuw. Controleer je rekening om Plus na {0} te houden.",
+"Your account could not be deleted. Please try again.": "Je account kon niet worden verwijderd. Probeer het opnieuw."
 };
