@@ -1796,7 +1796,7 @@ function vStand(){
       +(domDone(d)?`<div class="arow"><span></span><button class="alink" onclick="openAreaLevelUp('${d}')">Level up in this area &#8250;</button></div>`:''):'';
     return `<div class="acard${plus?' plus':''}">
       <button class="ahead" onclick="${lv===null&&!open?`scanDom('${d}')`:`V.area=${open?'null':`'${d}'`};render()`}" aria-expanded="${open?'true':'false'}">
-        <span class="aname">${esc(DATA.doms[d])}<span class="asub">${cs.length} skills, ${n===cs.length?'all scanned':n?n+' scanned':'none scanned'}</span></span>${head}</button>
+        <span class="aname">${esc(DATA.doms[d])}<span class="asub">${n===cs.length?`${cs.length} skills, all scanned`:n?`${cs.length} skills, ${n} scanned`:`${cs.length} skills, none scanned`}</span></span>${head}</button>
       ${skills}</div>`;
   };
   const free=DK.filter(d=>areaOpen(d)),locked=DK.filter(d=>!areaOpen(d));
@@ -2045,8 +2045,8 @@ function vRungArea(d){
       <button class="btn go full" onclick="scanDom('${d}')">Scan this area</button></div>`
     :(!anyReady&&open)?`<div class="card"><h3>Practise first</h3><p class="muted" style="margin:6px 0 14px">No test is ready yet. Hand in one assignment on a skill to open its level up test.</p>
       <button class="btn go full" onclick="practiseDom('${d}')">Practise this area</button></div>`:'';
-  const scanNote=skills.length&&unscanned.length?`<div class="card"><p class="muted" style="margin:0 0 12px">${unscanned.length} skill${unscanned.length>1?'s':''} in this area ${unscanned.length>1?'are':'is'} not scanned yet.</p>
-      <button class="btn sec full" onclick="scanDom('${d}')">Scan ${unscanned.length>1?'them':'it'} now</button></div>`:'';
+  const scanNote=skills.length&&unscanned.length?`<div class="card"><p class="muted" style="margin:0 0 12px">${unscanned.length>1?`${unscanned.length} skills in this area are not scanned yet.`:'1 skill in this area is not scanned yet.'}</p>
+      <button class="btn sec full" onclick="scanDom('${d}')">${unscanned.length>1?'Scan them now':'Scan it now'}</button></div>`:'';
   return shell(`<h1>${esc(DATA.doms[d])}</h1>
   <p class="lede">Tap a skill that is ready to take its level up test. The rest open as you practise.</p>
   ${guide}${rows}${scanNote}`,{crumb:'Level up'});
