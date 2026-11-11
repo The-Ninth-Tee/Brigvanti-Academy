@@ -1143,11 +1143,7 @@ function remindRows(){
 function saveName(){ if(!(S.name||'').trim()){ toast('A name is required.'); return; } save(); if(V)V.editName=false; render(); }
 async function doPasswordReset(){ try{ await window.brigvantiSendReset(); toast('Reset link sent to your email.'); }catch(e){ toast('Could not send the reset email. Try again.'); } }
 async function doDelete(){
-  if(PAY.status==='active'&&PAY.interval==='month'&&!PAY.cancelled){
-    try{PAY=await payCall('manage',{action:'cancel'});}
-    catch(e){if(V)V.del=false;render();toast('Your Plus plan could not be cancelled, so your account was not deleted. Please try again.');return;}
-  }
-  try{ await window.brigvantiDeleteAccount(); }catch(e){ if(V)V.del=false; render(); toast((window.brigvantiAuth&&window.brigvantiAuth.msg)?window.brigvantiAuth.msg(e):'Could not delete. Sign in again and retry.'); } }
+  try{ await window.brigvantiDeleteAccount(); }catch(e){ if(V)V.del=false; render(); toast(e&&e.brigMsg?e.brigMsg:(window.brigvantiAuth&&window.brigvantiAuth.msg)?window.brigvantiAuth.msg(e):'Could not delete. Sign in again and retry.'); } }
 /* ---------- analytics consent gate ----------
    Google Analytics (GA4) stays off until the learner opts in, and can be
    switched off again. gtag loads only from inside enableAnalytics, so no Google
@@ -2824,10 +2820,14 @@ window.brigvantiDeleteAccount=async function(){
     /* The hourly reminder job also removes records of deleted accounts, so a
        failure here never leaves reminders running. */
     try{ await window.brigReminders.deleteAll(); }catch(e){ console.warn('[brigvanti reminders] delete failed:',(e&&e.code)||e); }
-    await deleteDoc(doc(db,'users',uid));
   }
+  /* The server cancels a running plan, deletes the sign in, then progress, plan,
+     usage and reminder data. Payment records stay for the tax retention period. */
   const u=auth.currentUser;
-  if(u) await deleteUser(u);
+  if(!u) return;
+  const r=await fetch('/.netlify/functions/account-delete',{method:'POST',headers:{'Authorization':'Bearer '+await u.getIdToken()}});
+  if(!r.ok){const d=await r.json().catch(()=>({}));const e=new Error(d.error||'Your account could not be deleted. Please try again.');e.brigMsg=e.message;throw e;}
+  try{ await signOut(auth); }catch(e){}
 };
 window.brigvantiSendReset=async function(){
   const u=auth.currentUser;
