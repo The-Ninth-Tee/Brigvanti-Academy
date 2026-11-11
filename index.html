@@ -1644,6 +1644,8 @@ function vTerms(){
 
 /* Payments in Account. PAY mirrors pay-manage. */
 let PAY={status:null};
+/* ?page=plans and ?page=terms open those public screens directly, for Mollie and for links. */
+let PAGE_GO=(function(){try{const q=new URLSearchParams(location.search),k=q.get('page');return k==='plans'?11:k==='terms'?12:k==='privacy'?7:null;}catch(e){return null;}})();
 let PAY_RETURN=(function(){try{const q=new URLSearchParams(location.search);if(q.get('pay')!=='return')return false;
   q.delete('pay');history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:''));return true;}catch(e){return false;}})();
 async function payCall(method,body){
@@ -2536,6 +2538,7 @@ function render(){
     if(a)a.innerHTML='<div class="app"><p class="muted" style="padding:56px 0 20px">Connecting...</p></div>';
     window.__brigRendered=true;return;
   }
+  if(PAGE_GO&&!S.signed){NAV=[0];S.stage=PAGE_GO;PAGE_GO=null;}
   if(!S.signed&&![7,11,12].includes(S.stage))S.stage=0;
   const v=[vAccess,vStart,vScan,vStand,vPractice,vRung,vProgress,vLegal,vPortfolio,vAccount,vBadges,vPlans,vTerms][S.stage]||vAccess;
   const key=viewKey(), y=window.scrollY, moved=key!==LAST, app=document.getElementById('app');
@@ -2573,6 +2576,7 @@ window.brigvantiApp={
     if(REMIND_GO&&setupDone()){NAV=[6];S.stage=REMIND_GO==='levelup'?5:REMIND_GO==='scan'?2:4;}
     REMIND_GO=null;
     if(PAY_RETURN&&setupDone()){NAV=[6];S.stage=9;}
+    if(PAGE_GO){NAV=[S.stage];S.stage=PAGE_GO;PAGE_GO=null;}
     LAST=-1;render();
     save();
     enableAnalytics();
