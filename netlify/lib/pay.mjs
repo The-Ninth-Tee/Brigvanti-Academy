@@ -76,9 +76,10 @@ export function firestorePayStore(db) {
     setEntitlement: (uid, data) => db.doc(`entitlements/${uid}`).set(data, { merge: true }),
     // True once per payment id, so a repeated webhook changes nothing.
     claim: (uid, paymentId) => db.runTransaction(async (tx) => {
-      const ref = db.doc(`billing/${uid}/payments/${paymentId}`);
+      // Top level, so the seven year clean up can find old entries with a plain query.
+      const ref = db.doc(`payclaims/${paymentId}`);
       if ((await tx.get(ref)).exists) return false;
-      tx.set(ref, { at: Date.now() });
+      tx.set(ref, { uid, at: Date.now() });
       return true;
     }),
   };
@@ -171,7 +172,7 @@ export function createPayHandlers({ verify, store, mollie, notify = async () => 
     const renewing = isStart && bill.status === 'active' && (bill.periodEnd || 0) > now;
     const from = isStart && !renewing ? now : Math.max(bill.periodEnd || 0, now);
     const periodEnd = addPeriod(from, interval);
-    const upd = { status: 'active', interval, periodEnd, lastPaymentId: id, lastAmount: p.amount.value, failedAt: null };
+    const upd = { status: 'active', interval, periodEnd, lastPaymentId: id, lastAmount: p.amount.value, lastPaidAt: now, failedAt: null };
     if (isStart) Object.assign(upd, {
       startedAt: now, periodStart: from, firstPaymentId: id, cancelled: false, pendingPaymentId: null, endReminded: [],
       prev: renewing ? { interval: bill.interval, periodEnd: bill.periodEnd } : null,

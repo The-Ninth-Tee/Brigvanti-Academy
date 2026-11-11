@@ -136,3 +136,16 @@ assert.equal(planEndMessage('nl', T).url, '/?pay=renew');
 const { planMessage } = await import('../netlify/lib/pay-notify.mjs');
 assert.equal(planMessage('en', 'payment_failed', { until: T }).url, '/?pay=status');
 console.log('Reminder tests passed.');
+
+// Seven year retention of payment records
+const { decide: purge, purgeFrom, cutoff: purgeCutoff } = await import('../netlify/lib/billing-purge.mjs');
+const paid2026 = Date.UTC(2026, 10, 11);
+assert.equal(purgeFrom(paid2026), Date.UTC(2034, 0, 1), 'seven years after the year of payment');
+assert.equal(purge({ status: 'withdrawn', lastPaidAt: paid2026 }, Date.UTC(2033, 11, 31)), 'keep');
+assert.equal(purge({ status: 'withdrawn', lastPaidAt: paid2026 }, Date.UTC(2034, 0, 1)), 'delete');
+assert.equal(purge({ status: 'active', periodEnd: Date.UTC(2035, 0, 1), lastPaidAt: paid2026 }, Date.UTC(2034, 5, 1)), 'keep', 'never while a plan runs');
+assert.equal(purge({ status: 'pending', consent: { at: paid2026 } }, paid2026 + 10 * 864e5), 'keep');
+assert.equal(purge({ status: 'pending', consent: { at: paid2026 } }, paid2026 + 31 * 864e5), 'delete', 'unpaid checkout after 30 days');
+assert.equal(purge({ status: 'pending', consent: { at: paid2026 }, firstPaymentId: 'tr_1', lastPaidAt: paid2026 }, paid2026 + 31 * 864e5), 'keep', 'paid before, new checkout pending');
+assert.equal(purgeCutoff(Date.UTC(2034, 3, 1)), Date.UTC(2027, 0, 1));
+console.log('Retention tests passed.');
