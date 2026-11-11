@@ -1588,7 +1588,7 @@ const LEGAL_UPDATED=new Date(2026,9,6).toLocaleDateString(window.BRIG_LANG==='nl
    Plans and Terms are public, so Mollie and visitors can read them before signing in.
    The server sets prices and writes the plan. The browser only starts, cancels or withdraws. */
 const TERMS_UPDATED=new Date(2026,10,11).toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'});
-const COMPANY=`The Ninth Tee, Rijswijkstraat 199, 1062 XL Amsterdam, the Netherlands. Chamber of Commerce number 98566903. Email <b>legal@theninthtee.eu</b>.`;
+const COMPANY=`The Ninth Tee, Rijswijkstraat 199, 1062 XL Amsterdam, the Netherlands. Chamber of Commerce number 98566903. Support: <b>support@theninthtee.eu</b>. Payments and privacy: <b>legal@theninthtee.eu</b>.`;
 const fmtDay=ms=>new Date(ms).toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'});
 function vPlans(){
   const b=(t,body,cls)=>`<div class="card${cls?' '+cls:''}"><h3>${t}</h3><div style="margin-top:8px">${body}</div></div>`;
@@ -1637,7 +1637,7 @@ function vTerms(){
   ${b('11. Liability',`<p>Our liability is limited to the amount you paid us in the 12 months before the damage. This limit does not apply to damage caused by our intent or gross negligence, or where the law does not allow it.</p>`)}
   ${b('12. Ending your account',`<p>You can delete your account at any time in Account. Deleting your account also cancels a monthly plan.</p>
     <p>We may end or block an account that breaks these terms. If we end a paid plan without a reason in these terms, we refund the unused part.</p>`)}
-  ${b('13. Complaints',`<p>Send a complaint to <b>legal@theninthtee.eu</b>. We answer within 14 days.</p>`)}
+  ${b('13. Complaints',`<p>Send a complaint to <b>support@theninthtee.eu</b>. We answer within 14 days.</p>`)}
   ${b('14. Law and changes to these terms',`<p>Dutch law applies. If you live in another EU country, you keep the protection of its mandatory consumer law. A dispute goes to the competent court in the Netherlands, unless the law gives you another choice.</p>
     <p>We announce a change to these terms at least 30 days ahead. If you do not agree, you may cancel before the change applies.</p>`)}`);
 }
