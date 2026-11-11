@@ -94,7 +94,9 @@ async function signedIn(req, verify) {
 const blockedByB2B = (e) => e && e.product === 'b2b';
 
 export function createPayHandlers({ verify, store, mollie, notify = async () => {}, env = process.env, clock = Date.now }) {
-  const site = () => (env.URL || '').replace(/\/$/, '');
+  // APP_URL pins Mollie's webhook and return address to the app domain.
+  // brigvanti.com moves to the website later, and a subscription keeps the webhook it was created with.
+  const site = () => (env.APP_URL || env.URL || '').replace(/\/$/, '');
   const hook = () => `${site()}/.netlify/functions/pay-webhook`;
 
   // POST { interval: 'month'|'year', consent: true }
