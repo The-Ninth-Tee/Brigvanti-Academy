@@ -11,6 +11,10 @@ export const PRICES = {
 export const GRACE_DAYS = 7;
 export const WITHDRAW_DAYS = 14;
 export const CONSENT_VERSION = '2026-11-11';
+// A yearly plan can be renewed in its last 30 days. A cancelled monthly plan can restart before it ends.
+export const RENEW_DAYS = 30;
+export const canRenew = (b, now) => !!b && b.status === 'active' && b.periodEnd > now &&
+  (b.interval === 'year' ? b.periodEnd - now <= RENEW_DAYS * DAY : !!b.cancelled);
 
 const DAY = 86400000;
 const MOLLIE = 'https://api.mollie.com/v2';
@@ -30,9 +34,10 @@ export function accessUntil(periodEnd, interval, cancelled) {
 }
 
 // Refund for a withdrawal: the learner pays for the days used, rounded up.
-export function withdrawRefund(amount, startedAt, periodEnd, now) {
-  const total = Math.max(1, Math.round((periodEnd - startedAt) / DAY));
-  const used = Math.min(total, Math.max(1, Math.ceil((now - startedAt) / DAY)));
+// A renewal bought before the old period ends has no used days yet.
+export function withdrawRefund(amount, periodStart, periodEnd, now) {
+  const total = Math.max(1, Math.round((periodEnd - periodStart) / DAY));
+  const used = now < periodStart ? 0 : Math.min(total, Math.max(1, Math.ceil((now - periodStart) / DAY)));
   const cents = Math.round(Number(amount) * 100);
   return ((cents - Math.ceil(cents * used / total)) / 100).toFixed(2);
 }
@@ -105,7 +110,8 @@ export function createPayHandlers({ verify, store, mollie, env = process.env, cl
     const uid = user.sub, now = clock();
     const [ent, bill] = [await store.entitlement(uid), await store.billing(uid)];
     if (blockedByB2B(ent)) return json({ code: 'b2b', error: 'Your company account already has full access.' }, 409);
-    if (bill && bill.status === 'active' && bill.periodEnd > now) return json({ code: 'active', error: 'You already have Plus.' }, 409);
+    const active = bill && bill.status === 'active' && bill.periodEnd > now;
+    if (active && !canRenew(bill, now)) return json({ code: 'active', error: 'You already have Plus.' }, 409);
 
     let cst = bill && bill.customerId;
     if (!cst) cst = (await mollie.customer(user.email || undefined, uid)).id;
@@ -119,10 +125,11 @@ export function createPayHandlers({ verify, store, mollie, env = process.env, cl
       webhookUrl: hook(),
       metadata: { uid, interval, kind: 'start' },
     });
-    await store.setBilling(uid, {
-      customerId: cst, interval, pendingPaymentId: pay.id, subscriptionId: null, cancelled: false, status: bill && bill.status === 'active' ? 'active' : 'pending',
-      consent: { version: CONSENT_VERSION, at: now, interval },
-    });
+    // The current plan stays as it is until the new payment is paid.
+    await store.setBilling(uid, active
+      ? { customerId: cst, pendingPaymentId: pay.id, consent: { version: CONSENT_VERSION, at: now, interval } }
+      : { customerId: cst, interval, pendingPaymentId: pay.id, subscriptionId: null, cancelled: false, status: 'pending',
+          consent: { version: CONSENT_VERSION, at: now, interval } });
     return json({ checkout: pay._links && pay._links.checkout && pay._links.checkout.href });
   }
 
@@ -150,12 +157,17 @@ export function createPayHandlers({ verify, store, mollie, env = process.env, cl
 
     const interval = p.metadata.interval === 'year' ? 'year' : 'month';
     const isStart = p.metadata.kind === 'start';
-    const from = isStart ? now : Math.max(bill.periodEnd || 0, now);
+    // A renewal starts where the paid period ends, so no paid day is lost.
+    const renewing = isStart && bill.status === 'active' && (bill.periodEnd || 0) > now;
+    const from = isStart && !renewing ? now : Math.max(bill.periodEnd || 0, now);
     const periodEnd = addPeriod(from, interval);
     const upd = { status: 'active', interval, periodEnd, lastPaymentId: id, lastAmount: p.amount.value };
-    if (isStart) Object.assign(upd, { startedAt: now, firstPaymentId: id, cancelled: false, pendingPaymentId: null });
+    if (isStart) Object.assign(upd, {
+      startedAt: now, periodStart: from, firstPaymentId: id, cancelled: false, pendingPaymentId: null, endReminded: [],
+      prev: renewing ? { interval: bill.interval, periodEnd: bill.periodEnd } : null,
+    });
 
-    if (isStart && interval === 'month' && !bill.subscriptionId) {
+    if (isStart && interval === 'month') {
       const sub = await mollie.subscription(bill.customerId || p.customerId, {
         amount: { currency: 'EUR', value: PRICES.month.value },
         interval: '1 month',
@@ -186,6 +198,7 @@ export function createPayHandlers({ verify, store, mollie, env = process.env, cl
       return {
         status: b.status, interval: b.interval, periodEnd: b.periodEnd, cancelled: !!b.cancelled,
         withdrawUntil: canWithdraw ? b.startedAt + WITHDRAW_DAYS * DAY : null,
+        canRenew: canRenew(b, now), renewed: !!b.prev,
       };
     };
     if (req.method === 'GET') return json(view(bill));
@@ -205,8 +218,15 @@ export function createPayHandlers({ verify, store, mollie, env = process.env, cl
         return json({ code: 'late', error: 'The 14 days to withdraw have passed. You can still cancel.' }, 409);
       }
       if (bill.subscriptionId && !bill.cancelled) await mollie.cancelSubscription(bill.customerId, bill.subscriptionId);
-      const value = withdrawRefund(bill.lastAmount || PRICES[bill.interval].value, bill.startedAt, bill.periodEnd, now);
+      const value = withdrawRefund(bill.lastAmount || PRICES[bill.interval].value, bill.periodStart || bill.startedAt, bill.periodEnd, now);
       if (Number(value) > 0) await mollie.refund(bill.firstPaymentId, value);
+      // Withdrawing a renewal keeps the period that was already paid before it.
+      if (bill.prev && bill.prev.periodEnd > now) {
+        const back = { interval: bill.prev.interval, periodEnd: bill.prev.periodEnd, cancelled: true, prev: null, withdrawnAt: now, refund: value, subscriptionId: null };
+        await store.setBilling(uid, back);
+        await store.setEntitlement(uid, { interval: back.interval, validUntil: back.periodEnd });
+        return json({ ...view({ ...bill, ...back }), refund: value });
+      }
       await store.setBilling(uid, { status: 'withdrawn', cancelled: true, withdrawnAt: now, refund: value, periodEnd: now });
       await store.setEntitlement(uid, { tier: 'free', validUntil: now });
       return json({ ...view({ ...bill, status: 'withdrawn' }), refund: value });

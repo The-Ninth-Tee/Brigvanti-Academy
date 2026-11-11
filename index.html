@@ -1583,7 +1583,7 @@ function vBadges(){
   {crumb:'Your badges',wide:true});
 }
 /* ---------- 7. legal and privacy ---------- */
-const LEGAL_UPDATED=new Date(2026,9,6).toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'});
+const LEGAL_UPDATED=new Date(2026,10,11).toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'});
 /* ---------- Plans, terms and payments ----------
    Plans and Terms are public, so Mollie and visitors can read them before signing in.
    The server sets prices and writes the plan. The browser only starts, cancels or withdraws. */
@@ -1646,8 +1646,17 @@ function vTerms(){
 let PAY={status:null};
 /* ?page=plans and ?page=terms open those public screens directly, for Mollie and for links. */
 let PAGE_GO=(function(){try{const q=new URLSearchParams(location.search),k=q.get('page');return k==='plans'?11:k==='terms'?12:k==='privacy'?7:null;}catch(e){return null;}})();
-let PAY_RETURN=(function(){try{const q=new URLSearchParams(location.search);if(q.get('pay')!=='return')return false;
-  q.delete('pay');history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:''));return true;}catch(e){return false;}})();
+let PAY_RETURN=false,PAY_RENEW=false;
+(function(){try{const q=new URLSearchParams(location.search),k=q.get('pay');if(k!=='return'&&k!=='renew')return;
+  PAY_RETURN=k==='return';PAY_RENEW=k==='renew';
+  q.delete('pay');history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:''));}catch(e){}})();
+const DAY_MS=864e5;
+/* Once per visit: a yearly plan that ends within 14 days and is not renewed yet. */
+function yearEndNote(){
+  const p=PAY;if(!(p&&p.status==='active'&&p.interval==='year'&&!p.renewed))return;
+  const left=p.periodEnd-Date.now();
+  if(left>0&&left<=14*DAY_MS&&!window.__brigYearNote){window.__brigYearNote=true;toast(`Your Plus year ends on ${fmtDay(p.periodEnd)}. You can renew it in Account.`);}
+}
 async function payCall(method,body){
   const tok=window.brigvantiAuth&&await window.brigvantiAuth.token();
   if(!tok)throw new Error('Please sign in first.');
@@ -1657,7 +1666,10 @@ async function payCall(method,body){
   if(!r.ok)throw new Error(d.error||'Something went wrong with the payment service. Please try again.');
   return d;
 }
-async function payLoad(){try{PAY=await payCall('get');}catch(e){PAY={status:null};}if(S.stage===9&&!V.buy)render();}
+async function payLoad(){try{PAY=await payCall('get');}catch(e){PAY={status:null};}
+  if(PAY_RENEW){PAY_RENEW=false;if(PAY.canRenew){openBuy();return;}}
+  yearEndNote();
+  if(S.stage===9&&!V.buy)render();}
 function openBuy(){if(S.stage!==9)go(9);V.buy=true;V.payIv=V.payIv||'';render();}
 async function payStart(){
   if(!V.payIv||!V.payOk||V.payBusy)return;
@@ -1685,14 +1697,15 @@ function planCard(){
   if(plan().startsWith('b2b'))return '';
   const conf=(title,body,act,label)=>`<div class="sconfirm" style="margin-top:12px"><b>${title}</b><p>${body}</p>
     <div class="row" style="margin-top:12px"><button class="btn sec" style="flex:1" onclick="V.payQ='';render()">Keep it</button><button class="btn danger" style="flex:1" ${V.payBusy?'disabled':''} onclick="payAct('${act}')">${label}</button></div></div>`;
-  if(isFree()&&V.buy){
+  const renew=!isFree()&&PAY.canRenew;
+  if((isFree()||renew)&&V.buy){
     const opt=(iv,t,s)=>`<button class="opt${V.payIv===iv?' sel':''}" onclick="V.payIv='${iv}';render()"><b>${t}</b><span class="sub">${s}</span></button>`;
-    return `<div class="card plan"><b>Get Plus</b>
-      <p class="muted" style="margin:6px 0 10px">Plus opens all 7 areas.</p>
+    return `<div class="card plan"><b>${renew?'Renew Plus':'Get Plus'}</b>
+      <p class="muted" style="margin:6px 0 10px">${renew?`Your new period starts on ${fmtDay(PAY.periodEnd)}, when your current one ends.`:'Plus opens all 7 areas.'}</p>
       ${opt('month','€13.99 a month','Plus renews every month until you cancel.')}
       ${opt('year','€89.99 a year','Plus ends after one year. It does not renew by itself.')}
       <label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;cursor:pointer"><input type="checkbox" ${V.payOk?'checked':''} onchange="V.payOk=this.checked;render()" style="width:20px;height:20px;flex:none;margin:2px 0 0;padding:0;accent-color:var(--violet,#7357F6)">
-        <span style="font-size:14px;line-height:1.45">I want Plus to start straight away. I know I can withdraw within 14 days. If I withdraw, I pay for the days I used and get the rest back.</span></label>
+        <span style="font-size:14px;line-height:1.45">${renew?'I know I can withdraw within 14 days. If I withdraw before my new period starts, I get everything back. After that, I pay for the days I used.':'I want Plus to start straight away. I know I can withdraw within 14 days. If I withdraw, I pay for the days I used and get the rest back.'}</span></label>
       <p class="muted" style="margin:10px 0 0"><button style="color:var(--teal-d);font-weight:600;text-decoration:underline;text-align:left" onclick="go(12)">Read the terms and conditions before you pay.</button></p>
       <div class="row" style="margin-top:12px"><button class="btn sec" style="flex:1" onclick="V.buy=false;render()">Not now</button>
         <button class="btn go" style="flex:1" ${!V.payIv||!V.payOk||V.payBusy?'disabled':''} onclick="payStart()">Pay now</button></div></div>`;
@@ -1702,6 +1715,7 @@ function planCard(){
   if(p&&p.interval==='month'&&!p.cancelled)lines=`Plus, monthly. Renews on ${fmtDay(p.periodEnd)}.`;
   else if(p&&p.interval==='month')lines=`Plus ends on ${fmtDay(p.periodEnd)}.`;
   else if(p)lines=`Plus, yearly. Ends on ${fmtDay(p.periodEnd)}.`;
+  if(p&&p.canRenew)acts+=`<button class="srow" onclick="openBuy()"><span>Renew Plus<small>Your new period starts when this one ends</small></span><span class="v">&#8250;</span></button>`;
   if(p&&p.interval==='month'&&!p.cancelled)acts+=V.payQ==='cancel'?conf('Cancel Plus?',`Plus stays until ${fmtDay(p.periodEnd)}. After that you are on Free.`,'cancel','Cancel Plus')
     :`<button class="srow" onclick="V.payQ='cancel';render()"><span>Cancel Plus</span><span class="v">&#8250;</span></button>`;
   if(p&&p.withdrawUntil)acts+=V.payQ==='withdraw'?conf('Withdraw from your contract?','Plus stops now. You pay for the days you used and get the rest back.','withdraw','Withdraw')
@@ -1738,6 +1752,7 @@ function vLegal(){
       <li>Your badges, streak and assignment history</li>
       <li>Your portfolio: the text of each assignment you hand in, the coach reply, and what you wrote when you claimed a level</li>
       <li>If you switch reminders on: a push address for each device, your timezone, your app language and a reminder schedule</li>
+      <li>If you buy Plus: your plan, the dates and amounts of your payments, when you agreed that Plus starts straight away, and the reference numbers Mollie gives to you and your payments</li>
     </ul>
     <p style="margin-top:12px">We ask you not to enter special category data. That means health details, political or religious views, trade union membership, ethnic origin, sexual orientation, or biometric and genetic data. We also ask you not to enter identification numbers, bank details, or another person's personal data. The app repeats this warning at every point where you type.</p>`)}
 
@@ -1747,11 +1762,13 @@ function vLegal(){
     <p><b>Coach replies.</b> When you press send, the text you wrote in the assignment is sent to Anthropic, which provides the AI model behind the coach. <b>This processing is not limited to the European Economic Area.</b> It is covered by a data processing agreement and standard contractual clauses. If you would rather not have your text leave the platform, do not use the coach.</p>
     <p><b>Hosting.</b> The site is served by Netlify and its code is held on GitHub. Netlify records technical request logs, including your IP address, to deliver and secure the site.</p>
     <p><b>Reminders.</b> A push reminder travels through the push service of your browser or phone. That service is run by the company behind it, for example Google, Apple, Microsoft or Mozilla. It may process the reminder outside the European Economic Area. A reminder holds only a title, one sentence and a link.</p>
+    <p><b>Payments.</b> Payments for Plus run through Mollie B.V. in Amsterdam. We give Mollie your email address, so it can send your payment receipts, and a reference to your account. You enter your bank or card details at Mollie, not in Brigvanti. We never see or store them. Mollie handles your payment under its own privacy statement.</p>
     <p>We do not sell your data. We do not use it for advertising. We do not use your assignment text to train any AI model.</p>`)}
 
   ${b('Why we are allowed to hold it',`
     <p><b>Consent</b> for running the scan, storing your progress, and sending your text to the coach. You may withdraw it at any time, and withdrawing does not affect what happened before.</p>
-    <p><b>Legitimate interest</b> for keeping the service secure and working, and for improving the questions using data that no longer identifies you.</p>`)}
+    <p><b>Legitimate interest</b> for keeping the service secure and working, and for improving the questions using data that no longer identifies you.</p>
+    <p><b>Contract</b> for handling your Plus plan and its payments. <b>Legal obligation</b> for keeping payment records, because Dutch tax law requires it.</p>`)}
 
   ${b('Your portfolio',`
     <p>Your portfolio is the record of what you made. It holds the text you wrote in each assignment, the coach reply, and the note you added when you claimed a level.</p>
@@ -1763,6 +1780,7 @@ function vLegal(){
     <p>Reminders are off until you switch them on. Push reminders are switched on per device, in Account.</p>
     <p>When push is on, we store a push address for that device, your timezone, your app language and a short schedule. The schedule holds the next reminder time, the kind of reminder and the name of the skill or area it mentions.</p>
     <p>We send at most one reminder a day and three a week. After three reminders without a hand in, we stop until you hand in work again.</p>
+    <p>If you have a yearly Plus plan and push is on, we also send a push message 14 days and 3 days before your plan ends.</p>
     <p>A reminder never holds your assignments, your portfolio or a level. It shows a short title, one sentence and a link to the app.</p>
     <p>You can switch push off in Account or in your phone or browser settings. Push stays on when you sign out. Deleting your account deletes all reminder data.</p>`)}
 
@@ -1770,6 +1788,7 @@ function vLegal(){
     <p>Your account data is kept while your account is open. When you delete or reset your account, we delete it from our storage straight away. Our storage provider, Google Firebase, completes the deletion from its systems and backups within 180 days. Netlify keeps technical logs with your IP address for up to 90 days, and archived copies for up to one year.</p>
     <p>You can erase your progress yourself at any time. Open Account and choose Reset account. That deletes your levels, badges, streak and your whole portfolio, from this device and from our storage. It also switches push reminders off on all your devices. Your sign in stays, so you can start again. We replace the server copy first. If that step fails, we tell you and nothing changes.</p>
     <p>To remove your sign in as well, choose Delete my account in Account.</p>
+    <p>Payment records are the exception. We keep them for seven years after the year of payment, because Dutch tax law requires it. This also applies after you delete your account. They hold no assignment text, no portfolio and no levels.</p>
     <p>Deletion is permanent. Download your record first if you want to keep it.</p>`)}
 
   ${b('Your rights',`
@@ -2487,7 +2506,7 @@ function vAccount(){
     ?confirm('Reset your account?','This deletes your levels, badges, streak and your whole portfolio, from this device and from our storage. It cannot be undone. Your sign in stays, so you can start again. Download your record first if you want to keep it.','V.reset=false;render()',`${V.busyReset?'disabled':''} onclick="resetAccount()"`,V.busyReset?'Resetting':'Reset')
     :`<button class="srow" onclick="V.reset=true;render()"><span>Reset account<small>Erase all progress and start again</small></span><span class="v">&#8250;</span></button>`;
   const delRow=V.del
-    ?confirm('Delete your account?','This erases everything. It cannot be undone.','V.del=false;render()','onclick="doDelete()"','Delete')
+    ?confirm('Delete your account?','This erases everything except payment records, which we must keep by law. It cannot be undone.','V.del=false;render()','onclick="doDelete()"','Delete')
     :`<button class="srow danger" onclick="V.del=true;render()"><span>Delete my account<small>Erase everything, permanently</small></span><span class="v">&#8250;</span></button>`;
   return shell(`<h1>Account</h1>
   ${planCard()}
