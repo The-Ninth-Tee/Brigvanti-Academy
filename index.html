@@ -1786,8 +1786,8 @@ function vLegal(){
     <p>You can switch push off in Account or in your phone or browser settings. Push stays on when you sign out. Deleting your account deletes all reminder data.</p>`)}
 
   ${b('How long we keep it',`
-    <p>Your account data is kept while your account is open. When you delete or reset your account, we delete it from our storage straight away. Our storage provider, Google Firebase, completes the deletion from its systems and backups within 180 days. Netlify keeps technical logs with your IP address for up to 90 days, and archived copies for up to one year.</p>
-    <p>You can erase your progress yourself at any time. Open Account and choose Reset account. That deletes your levels, badges, streak and your whole portfolio, from this device and from our storage. It also switches push reminders off on all your devices. Your sign in stays, so you can start again. We replace the server copy first. If that step fails, we tell you and nothing changes.</p>
+    <p>Your account data is kept while your account is open. When you delete your account, we delete your account data from our storage straight away. When you reset it, we delete your progress straight away. Our storage provider, Google Firebase, completes the deletion from its systems and backups within 180 days. Netlify keeps technical logs with your IP address for up to 90 days, and archived copies for up to one year.</p>
+    <p>You can erase your progress yourself at any time. Open Account and choose Reset account. That deletes your levels, badges, streak and your whole portfolio, from this device and from our storage. It also switches push reminders off on all your devices. Your sign in stays, so you can start again. Your plan and your coach use this month stay too, so a reset does not end Plus or restart your coach limits. We replace the server copy first. If that step fails, we tell you and nothing changes.</p>
     <p>To remove your sign in as well, choose Delete my account in Account.</p>
     <p>Payment records are the exception. We keep them for seven years after the year of payment, because Dutch tax law requires it. This also applies after you delete your account. They hold no assignment text, no portfolio and no levels.</p>
     <p>Deletion is permanent. Download your record first if you want to keep it.</p>`)}
@@ -2504,7 +2504,7 @@ function vAccount(){
   const confirm=(title,body,keep,act,label)=>`<div class="sconfirm"><b>${title}</b><p>${body}</p>
     <div class="row" style="margin-top:12px"><button class="btn sec" style="flex:1" onclick="${keep}">Keep it</button><button class="btn danger" style="flex:1" ${act}>${label}</button></div></div>`;
   const resetRow=V.reset
-    ?confirm('Reset your account?','This deletes your levels, badges, streak and your whole portfolio, from this device and from our storage. It cannot be undone. Your sign in stays, so you can start again. Download your record first if you want to keep it.','V.reset=false;render()',`${V.busyReset?'disabled':''} onclick="resetAccount()"`,V.busyReset?'Resetting':'Reset')
+    ?confirm('Reset your account?','This deletes your levels, badges, streak and your whole portfolio, from this device and from our storage. It cannot be undone. Your sign in, your plan and your coach limits stay. Download your record first if you want to keep it.','V.reset=false;render()',`${V.busyReset?'disabled':''} onclick="resetAccount()"`,V.busyReset?'Resetting':'Reset')
     :`<button class="srow" onclick="V.reset=true;render()"><span>Reset account<small>Erase all progress and start again</small></span><span class="v">&#8250;</span></button>`;
   const delRow=V.del
     ?confirm('Delete your account?','This erases everything except payment records, which we must keep by law. It cannot be undone.','V.del=false;render()','onclick="doDelete()"','Delete')
