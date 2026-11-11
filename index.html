@@ -690,7 +690,7 @@ async function resetAccount(){
   RM.devices=[];
   S=n;V={};NAV=[];LAST=-1;render();
   toast(pushOk?'Your account is reset. You can start again.'
-    :'Your progress is reset. Push reminders could not be switched off, so switch them off in Account settings.');
+    :'Your progress is reset. Push reminders could not be switched off, so switch them off in Account.');
 }
 
 /* ---------- scan record ---------- */
@@ -1117,7 +1117,7 @@ function pushInvite(){
   try{if(Number(localStorage.getItem('brigvanti_push_invite_until')||0)>Date.now())return '';}catch(e){}
   const st=pushSupport();
   if(st==='ok')return `<div class="card tint pop"><h3>Want a reminder on your practice days?</h3>
-    <p class="muted" style="margin:6px 0 0">Skills stick when you come back to them after a few days. A short reminder helps you keep that rhythm. You get one a day at most, and you can switch it off at any time in Account settings.</p>
+    <p class="muted" style="margin:6px 0 0">Skills stick when you come back to them after a few days. A short reminder helps you keep that rhythm. You get one a day at most, and you can switch it off at any time in Account.</p>
     <div class="row"><button class="btn sec" style="flex:1" onclick="pushInviteLater()">Not now</button>
     <button class="btn go" style="flex:1" ${V.pushBusy?'disabled':''} onclick="pushToggle(true)">Remind me</button></div></div>`;
   if(st==='ios-install')return `<div class="card tint pop"><h3>Get reminders on your iPhone</h3>
@@ -1623,16 +1623,16 @@ function vLegal(){
     <p>Because it holds text you wrote yourself, it is the part of your account most likely to contain something personal. That is why we ask you not to enter private details, and why you can erase all of it in one action.</p>`)}
 
   ${b('Reminders',`
-    <p>Reminders are off until you switch them on. Push reminders are switched on per device, in Account settings.</p>
+    <p>Reminders are off until you switch them on. Push reminders are switched on per device, in Account.</p>
     <p>When push is on, we store a push address for that device, your timezone, your app language and a short schedule. The schedule holds the next reminder time, the kind of reminder and the name of the skill or area it mentions.</p>
     <p>We send at most one reminder a day and three a week. After three reminders without a hand in, we stop until you hand in work again.</p>
     <p>A reminder never holds your assignments, your portfolio or a level. It shows a short title, one sentence and a link to the app.</p>
-    <p>You can switch push off in Account settings or in your phone or browser settings. Push stays on when you sign out. Deleting your account deletes all reminder data.</p>`)}
+    <p>You can switch push off in Account or in your phone or browser settings. Push stays on when you sign out. Deleting your account deletes all reminder data.</p>`)}
 
   ${b('How long we keep it',`
     <p>Your account data is kept while your account is open. When you delete or reset your account, we delete it from our storage straight away. Our storage provider, Google Firebase, completes the deletion from its systems and backups within 180 days. Netlify keeps technical logs with your IP address for up to 90 days, and archived copies for up to one year.</p>
-    <p>You can erase your progress yourself at any time. Open Account settings and choose Reset account. That deletes your levels, badges, streak and your whole portfolio, from this device and from our storage. It also switches push reminders off on all your devices. Your sign in stays, so you can start again. We replace the server copy first. If that step fails, we tell you and nothing changes.</p>
-    <p>To remove your sign in as well, choose Delete my account in Account settings.</p>
+    <p>You can erase your progress yourself at any time. Open Account and choose Reset account. That deletes your levels, badges, streak and your whole portfolio, from this device and from our storage. It also switches push reminders off on all your devices. Your sign in stays, so you can start again. We replace the server copy first. If that step fails, we tell you and nothing changes.</p>
+    <p>To remove your sign in as well, choose Delete my account in Account.</p>
     <p>Deletion is permanent. Download your record first if you want to keep it.</p>`)}
 
   ${b('Your rights',`
@@ -2392,9 +2392,12 @@ function dropUntested(){
   Object.keys(S.scan).forEach(id=>{const r=S.scan[id];
     if(untested(r,id,S.rung))delete S.scan[id];});
 }
+/* Role names lost their internal codes (P1) and (P2) on 11 November 2026. Saved accounts keep the old name. */
+function fixRole(){if(S&&S.role&&/ \(P[12]\)$/.test(S.role))S.role=S.role.replace(/ \(P[12]\)$/,'');}
 function render(){
   coachSoon();
   dropUntested();
+  fixRole();
   if(window.__brigAuthPending){
     var a=document.getElementById('app');
     if(a)a.innerHTML='<div class="app"><p class="muted" style="padding:56px 0 20px">Connecting...</p></div>';
