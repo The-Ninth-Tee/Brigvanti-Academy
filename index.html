@@ -973,7 +973,7 @@ async function claude(body,json){
   return t;
 }
 /* ---------- navigation ---------- */
-const TITLE=['Sign in','Set up','Insight scan','Your areas','Practice','Level up','Your progress','Privacy and legal','Portfolio','Account','Your badges'];
+const TITLE=['Sign in','Set up','Insight scan','Your areas','Practice','Level up','Your progress','Privacy and legal','Portfolio','Account','Your badges','Plans and prices','Terms and conditions'];
 function go(n){
   if(n===8)V.pf=null;
   if(n===S.stage&&!V.rep&&!V.ru){if(V.menu){V={};render();}return;}
@@ -1142,7 +1142,12 @@ function remindRows(){
 }
 function saveName(){ if(!(S.name||'').trim()){ toast('A name is required.'); return; } save(); if(V)V.editName=false; render(); }
 async function doPasswordReset(){ try{ await window.brigvantiSendReset(); toast('Reset link sent to your email.'); }catch(e){ toast('Could not send the reset email. Try again.'); } }
-async function doDelete(){ try{ await window.brigvantiDeleteAccount(); }catch(e){ if(V)V.del=false; render(); toast((window.brigvantiAuth&&window.brigvantiAuth.msg)?window.brigvantiAuth.msg(e):'Could not delete. Sign in again and retry.'); } }
+async function doDelete(){
+  if(PAY.status==='active'&&PAY.interval==='month'&&!PAY.cancelled){
+    try{PAY=await payCall('manage',{action:'cancel'});}
+    catch(e){if(V)V.del=false;render();toast('Your Plus plan could not be cancelled, so your account was not deleted. Please try again.');return;}
+  }
+  try{ await window.brigvantiDeleteAccount(); }catch(e){ if(V)V.del=false; render(); toast((window.brigvantiAuth&&window.brigvantiAuth.msg)?window.brigvantiAuth.msg(e):'Could not delete. Sign in again and retry.'); } }
 /* ---------- analytics consent gate ----------
    Google Analytics (GA4) stays off until the learner opts in, and can be
    switched off again. gtag loads only from inside enableAnalytics, so no Google
@@ -1319,8 +1324,11 @@ function vAccess(){
     <div class="row"><button class="btn go full" onclick="signIn('email')">${S.authMode==='up'?'Create account':'Sign in'}</button></div>
     <p class="muted" style="margin:12px 0 0">${S.authMode==='up'?'Already have an account? ':'New to Brigvanti? '}<button style="color:var(--teal-d);font-weight:600;text-decoration:underline" onclick="S.authMode='${S.authMode==='up'?'in':'up'}';V.err='';render()">${S.authMode==='up'?'Sign in':'Create one'}</button></p>
   </div>
-  <p class="muted" style="text-align:center;padding:0 8px 8px">By continuing you agree to how we handle your data.
-    <button style="color:var(--teal-d);font-weight:600;text-decoration:underline" onclick="go(7)">Read privacy and legal</button></p></div>`;
+  <p class="muted" style="text-align:center;padding:0 8px 8px">By continuing you agree to the terms and to how we handle your data.</p>
+  <p class="muted" style="text-align:center;padding:0 8px 8px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap">
+    <button style="color:var(--teal-d);font-weight:600;text-decoration:underline" onclick="go(11)">Plans and prices</button>
+    <button style="color:var(--teal-d);font-weight:600;text-decoration:underline" onclick="go(12)">Terms and conditions</button>
+    <button style="color:var(--teal-d);font-weight:600;text-decoration:underline" onclick="go(7)">Privacy and legal</button></p></div>`;
 }
 async function signIn(how){
   V.err='';
@@ -1576,6 +1584,135 @@ function vBadges(){
 }
 /* ---------- 7. legal and privacy ---------- */
 const LEGAL_UPDATED=new Date(2026,9,6).toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'});
+/* ---------- Plans, terms and payments ----------
+   Plans and Terms are public, so Mollie and visitors can read them before signing in.
+   The server sets prices and writes the plan. The browser only starts, cancels or withdraws. */
+const TERMS_UPDATED=new Date(2026,10,11).toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'});
+const COMPANY=`The Ninth Tee, Rijswijkstraat 199, 1062 XL Amsterdam, the Netherlands. Chamber of Commerce number 98566903. Support: <b>support@theninthtee.eu</b>. Payments and privacy: <b>legal@theninthtee.eu</b>.`;
+const fmtDay=ms=>new Date(ms).toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'});
+function vPlans(){
+  const b=(t,body,cls)=>`<div class="card${cls?' '+cls:''}"><h3>${t}</h3><div style="margin-top:8px">${body}</div></div>`;
+  return shell(`<h1>Plans and prices</h1>
+  <p class="lede">Brigvanti is an AI literacy app. You build real AI skill on tasks from your own work, with feedback from an AI coach. Your level is advice, never a qualification.</p>
+  ${b('Free, €0',`<p>Scan all 7 areas and see your level per skill.</p>
+    <p>Practise and level up in three areas: Foundations, Prompting &amp; interaction and Responsible use.</p>
+    <p class="muted">Up to 1 coached assignment a day and 10 a month.</p>`)}
+  ${b('Plus, €13.99 a month or €89.99 a year',`<p>Everything in Free.</p>
+    <p>Practise and level up in all 7 areas. See your growth path and your growth over time.</p>
+    <p class="muted">Up to 10 coached assignments a day and 150 a month.</p>
+    <p class="muted">Prices are in euro and include VAT.</p>`)}
+  ${b('How paying works',`<p>You pay through our payment provider Mollie.</p>
+    <p>The monthly plan starts with a first payment. After that, Mollie collects €13.99 every month from the same account or card, until you cancel.</p>
+    <p>The yearly plan is one payment of €89.99. It ends after one year and does not renew by itself.</p>`)}
+  ${b('Cancel and withdraw',`<p>You can cancel at any time in Account. Plus then runs to the end of the period you paid for.</p>
+    <p>You can withdraw within 14 days of your first payment. You then pay for the days you used, and we refund the rest within 14 days.</p>`)}
+  ${b('Who we are',`<p class="muted">${COMPANY}</p>`)}
+  <div class="row"><button class="btn sec" style="flex:1" onclick="go(12)">Terms and conditions</button><button class="btn sec" style="flex:1" onclick="go(7)">Privacy and legal</button></div>`);
+}
+function vTerms(){
+  const b=(t,body)=>`<div class="card"><h3>${t}</h3><div style="margin-top:8px">${body}</div></div>`;
+  return shell(`<h1>Terms and conditions</h1>
+  <p class="lede">These terms apply to every use of Brigvanti. Version 1, ${TERMS_UPDATED}.</p>
+  ${b('1. Who we are',`<p class="muted">${COMPANY}</p><p>In these terms, "we" means The Ninth Tee. "You" means the person who uses Brigvanti.</p>`)}
+  ${b('2. What Brigvanti is',`<p>Brigvanti is a learning app for AI skills. It gives you an advisory picture of your level per skill, and assignments built on tasks from your own work.</p>
+    <p>Your level is advice. It is not an assessment, a certificate or a qualification. The AI coach gives feedback. It never scores you and never decides your level.</p>
+    <p>The coach is an AI model and can be wrong. Do not rely on it for legal, medical, financial or safety decisions. You stay responsible for what you do with its feedback.</p>`)}
+  ${b('3. Your account',`<p>You must be 18 or over. You need an account to use Brigvanti. Keep your sign in details to yourself.</p>
+    <p>Do not enter special category data, identification numbers, bank details or another person's personal data. The privacy statement explains how we handle your data.</p>`)}
+  ${b('4. Free and Plus',`<p>Free is free of charge. Plus is a paid plan with more areas and more coached assignments. The plans, prices and limits are on the Plans and prices page.</p>
+    <p>The daily and monthly limits on coached assignments protect the service. Unused assignments do not carry over.</p>`)}
+  ${b('5. Prices and payment',`<p>Prices are in euro and include VAT. You pay in advance through Mollie.</p>
+    <p>Monthly: the first payment starts Plus. After that, Mollie collects the monthly price from the same account or card each month. If a payment fails, Mollie may try again. Plus stops if the payment still fails after 7 days.</p>
+    <p>Yearly: you pay once for 12 months.</p>
+    <p>We announce a price change at least 30 days ahead. It applies from your next period. You may cancel before it applies.</p>`)}
+  ${b('6. Duration and cancelling',`<p>The monthly plan runs per month until you cancel. You can cancel at any time in Account. Plus then stays until the end of the month you paid for. We do not refund part of a month after cancelling, except when you withdraw under section 7.</p>
+    <p>The yearly plan ends after 12 months. It does not renew by itself.</p>`)}
+  ${b('7. Right of withdrawal',`<p>You may withdraw from a paid plan within 14 days of your first payment, without giving a reason.</p>
+    <p>At checkout you ask us to start Plus straight away. If you withdraw, you pay for the days you used. We refund the rest within 14 days, to the account or card you paid with.</p>
+    <p>To withdraw, open Account and choose Withdraw from contract. You can also email <b>legal@theninthtee.eu</b> with your name, the email of your account and the date of payment.</p>`)}
+  ${b('8. Your work',`<p>You keep ownership of the text you write. You give us permission to process it, to give you feedback and to show you your own record. We do not use it to train AI models.</p>
+    <p>Do not use Brigvanti to break the law, to harm others or to attack the service. We may block an account that does.</p>`)}
+  ${b('9. Our content',`<p>The framework, questions and assignments belong to us. You may use them for your own learning. Do not copy or redistribute them.</p>`)}
+  ${b('10. Availability and changes',`<p>We work to keep Brigvanti available, but we cannot promise it is always free of errors or interruptions. We may improve or change the service. If a change takes away a main part of Plus, you may cancel and we refund the unused part.</p>`)}
+  ${b('11. Liability',`<p>Our liability is limited to the amount you paid us in the 12 months before the damage. This limit does not apply to damage caused by our intent or gross negligence, or where the law does not allow it.</p>`)}
+  ${b('12. Ending your account',`<p>You can delete your account at any time in Account. Deleting your account also cancels a monthly plan.</p>
+    <p>We may end or block an account that breaks these terms. If we end a paid plan without a reason in these terms, we refund the unused part.</p>`)}
+  ${b('13. Complaints',`<p>Send a complaint to <b>support@theninthtee.eu</b>. We answer within 14 days.</p>`)}
+  ${b('14. Law and changes to these terms',`<p>Dutch law applies. If you live in another EU country, you keep the protection of its mandatory consumer law. A dispute goes to the competent court in the Netherlands, unless the law gives you another choice.</p>
+    <p>We announce a change to these terms at least 30 days ahead. If you do not agree, you may cancel before the change applies.</p>`)}`);
+}
+
+/* Payments in Account. PAY mirrors pay-manage. */
+let PAY={status:null};
+/* ?page=plans and ?page=terms open those public screens directly, for Mollie and for links. */
+let PAGE_GO=(function(){try{const q=new URLSearchParams(location.search),k=q.get('page');return k==='plans'?11:k==='terms'?12:k==='privacy'?7:null;}catch(e){return null;}})();
+let PAY_RETURN=(function(){try{const q=new URLSearchParams(location.search);if(q.get('pay')!=='return')return false;
+  q.delete('pay');history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:''));return true;}catch(e){return false;}})();
+async function payCall(method,body){
+  const tok=window.brigvantiAuth&&await window.brigvantiAuth.token();
+  if(!tok)throw new Error('Please sign in first.');
+  const r=await fetch('/.netlify/functions/'+(method==='start'?'pay-start':'pay-manage'),{method:method==='get'?'GET':'POST',
+    headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},body:method==='get'?undefined:JSON.stringify(body)});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(d.error||'Something went wrong with the payment service. Please try again.');
+  return d;
+}
+async function payLoad(){try{PAY=await payCall('get');}catch(e){PAY={status:null};}if(S.stage===9&&!V.buy)render();}
+function openBuy(){if(S.stage!==9)go(9);V.buy=true;V.payIv=V.payIv||'';render();}
+async function payStart(){
+  if(!V.payIv||!V.payOk||V.payBusy)return;
+  V.payBusy=true;render();
+  try{const d=await payCall('start',{interval:V.payIv,consent:true});if(!d.checkout)throw new Error('');location.href=d.checkout;}
+  catch(e){V.payBusy=false;render();toast(e.message||'Something went wrong with the payment service. Please try again.');}
+}
+async function payAct(action){
+  V.payBusy=true;render();
+  try{PAY=await payCall('manage',{action});V={};COACH.at=0;await coachRefresh();
+    toast(action==='withdraw'?'You withdrew from your contract. Your refund is on its way.':'Plus is cancelled. It stays until the end of the period you paid for.');}
+  catch(e){V.payBusy=false;toast(e.message);}
+  render();
+}
+async function payReturned(){
+  toast('Thanks. We are confirming your payment.');
+  for(let i=0;i<10;i++){
+    await new Promise(r=>setTimeout(r,3000));
+    COACH.at=0;await coachRefresh();
+    if(!isFree()){await payLoad();toast('Plus is open. Enjoy all 7 areas.');return;}
+  }
+  toast('Your payment is not confirmed yet. If you paid, Plus opens within a few minutes. If you stopped at checkout, nothing was charged.');
+}
+function planCard(){
+  if(plan().startsWith('b2b'))return '';
+  const conf=(title,body,act,label)=>`<div class="sconfirm" style="margin-top:12px"><b>${title}</b><p>${body}</p>
+    <div class="row" style="margin-top:12px"><button class="btn sec" style="flex:1" onclick="V.payQ='';render()">Keep it</button><button class="btn danger" style="flex:1" ${V.payBusy?'disabled':''} onclick="payAct('${act}')">${label}</button></div></div>`;
+  if(isFree()&&V.buy){
+    const opt=(iv,t,s)=>`<button class="opt${V.payIv===iv?' sel':''}" onclick="V.payIv='${iv}';render()"><b>${t}</b><span class="sub">${s}</span></button>`;
+    return `<div class="card plan"><b>Get Plus</b>
+      <p class="muted" style="margin:6px 0 10px">Plus opens all 7 areas.</p>
+      ${opt('month','€13.99 a month','Plus renews every month until you cancel.')}
+      ${opt('year','€89.99 a year','Plus ends after one year. It does not renew by itself.')}
+      <label style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;cursor:pointer"><input type="checkbox" ${V.payOk?'checked':''} onchange="V.payOk=this.checked;render()" style="width:20px;height:20px;flex:none;margin:2px 0 0;padding:0;accent-color:var(--violet,#7357F6)">
+        <span style="font-size:14px;line-height:1.45">I want Plus to start straight away. I know I can withdraw within 14 days. If I withdraw, I pay for the days I used and get the rest back.</span></label>
+      <p class="muted" style="margin:10px 0 0"><button style="color:var(--teal-d);font-weight:600;text-decoration:underline;text-align:left" onclick="go(12)">Read the terms and conditions before you pay.</button></p>
+      <div class="row" style="margin-top:12px"><button class="btn sec" style="flex:1" onclick="V.buy=false;render()">Not now</button>
+        <button class="btn go" style="flex:1" ${!V.payIv||!V.payOk||V.payBusy?'disabled':''} onclick="payStart()">Pay now</button></div></div>`;
+  }
+  let lines='',acts='';
+  const p=PAY.status==='active'?PAY:null;
+  if(p&&p.interval==='month'&&!p.cancelled)lines=`Plus, monthly. Renews on ${fmtDay(p.periodEnd)}.`;
+  else if(p&&p.interval==='month')lines=`Plus ends on ${fmtDay(p.periodEnd)}.`;
+  else if(p)lines=`Plus, yearly. Ends on ${fmtDay(p.periodEnd)}.`;
+  if(p&&p.interval==='month'&&!p.cancelled)acts+=V.payQ==='cancel'?conf('Cancel Plus?',`Plus stays until ${fmtDay(p.periodEnd)}. After that you are on Free.`,'cancel','Cancel Plus')
+    :`<button class="srow" onclick="V.payQ='cancel';render()"><span>Cancel Plus</span><span class="v">&#8250;</span></button>`;
+  if(p&&p.withdrawUntil)acts+=V.payQ==='withdraw'?conf('Withdraw from your contract?','Plus stops now. You pay for the days you used and get the rest back.','withdraw','Withdraw')
+    :`<button class="srow" onclick="V.payQ='withdraw';render()"><span>Withdraw from contract<small>Until ${fmtDay(p.withdrawUntil)}</small></span><span class="v">&#8250;</span></button>`;
+  return `<div class="card plan"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>Your plan</b><span class="lvchip" id="coachPlan">${planName()}</span></div>
+    <p class="muted" id="coachLeftAccount" style="margin:6px 0 0">${planName()}</p>
+    ${lines?`<p style="margin:8px 0 0">${lines}</p>`:''}
+    ${isFree()?`<p class="muted" style="margin:8px 0 0">Plus opens all 7 areas. €13.99 a month or €89.99 a year.</p>
+      <div class="row" style="margin-top:12px"><button class="btn go" style="flex:1" onclick="openBuy()">Get Plus</button><button class="btn sec" style="flex:1" onclick="go(11)">Plans and prices</button></div>`:''}
+    ${acts?`<div style="margin-top:10px">${acts}</div>`:''}</div>`;
+}
 function vLegal(){
   const b=(t,body)=>`<div class="card"><h3>${t}</h3><div style="margin-top:8px">${body}</div></div>`;
   return shell(`<h1>Privacy and legal</h1>
@@ -1806,7 +1943,7 @@ function vStand(){
   ${isFree()?`<div class="agrp">Included in Free</div>`:''}
   ${free.map(card).join('')}</section>
   ${locked.length?`<section><div class="agrp plus">Part of Plus</div>${locked.map(card).join('')}
-    <p class="muted" style="margin:6px 4px 0">Plus opens practice and level up in all 7 areas. Payments open soon.</p></section>`:''}</div>`,
+    <p class="muted" style="margin:6px 4px 0">Plus opens practice and level up in all 7 areas. <button style="color:var(--teal-d);font-weight:600;text-decoration:underline" onclick="openBuy()">Get Plus</button></p></section>`:''}</div>`,
   {crumb:'Your areas',wide:true});
 }
 /* Start the scan at one chosen skill. A skill already in progress keeps priority. */
@@ -2353,9 +2490,7 @@ function vAccount(){
     ?confirm('Delete your account?','This erases everything. It cannot be undone.','V.del=false;render()','onclick="doDelete()"','Delete')
     :`<button class="srow danger" onclick="V.del=true;render()"><span>Delete my account<small>Erase everything, permanently</small></span><span class="v">&#8250;</span></button>`;
   return shell(`<h1>Account</h1>
-  <div class="card plan"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>Your plan</b><span class="lvchip" id="coachPlan">${planName()}</span></div>
-    <p class="muted" id="coachLeftAccount" style="margin:6px 0 0">${planName()}</p>
-    ${isFree()?`<p class="muted" style="margin:8px 0 0">Plus opens all 7 areas. €13.99 a month or €89.99 a year. Payments open soon.</p>`:''}</div>
+  ${planCard()}
 
   <div class="sgrp">Personal</div>
   ${nameRow}
@@ -2403,8 +2538,9 @@ function render(){
     if(a)a.innerHTML='<div class="app"><p class="muted" style="padding:56px 0 20px">Connecting...</p></div>';
     window.__brigRendered=true;return;
   }
-  if(!S.signed&&S.stage!==7)S.stage=0;
-  const v=[vAccess,vStart,vScan,vStand,vPractice,vRung,vProgress,vLegal,vPortfolio,vAccount,vBadges][S.stage]||vAccess;
+  if(PAGE_GO&&!S.signed){NAV=[0];S.stage=PAGE_GO;PAGE_GO=null;}
+  if(!S.signed&&![7,11,12].includes(S.stage))S.stage=0;
+  const v=[vAccess,vStart,vScan,vStand,vPractice,vRung,vProgress,vLegal,vPortfolio,vAccount,vBadges,vPlans,vTerms][S.stage]||vAccess;
   const key=viewKey(), y=window.scrollY, moved=key!==LAST, app=document.getElementById('app');
   /* On a screen change, scroll up before swapping content and nudge a repaint.
      Android Chrome could leave a stale picture of a long screen below a shorter one. */
@@ -2439,10 +2575,14 @@ window.brigvantiApp={
     S.stage=setupDone()?6:1;NAV=[];
     if(REMIND_GO&&setupDone()){NAV=[6];S.stage=REMIND_GO==='levelup'?5:REMIND_GO==='scan'?2:4;}
     REMIND_GO=null;
+    if(PAY_RETURN&&setupDone()){NAV=[6];S.stage=9;}
+    if(PAGE_GO){NAV=[S.stage];S.stage=PAGE_GO;PAGE_GO=null;}
     LAST=-1;render();
     save();
     enableAnalytics();
     remindInit();
+    payLoad();
+    if(PAY_RETURN){PAY_RETURN=false;payReturned();}
     /* Pull the server copy in the background. When it arrives, merge it in and
        refresh. Login never waits on this, so a slow or down server does not
        hold up the screen. */
