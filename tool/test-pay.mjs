@@ -119,6 +119,18 @@ assert.equal((await h.start(req('POST', { interval: 'month', consent: true }))).
 // Payments off without a key
 const off = createPayHandlers({ verify, store, mollie: null, env: {}, clock: () => now });
 assert.equal((await off.start(req('POST', { interval: 'month', consent: true }))).status, 503);
+// A test-mode customer is not reused once the live key is in
+{
+  const made = [];
+  const liveM = { ...mollie, customer: async (e, u) => { made.push(u); return { id: 'cst_live' }; } };
+  const store2 = { ...store, billing: async () => ({ status: 'withdrawn', customerId: 'cst_test_old' }), entitlement: async () => null, setBilling: async () => {} };
+  const hl = createPayHandlers({ verify, store: store2, mollie: liveM, env: { URL: 'https://app.test', MOLLIE_API_KEY: 'live_x' }, clock: () => now });
+  await hl.start(req('POST', { interval: 'year', consent: true }));
+  assert.equal(made.length, 1, 'new live customer');
+  const ht = createPayHandlers({ verify, store: store2, mollie: liveM, env: { URL: 'https://app.test', MOLLIE_API_KEY: 'test_x' }, clock: () => now });
+  await ht.start(req('POST', { interval: 'year', consent: true }));
+  assert.equal(made.length, 1, 'test customer reused in test mode');
+}
 console.log('Payment tests passed.');
 
 // Reminder before a yearly plan ends
