@@ -1583,7 +1583,7 @@ const LEGAL_UPDATED=new Date(2026,10,11).toLocaleDateString(window.BRIG_LANG==='
 /* ---------- Plans, terms and payments ----------
    Plans and Terms are public, so Mollie and visitors can read them before signing in.
    The server sets prices and writes the plan. The browser only starts, cancels or withdraws. */
-const TERMS_UPDATED=new Date(2026,10,11).toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'});
+const TERMS_UPDATED=new Date(2026,10,12).toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'});
 const COMPANY=`The Ninth Tee, Rijswijkstraat 199, 1062 XL Amsterdam, the Netherlands. Chamber of Commerce number 98566903. Support: <b>support@theninthtee.eu</b>. Payments and privacy: <b>legal@theninthtee.eu</b>.`;
 const fmtDay=ms=>new Date(ms).toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'});
 function vPlans(){
@@ -1608,7 +1608,7 @@ function vPlans(){
 function vTerms(){
   const b=(t,body)=>`<div class="card"><h3>${t}</h3><div style="margin-top:8px">${body}</div></div>`;
   return shell(`<h1>Terms and conditions</h1>
-  <p class="lede">These terms apply to every use of Brigvanti. Version 1, ${TERMS_UPDATED}.</p>
+  <p class="lede">These terms apply to every use of Brigvanti. Version 2, ${TERMS_UPDATED}.</p>
   ${b('1. Who we are',`<p class="muted">${COMPANY}</p><p>In these terms, "we" means The Ninth Tee. "You" means the person who uses Brigvanti.</p>`)}
   ${b('2. What Brigvanti is',`<p>Brigvanti is a learning app for AI skills. It gives you an advisory picture of your level per skill, and assignments built on tasks from your own work.</p>
     <p>Your level is advice. It is not an assessment, a certificate or a qualification. The AI coach gives feedback. It never scores you and never decides your level.</p>
@@ -1618,11 +1618,12 @@ function vTerms(){
   ${b('4. Free and Plus',`<p>Free is free of charge. Plus is a paid plan with more areas and more coached assignments. The plans, prices and limits are on the Plans and prices page.</p>
     <p>The daily and monthly limits on coached assignments protect the service. Unused assignments do not carry over.</p>`)}
   ${b('5. Prices and payment',`<p>Prices are in euro and include VAT. You pay in advance through Mollie.</p>
-    <p>Monthly: the first payment starts Plus. After that, Mollie collects the monthly price from the same account or card each month. If a payment fails, Mollie may try again. Plus stops if the payment still fails after 7 days.</p>
+    <p>Monthly: Your first payment activates Plus. After that, Mollie automatically collects the monthly fee from the same account or card each month. If a payment fails, we will send you a single reminder email 3 days after the due date, giving you the option to pay manually in your Account. If the balance remains unpaid 5 days after the due date, your Plus subscription will end.</p>
     <p>Yearly: you pay once for 12 months.</p>
     <p>We announce a price change at least 30 days ahead. It applies from your next period. You may cancel before it applies.</p>`)}
   ${b('6. Duration and cancelling',`<p>The monthly plan runs per month until you cancel. You can cancel at any time in Account. Plus then stays until the end of the month you paid for. We do not refund part of a month after cancelling, except when you withdraw under section 7.</p>
-    <p>The yearly plan ends after 12 months. It does not renew by itself.</p>`)}
+    <p>The yearly plan ends after 12 months. It does not renew by itself. We email you 30 days before it ends.</p>
+    <p>We also email you a confirmation when Plus starts, a receipt for each payment, and a confirmation when you cancel or withdraw.</p>`)}
   ${b('7. Right of withdrawal',`<p>You may withdraw from a paid plan within 14 days of your first payment, without giving a reason.</p>
     <p>At checkout you ask us to start Plus straight away. If you withdraw, you pay for the days you used. We refund the rest within 14 days, to the account or card you paid with.</p>
     <p>To withdraw, open Account and choose Withdraw from contract. You can also email <b>legal@theninthtee.eu</b> with your name, the email of your account and the date of payment.</p>`)}
@@ -1647,12 +1648,6 @@ let PAY_RETURN=false,PAY_RENEW=false,PAY_STATUS=false;
   PAY_RETURN=k==='return';PAY_RENEW=k==='renew';PAY_STATUS=k==='status';
   q.delete('pay');history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:''));}catch(e){}})();
 const DAY_MS=864e5;
-/* Once per visit: a yearly plan that ends within 14 days and is not renewed yet. */
-function yearEndNote(){
-  const p=PAY;if(!(p&&p.status==='active'&&p.interval==='year'&&!p.renewed))return;
-  const left=p.periodEnd-Date.now();
-  if(left>0&&left<=14*DAY_MS&&!window.__brigYearNote){window.__brigYearNote=true;toast(`Your Plus year ends on ${fmtDay(p.periodEnd)}. You can renew it in Account.`);}
-}
 async function payCall(method,body){
   const tok=window.brigvantiAuth&&await window.brigvantiAuth.token();
   if(!tok)throw new Error('Please sign in first.');
@@ -1665,14 +1660,18 @@ async function payCall(method,body){
 async function payLoad(){try{PAY=await payCall('get');}catch(e){PAY={status:null};}
   if(PAY_RENEW){PAY_RENEW=false;if(PAY.canRenew){openBuy();return;}}
   if(PAY_STATUS){PAY_STATUS=false;if(S.stage!==9)go(9);}
-  yearEndNote();
-  if(PAY.failedUntil&&!window.__brigFailNote){window.__brigFailNote=true;toast(`Your last Plus payment did not go through. Mollie will try again. Check your bank account to keep Plus after ${fmtDay(PAY.failedUntil)}.`);}
+  if(PAY.failedUntil&&!window.__brigFailNote){window.__brigFailNote=true;}
   if(S.stage===9&&!V.buy)render();}
 function openBuy(){if(S.stage!==9)go(9);V.buy=true;V.payIv=V.payIv||'';render();}
 async function payStart(){
   if(!V.payIv||!V.payOk||V.payBusy)return;
   V.payBusy=true;render();
-  try{const d=await payCall('start',{interval:V.payIv,consent:true});if(!d.checkout)throw new Error('');location.href=d.checkout;}
+  try{const d=await payCall('start',{interval:V.payIv,consent:true,lang:window.BRIG_LANG==='nl'?'nl':'en'});if(!d.checkout)throw new Error('');location.href=d.checkout;}
+  catch(e){V.payBusy=false;render();toast(e.message||'Something went wrong with the payment service. Please try again.');}
+}
+async function payNow(){
+  if(V.payBusy)return;V.payBusy=true;render();
+  try{const d=await payCall('manage',{action:'paynow'});if(!d.checkout)throw new Error('');location.href=d.checkout;}
   catch(e){V.payBusy=false;render();toast(e.message||'Something went wrong with the payment service. Please try again.');}
 }
 async function payAct(action){
@@ -1722,7 +1721,7 @@ function planCard(){
   return `<div class="card plan"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b>Your plan</b><span class="lvchip" id="coachPlan">${planName()}</span></div>
     <p class="muted" id="coachLeftAccount" style="margin:6px 0 0">${planName()}</p>
     ${lines?`<p style="margin:8px 0 0">${lines}</p>`:''}
-    ${p&&p.failedUntil?`<div class="sconfirm" style="margin-top:12px"><b>Your last payment did not go through</b><p>Mollie will try again in the coming days. Check that your bank account can be debited. If the payment still fails, Plus stops on ${fmtDay(p.failedUntil)}.</p></div>`:''}
+    ${p&&p.failedUntil?`<div class="sconfirm" style="margin-top:12px"><b>Your last payment did not go through</b><p>Pay before ${fmtDay(p.failedUntil)} to keep Plus. If it is not paid by then, your Plus contract ends.</p>${p.canPayNow?`<div class="row" style="margin-top:12px"><button class="btn go" style="flex:1" ${V.payBusy?'disabled':''} onclick="payNow()">Pay now</button></div>`:''}</div>`:''}
     ${isFree()?`<p class="muted" style="margin:8px 0 0">Plus opens all 7 areas. €13.99 a month or €89.99 a year.</p>
       <div class="row" style="margin-top:12px"><button class="btn go" style="flex:1" onclick="openBuy()">Get Plus</button><button class="btn sec" style="flex:1" onclick="go(11)">Plans and prices</button></div>`:''}
     ${acts?`<div style="margin-top:10px">${acts}</div>`:''}</div>`;
@@ -1762,7 +1761,8 @@ function vLegal(){
     <p><b>Coach replies.</b> When you press send, the text you wrote in the assignment is sent to Anthropic, which provides the AI model behind the coach. <b>This processing is not limited to the European Economic Area.</b> It is covered by a data processing agreement and standard contractual clauses. If you would rather not have your text leave the platform, do not use the coach.</p>
     <p><b>Hosting.</b> The site is served by Netlify and its code is held on GitHub. Netlify records technical request logs, including your IP address, to deliver and secure the site.</p>
     <p><b>Reminders.</b> A push reminder travels through the push service of your browser or phone. That service is run by the company behind it, for example Google, Apple, Microsoft or Mozilla. It may process the reminder outside the European Economic Area. A reminder holds only a title, one sentence and a link.</p>
-    <p><b>Payments.</b> Payments for Plus run through Mollie B.V. in Amsterdam. We give Mollie your email address, so it can send your payment receipts, and a reference to your account. You enter your bank or card details at Mollie, not in Brigvanti. We never see or store them. Mollie handles your payment under its own privacy statement.</p>
+    <p><b>Payments.</b> Payments for Plus run through Mollie B.V. in Amsterdam. We give Mollie your email address and a reference to your account. You enter your bank or card details at Mollie, not in Brigvanti. We never see or store them. Mollie handles your payment under its own privacy statement.</p>
+    <p><b>Emails about your plan.</b> If you buy Plus, we email you about it: a confirmation when it starts, a receipt for each payment, a confirmation when you cancel or withdraw, one reminder 30 days before a yearly plan ends, and one email if a monthly payment fails. We send them from our mailbox at Hostinger, using the email address of your account.</p>
     <p>We do not sell your data. We do not use it for advertising. We do not use your assignment text to train any AI model.</p>`)}
 
   ${b('Why we are allowed to hold it',`
@@ -1780,8 +1780,7 @@ function vLegal(){
     <p>Reminders are off until you switch them on. Push reminders are switched on per device, in Account.</p>
     <p>When push is on, we store a push address for that device, your timezone, your app language and a short schedule. The schedule holds the next reminder time, the kind of reminder and the name of the skill or area it mentions.</p>
     <p>We send at most one reminder a day and three a week. After three reminders without a hand in, we stop until you hand in work again.</p>
-    <p>If you have a yearly Plus plan and push is on, we also send a push message 14 days and 3 days before your plan ends.</p>
-    <p>If a monthly payment fails and push is on, we send one push message about it.</p>
+
     <p>A reminder never holds your assignments, your portfolio or a level. It shows a short title, one sentence and a link to the app.</p>
     <p>You can switch push off in Account or in your phone or browser settings. Push stays on when you sign out. Deleting your account deletes all reminder data.</p>`)}
 

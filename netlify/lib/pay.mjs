@@ -7,8 +7,9 @@ export const PRICES = {
   month: { value: '13.99', label: 'Brigvanti Plus, monthly' },
   year: { value: '89.99', label: 'Brigvanti Plus, yearly' },
 };
-// Mollie retries a failed debit up to 5 times, about once a day.
-export const GRACE_DAYS = 7;
+// A failed monthly debit: one email on day 3 after the due date, Plus ends on day 5.
+export const GRACE_DAYS = 5;
+export const FAIL_MAIL_DAYS = 3;
 export const WITHDRAW_DAYS = 14;
 export const CONSENT_VERSION = '2026-11-11';
 // A yearly plan can be renewed in its last 30 days. A cancelled monthly plan can restart before it ends.
@@ -93,7 +94,9 @@ async function signedIn(req, verify) {
 
 const blockedByB2B = (e) => e && e.product === 'b2b';
 
-export function createPayHandlers({ verify, store, mollie, notify = async () => {}, env = process.env, clock = Date.now }) {
+export function createPayHandlers({ verify, store, mollie, mail = async () => {}, env = process.env, clock = Date.now }) {
+  // An email failure never blocks a payment step. It is logged and the step goes on.
+  const send = async (uid, kind, data) => { try { await mail(uid, kind, data); } catch (e) { console.warn('pay mail failed', kind, e.message); } };
   // APP_URL pins Mollie's webhook and return address to the app domain.
   // brigvanti.com moves to the website later, and a subscription keeps the webhook it was created with.
   const site = () => (env.APP_URL || env.URL || '').replace(/\/$/, '');
@@ -106,6 +109,7 @@ export function createPayHandlers({ verify, store, mollie, notify = async () => 
     if (!user) return json({ error: 'Please sign in first.' }, 401);
     if (!mollie) return json({ code: 'pay_off', error: 'Payments are not open yet.' }, 503);
     const body = await req.json().catch(() => ({}));
+    const lang = body.lang === 'nl' ? 'nl' : 'en';
     const interval = body.interval === 'year' ? 'year' : body.interval === 'month' ? 'month' : null;
     if (!interval) return json({ error: 'Choose monthly or yearly.' }, 400);
     if (body.consent !== true) return json({ code: 'consent', error: 'Please confirm the start of Plus first.' }, 400);
@@ -133,8 +137,8 @@ export function createPayHandlers({ verify, store, mollie, notify = async () => 
     });
     // The current plan stays as it is until the new payment is paid.
     await store.setBilling(uid, active
-      ? { customerId: cst, customerMode: mode, pendingPaymentId: pay.id, consent: { version: CONSENT_VERSION, at: now, interval } }
-      : { customerId: cst, customerMode: mode, interval, pendingPaymentId: pay.id, subscriptionId: null, cancelled: false, status: 'pending',
+      ? { customerId: cst, customerMode: mode, lang, pendingPaymentId: pay.id, consent: { version: CONSENT_VERSION, at: now, interval } }
+      : { customerId: cst, customerMode: mode, lang, interval, pendingPaymentId: pay.id, subscriptionId: null, cancelled: false, status: 'pending',
           consent: { version: CONSENT_VERSION, at: now, interval } });
     return json({ checkout: pay._links && pay._links.checkout && pay._links.checkout.href });
   }
@@ -158,14 +162,10 @@ export function createPayHandlers({ verify, store, mollie, notify = async () => 
       await store.setEntitlement(uid, { product: 'b2c', tier: 'free', validUntil: now, source: 'mollie' });
       return new Response('ok');
     }
-    // A failed monthly debit: Mollie retries, Plus runs on through the grace days.
-    // The learner hears about it once per period, by push and in the app.
+    // A failed monthly debit is only recorded here. The daily plan job sends the
+    // one email on day 3 and ends Plus on day 5 if it is still unpaid.
     if (p.status === 'failed' && p.metadata.kind === 'renew' && bill.status === 'active') {
-      if (bill.failNotified !== bill.periodEnd) {
-        await store.setBilling(uid, { failedAt: now, failNotified: bill.periodEnd });
-        try { await notify(uid, 'payment_failed', { until: accessUntil(bill.periodEnd, 'month', false) }); }
-        catch (e) { console.warn('pay notify failed', e.message); }
-      }
+      if (!bill.failedAt) await store.setBilling(uid, { failedAt: now });
       return new Response('ok');
     }
     if (p.status !== 'paid') return new Response('ok');
@@ -173,9 +173,12 @@ export function createPayHandlers({ verify, store, mollie, notify = async () => 
 
     const interval = p.metadata.interval === 'year' ? 'year' : 'month';
     const isStart = p.metadata.kind === 'start';
+    // A catch-up pays the month that failed, so it runs from the old due date
+    // and the subscription's next debit stays on schedule.
+    const catchup = p.metadata.kind === 'catchup' && bill.periodEnd;
     // A renewal starts where the paid period ends, so no paid day is lost.
     const renewing = isStart && bill.status === 'active' && (bill.periodEnd || 0) > now;
-    const from = isStart && !renewing ? now : Math.max(bill.periodEnd || 0, now);
+    const from = catchup ? bill.periodEnd : isStart && !renewing ? now : Math.max(bill.periodEnd || 0, now);
     const periodEnd = addPeriod(from, interval);
     const upd = { status: 'active', interval, periodEnd, lastPaymentId: id, lastAmount: p.amount.value, lastPaidAt: now, failedAt: null };
     if (isStart) Object.assign(upd, {
@@ -199,6 +202,9 @@ export function createPayHandlers({ verify, store, mollie, notify = async () => 
       product: 'b2c', tier: 'plus', source: 'mollie', interval,
       validUntil: accessUntil(periodEnd, interval, isStart ? false : !!bill.cancelled),
     });
+    // The welcome email is also the confirmation of the contract.
+    if (isStart) await send(uid, 'welcome', { lang: bill.lang, interval, amount: p.amount.value, startedAt: now, periodStart: from, periodEnd, withdrawUntil: now + WITHDRAW_DAYS * DAY, renewing });
+    else await send(uid, 'paid', { lang: bill.lang, interval, amount: p.amount.value, paidAt: now, periodEnd });
     return new Response('ok');
   }
 
@@ -216,6 +222,7 @@ export function createPayHandlers({ verify, store, mollie, notify = async () => 
         withdrawUntil: canWithdraw ? b.startedAt + WITHDRAW_DAYS * DAY : null,
         canRenew: canRenew(b, now), renewed: !!b.prev,
         failedUntil: b.failedAt && b.interval === 'month' ? accessUntil(b.periodEnd, 'month', false) : null,
+        canPayNow: !!(b.failedAt && b.interval === 'month' && b.status === 'active' && !b.cancelled),
       };
     };
     if (req.method === 'GET') return json(view(bill));
@@ -228,7 +235,22 @@ export function createPayHandlers({ verify, store, mollie, notify = async () => 
       if (bill.subscriptionId && !bill.cancelled) await mollie.cancelSubscription(bill.customerId, bill.subscriptionId);
       await store.setBilling(uid, { cancelled: true, cancelledAt: now });
       await store.setEntitlement(uid, { validUntil: bill.periodEnd });
+      await send(uid, 'cancelled', { lang: bill.lang, periodEnd: bill.periodEnd });
       return json(view({ ...bill, cancelled: true }));
+    }
+    // Pays the month whose debit failed, by iDEAL or another method at Mollie.
+    if (action === 'paynow') {
+      if (!(bill.failedAt && bill.interval === 'month' && !bill.cancelled)) return json({ code: 'none', error: 'There is no open payment.' }, 409);
+      const pay = await mollie.payment({
+        amount: { currency: 'EUR', value: PRICES.month.value },
+        description: PRICES.month.label,
+        customerId: bill.customerId,
+        sequenceType: 'oneoff',
+        redirectUrl: `${site()}/?pay=return`,
+        webhookUrl: hook(),
+        metadata: { uid, interval: 'month', kind: 'catchup' },
+      });
+      return json({ checkout: pay._links && pay._links.checkout && pay._links.checkout.href });
     }
     if (action === 'withdraw') {
       if (!(bill.startedAt && now - bill.startedAt < WITHDRAW_DAYS * DAY)) {
@@ -242,10 +264,12 @@ export function createPayHandlers({ verify, store, mollie, notify = async () => 
         const back = { interval: bill.prev.interval, periodEnd: bill.prev.periodEnd, cancelled: true, prev: null, withdrawnAt: now, refund: value, subscriptionId: null };
         await store.setBilling(uid, back);
         await store.setEntitlement(uid, { interval: back.interval, validUntil: back.periodEnd });
+        await send(uid, 'withdrawn', { lang: bill.lang, refund: value, keepUntil: back.periodEnd });
         return json({ ...view({ ...bill, ...back }), refund: value });
       }
       await store.setBilling(uid, { status: 'withdrawn', cancelled: true, withdrawnAt: now, refund: value, periodEnd: now });
       await store.setEntitlement(uid, { tier: 'free', validUntil: now });
+      await send(uid, 'withdrawn', { lang: bill.lang, refund: value, keepUntil: null });
       return json({ ...view({ ...bill, status: 'withdrawn' }), refund: value });
     }
     return json({ error: 'Unknown action.' }, 400);

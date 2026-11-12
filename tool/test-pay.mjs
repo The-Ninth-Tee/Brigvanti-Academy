@@ -24,7 +24,7 @@ const mollie = {
 };
 const verify = async (t) => { if (t !== 'good') throw new Error('bad'); return { sub: 'u1', email: 'a@b.c', name: 'Nope' }; };
 const notes = [];
-const h = createPayHandlers({ verify, store, mollie, notify: async (u, k, d) => notes.push([u, k, d]), env: { URL: 'https://app.test' }, clock: () => now });
+const h = createPayHandlers({ verify, store, mollie, mail: async (u, k, d) => notes.push([u, k, d]), env: { URL: 'https://app.test' }, clock: () => now });
 const req = (method, body, auth = 'good') => new Request('https://x/', { method, headers: { authorization: 'Bearer ' + auth, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
 const hook = (id) => h.webhook(new Request('https://x/', { method: 'POST', body: 'id=' + id }));
 const plan = () => resolvePlan(docs.eu1, now);
@@ -56,16 +56,25 @@ await hook('tr_r1');
 assert.equal(docs.bu1.periodEnd, addPeriod(addPeriod(Date.UTC(2026, 10, 11, 10), 'month'), 'month'));
 assert.equal((await (await h.manage(req('POST', { action: 'withdraw' }))).json()).code, 'late');
 
-// A failed monthly debit warns once per period, and a later payment clears it
+assert.deepEqual(notes.map((n) => n[1]), ['welcome', 'paid'], 'welcome on start, receipt on renewal');
+assert.equal(notes[0][2].lang, 'en');
+
+// A failed monthly debit is recorded without a message. Pay now catches up from the old due date.
+const due = docs.bu1.periodEnd;
 payments.tr_f1 = { id: 'tr_f1', status: 'failed', amount: { value: '13.99' }, metadata: { uid: 'u1', interval: 'month', kind: 'renew' } };
 await hook('tr_f1'); await hook('tr_f1');
-assert.equal(notes.length, 1); assert.equal(notes[0][1], 'payment_failed');
-assert.equal(notes[0][2].until, docs.bu1.periodEnd + GRACE_DAYS * DAY);
-assert.ok((await (await h.manage(req('GET'))).json()).failedUntil);
-payments.tr_f2 = { id: 'tr_f2', status: 'paid', amount: { value: '13.99' }, metadata: { uid: 'u1', interval: 'month', kind: 'renew' } };
-await hook('tr_f2');
+assert.equal(notes.length, 2, 'no mail from the webhook');
+let gv = await (await h.manage(req('GET'))).json();
+assert.equal(gv.failedUntil, due + GRACE_DAYS * DAY); assert.equal(gv.canPayNow, true);
+r = await (await h.manage(req('POST', { action: 'paynow' }))).json();
+const cid = r.checkout.split('/').pop();
+assert.equal(payments[cid].metadata.kind, 'catchup');
+Object.assign(payments[cid], { status: 'paid', amount: { value: '13.99' } });
+now = due + 2 * DAY; await hook(cid);
+assert.equal(docs.bu1.periodEnd, addPeriod(due, 'month'), 'catch-up keeps the subscription schedule');
 assert.equal((await (await h.manage(req('GET'))).json()).failedUntil, null);
 assert.equal(plan(), 'plus');
+now = due - 2 * DAY;
 
 // Cancel keeps access to the paid end, no grace
 await h.manage(req('POST', { action: 'cancel' }));
@@ -133,20 +142,25 @@ assert.equal((await off.start(req('POST', { interval: 'month', consent: true }))
 }
 console.log('Payment tests passed.');
 
-// Reminder before a yearly plan ends
-const { dueMark, planEndMessage } = await import('../netlify/lib/plan-remind.mjs');
+// Daily plan job: yearly email at 30 days, failed email on day 3, contract ends on day 5
+const { planActions } = await import('../netlify/lib/plan-remind.mjs');
 const T = Date.UTC(2029, 5, 1), D = 864e5;
 const yb = { status: 'active', interval: 'year', periodEnd: T };
-assert.equal(dueMark(yb, T - 20 * D), null);
-assert.equal(dueMark(yb, T - 13 * D), 14);
-assert.equal(dueMark({ ...yb, endReminded: [14] }, T - 13 * D), null);
-assert.equal(dueMark({ ...yb, endReminded: [14] }, T - 2 * D), 3);
-assert.equal(dueMark(yb, T - 2 * D), 3, 'a late first run sends only the nearest');
-assert.equal(dueMark({ ...yb, interval: 'month' }, T - 2 * D), null);
-assert.equal(dueMark(yb, T + 1), null);
-assert.equal(planEndMessage('nl', T).url, '/?pay=renew');
-const { planMessage } = await import('../netlify/lib/pay-notify.mjs');
-assert.equal(planMessage('en', 'payment_failed', { until: T }).url, '/?pay=status');
+assert.deepEqual(planActions(yb, T - 40 * D), []);
+assert.deepEqual(planActions(yb, T - 29 * D), ['yearly']);
+assert.deepEqual(planActions({ ...yb, yearMailedFor: T }, T - 10 * D), [], 'once per year');
+const mb = { status: 'active', interval: 'month', periodEnd: T, failedAt: T + D };
+assert.deepEqual(planActions(mb, T + 2 * D), []);
+assert.deepEqual(planActions(mb, T + 3 * D), ['failed']);
+assert.deepEqual(planActions({ ...mb, failMailedFor: T }, T + 4 * D), [], 'one email only');
+assert.deepEqual(planActions({ ...mb, failMailedFor: T }, T + 5 * D), ['end']);
+assert.deepEqual(planActions({ ...mb, failedAt: null }, T + 6 * D), [], 'no failure, nothing to end');
+const { planMail } = await import('../netlify/lib/pay-mail.mjs');
+for (const k of ['welcome', 'paid', 'cancelled', 'withdrawn', 'yearly', 'failed']) for (const l of ['en', 'nl']) {
+  const m = planMail(k, { lang: l, interval: 'month', amount: '13.99', startedAt: T, periodStart: T, periodEnd: T, withdrawUntil: T, paidAt: T, refund: '1.00', keepUntil: null, until: T }, 'https://app.test');
+  assert.ok(m.subject && m.text.includes('legal@theninthtee.eu') && !m.text.includes('undefined') && !m.text.includes('Invalid'), k + l);
+}
+assert.ok(planMail('welcome', { lang: 'nl', interval: 'month', amount: '13.99', startedAt: T, periodEnd: T, withdrawUntil: T }, '').text.includes('€ 13,99'));
 console.log('Reminder tests passed.');
 
 // Seven year retention of payment records
