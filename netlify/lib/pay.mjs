@@ -116,7 +116,10 @@ export function createPayHandlers({ verify, store, mollie, notify = async () => 
     const active = bill && bill.status === 'active' && bill.periodEnd > now;
     if (active && !canRenew(bill, now)) return json({ code: 'active', error: 'You already have Plus.' }, 409);
 
-    let cst = bill && bill.customerId;
+    // A Mollie customer exists in test or live mode only. Records from before the
+    // switch to live hold a test customer, so a new one is made in the current mode.
+    const mode = /^live_/.test(env.MOLLIE_API_KEY || '') ? 'live' : 'test';
+    let cst = bill && (bill.customerMode || 'test') === mode && bill.customerId;
     if (!cst) cst = (await mollie.customer(user.email || undefined, uid)).id;
     const price = PRICES[interval];
     const pay = await mollie.payment({
@@ -130,8 +133,8 @@ export function createPayHandlers({ verify, store, mollie, notify = async () => 
     });
     // The current plan stays as it is until the new payment is paid.
     await store.setBilling(uid, active
-      ? { customerId: cst, pendingPaymentId: pay.id, consent: { version: CONSENT_VERSION, at: now, interval } }
-      : { customerId: cst, interval, pendingPaymentId: pay.id, subscriptionId: null, cancelled: false, status: 'pending',
+      ? { customerId: cst, customerMode: mode, pendingPaymentId: pay.id, consent: { version: CONSENT_VERSION, at: now, interval } }
+      : { customerId: cst, customerMode: mode, interval, pendingPaymentId: pay.id, subscriptionId: null, cancelled: false, status: 'pending',
           consent: { version: CONSENT_VERSION, at: now, interval } });
     return json({ checkout: pay._links && pay._links.checkout && pay._links.checkout.href });
   }
