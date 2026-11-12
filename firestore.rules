@@ -23,6 +23,30 @@ service cloud.firestore {
                          && request.auth.uid == userId;
     }
 
+    // Push reminders. The learner writes the schedule fields and their own
+    // devices. lastSentAt, unanswered and sentLog are written only by the
+    // server job, through the Admin SDK, which bypasses these rules.
+    match /reminders/{userId} {
+      allow read, delete: if request.auth != null
+                          && request.auth.uid == userId;
+      allow create: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.data.keys().hasOnly(['active','nextNudgeAt','kind','skillName','areaName','levelUpReady','lastRepAt','lang','tz']);
+      allow update: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active','nextNudgeAt','kind','skillName','areaName','levelUpReady','lastRepAt','lang','tz']);
+
+      match /devices/{deviceId} {
+        allow read, delete: if request.auth != null
+                            && request.auth.uid == userId;
+        allow create, update: if request.auth != null
+                              && request.auth.uid == userId
+                              && request.resource.data.keys().hasOnly(['on','sub','lang','at'])
+                              && request.resource.data.on is bool
+                              && request.resource.data.sub is map;
+      }
+    }
+
     // No other path grants access. Default-deny covers the rest,
     // so there is no public read and no cross-user access.
   }
