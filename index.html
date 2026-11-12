@@ -1583,7 +1583,7 @@ const LEGAL_UPDATED=new Date(2026,10,11).toLocaleDateString(window.BRIG_LANG==='
 /* ---------- Plans, terms and payments ----------
    Plans and Terms are public, so Mollie and visitors can read them before signing in.
    The server sets prices and writes the plan. The browser only starts, cancels or withdraws. */
-const TERMS_UPDATED=new Date(2026,10,11).toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'});
+const TERMS_UPDATED=new Date(2026,10,12).toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'});
 const COMPANY=`The Ninth Tee, Rijswijkstraat 199, 1062 XL Amsterdam, the Netherlands. Chamber of Commerce number 98566903. Support: <b>support@theninthtee.eu</b>. Payments and privacy: <b>legal@theninthtee.eu</b>.`;
 const fmtDay=ms=>new Date(ms).toLocaleDateString(window.BRIG_LANG==='nl'?'nl-NL':'en-GB',{day:'numeric',month:'long',year:'numeric'});
 function vPlans(){
@@ -1608,7 +1608,7 @@ function vPlans(){
 function vTerms(){
   const b=(t,body)=>`<div class="card"><h3>${t}</h3><div style="margin-top:8px">${body}</div></div>`;
   return shell(`<h1>Terms and conditions</h1>
-  <p class="lede">These terms apply to every use of Brigvanti. Version 1, ${TERMS_UPDATED}.</p>
+  <p class="lede">These terms apply to every use of Brigvanti. Version 2, ${TERMS_UPDATED}.</p>
   ${b('1. Who we are',`<p class="muted">${COMPANY}</p><p>In these terms, "we" means The Ninth Tee. "You" means the person who uses Brigvanti.</p>`)}
   ${b('2. What Brigvanti is',`<p>Brigvanti is a learning app for AI skills. It gives you an advisory picture of your level per skill, and assignments built on tasks from your own work.</p>
     <p>Your level is advice. It is not an assessment, a certificate or a qualification. The AI coach gives feedback. It never scores you and never decides your level.</p>
@@ -1618,7 +1618,7 @@ function vTerms(){
   ${b('4. Free and Plus',`<p>Free is free of charge. Plus is a paid plan with more areas and more coached assignments. The plans, prices and limits are on the Plans and prices page.</p>
     <p>The daily and monthly limits on coached assignments protect the service. Unused assignments do not carry over.</p>`)}
   ${b('5. Prices and payment',`<p>Prices are in euro and include VAT. You pay in advance through Mollie.</p>
-    <p>Monthly: the first payment starts Plus. After that, Mollie collects the monthly price from the same account or card each month. If a payment fails, we email you once, 3 days after the due date. You can then pay in Account. If it is still not paid 5 days after the due date, your Plus contract ends.</p>
+    <p>Monthly: Your first payment activates Plus. After that, Mollie automatically collects the monthly fee from the same account or card each month. If a payment fails, we will send you a single reminder email 3 days after the due date, giving you the option to pay manually in your Account. If the balance remains unpaid 5 days after the due date, your Plus subscription will end.</p>
     <p>Yearly: you pay once for 12 months.</p>
     <p>We announce a price change at least 30 days ahead. It applies from your next period. You may cancel before it applies.</p>`)}
   ${b('6. Duration and cancelling',`<p>The monthly plan runs per month until you cancel. You can cancel at any time in Account. Plus then stays until the end of the month you paid for. We do not refund part of a month after cancelling, except when you withdraw under section 7.</p>

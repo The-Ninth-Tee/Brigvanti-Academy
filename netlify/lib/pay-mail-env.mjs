@@ -29,7 +29,7 @@ export async function mailPlan(uid, kind, data) {
   const m = planMail(kind, data, appUrl());
   const attachments = [];
   if (kind === 'welcome') {
-    const file = `brigvanti-terms-v1-${m.lang}.pdf`;
+    const file = `brigvanti-terms-v2-${m.lang}.pdf`;
     const res = await fetch(`${appUrl()}/legal/${file}`);
     if (!res.ok) throw new Error(`terms pdf ${res.status}`);
     attachments.push({ filename: file, content: Buffer.from(await res.arrayBuffer()), contentType: 'application/pdf' });

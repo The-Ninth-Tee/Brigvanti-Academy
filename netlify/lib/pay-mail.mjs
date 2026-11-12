@@ -49,7 +49,7 @@ const T = {
           ? `Je nieuwe periode start op ${day(d.periodStart, 'nl')}, als je huidige periode afloopt.`
           : `Plus is gestart op ${day(d.startedAt, 'nl')}.`,
         d.interval === 'month'
-          ? `Plus wordt elke maand verlengd tot je opzegt. Je volgende betaling is op ${day(d.periodEnd, 'nl')}. Je kunt op elk moment opzeggen in de accountinstellingen.`
+          ? `Plus wordt elke maand verlengd totdat je opzegt. Je volgende betaling is op ${day(d.periodEnd, 'nl')}. Je kunt op elk moment opzeggen in de accountinstellingen.`
           : `Plus stopt op ${day(d.periodEnd, 'nl')}. Het wordt niet automatisch verlengd. We mailen je 30 dagen voordat het afloopt.`,
         d.renewing
           ? `Je kunt annuleren tot ${day(d.withdrawUntil, 'nl')}. Annuleer je voordat je nieuwe periode start, dan krijg je alles terug. Daarna betaal je voor de dagen die je hebt gebruikt.`
@@ -151,9 +151,19 @@ export function planMail(kind, data, appUrl) {
   const open = l === 'nl' ? 'Open Brigvanti' : 'Open Brigvanti';
   const link = `${appUrl}/?pay=status`;
   const text = [hi, '', ...lines.flatMap((x) => [x, '']), `${open}: ${link}`, '', FOOT[l]].join('\n');
-  const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#1b1830;max-width:560px">
-<p>${hi}</p>${lines.map((x) => `<p>${esc(x)}</p>`).join('')}
-<p><a href="${link}" style="display:inline-block;background:#C6F432;color:#0B0B14;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:700">${open}</a></p>
-<p style="font-size:12px;color:#666">${esc(FOOT[l])}</p></div>`;
+  // Table layout and inline styles, so Outlook and Gmail show it the same way.
+  const logo = `${appUrl}/Icons/app-icon-192.png`;
+  const html = `<!doctype html><html lang="${l}"><body style="margin:0;padding:0;background:#F2F1F7">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F2F1F7"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="width:100%;max-width:560px;background:#FFFFFF;border-radius:16px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#1B1830">
+<tr><td style="background:#0B0B14;padding:18px 28px"><table role="presentation" cellpadding="0" cellspacing="0"><tr>
+<td><img src="${logo}" width="36" height="36" alt="" style="display:block;border:0;border-radius:9px"></td>
+<td style="padding-left:12px;font-size:20px;font-weight:700;color:#FFFFFF">Brigvanti</td></tr></table></td></tr>
+<tr><td style="padding:28px 28px 8px"><h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;color:#1B1830">${esc(subject)}</h1>
+<p style="margin:0 0 14px;font-size:15px;line-height:1.55">${hi}</p>
+${lines.map((x) => `<p style="margin:0 0 14px;font-size:15px;line-height:1.55">${esc(x)}</p>`).join('')}</td></tr>
+<tr><td style="padding:4px 28px 28px"><a href="${link}" style="display:inline-block;background:#C6F432;color:#0B0B14;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:700;font-size:15px">${open}</a></td></tr>
+<tr><td style="padding:18px 28px;background:#F7F6FB;border-top:1px solid #E6E4EF;font-size:12px;line-height:1.5;color:#6B6880">${esc(FOOT[l])}</td></tr>
+</table></td></tr></table></body></html>`;
   return { subject, text, html, lang: l };
 }
