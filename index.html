@@ -1344,11 +1344,12 @@ async function signIn(how){
   }
 }
 async function signOutUser(){
-  /* Flush the latest state to the server before leaving, so a finished scan is
-     never lost at logout. The device copy is kept as a backstop. Its storage
-     key is per user, so the next person on this browser cannot see it through
-     the app. */
+  /* Save to the server first. The device copy is cleared only once the server
+     confirms the save. If it fails, the copy stays as a backstop. */
+  if(window.storage)window.storage.serverOk=false;
   try{ await save(); }catch(e){}
+  if(window.storage&&window.storage.serverOk)window.storage.clearLocal(KEY);
+  else toast('Your latest changes could not reach the server. They stay on this device until you sign in again.');
   if(window.brigvantiAuth){try{await window.brigvantiAuth.doSignOut();}catch(e){}}
 }
 
@@ -1732,7 +1733,7 @@ function vLegal(){
   <p class="lede">Written in plain language, because you cannot consent to something you cannot read. Last updated ${LEGAL_UPDATED}.</p>
 
   ${b('Who is responsible',`
-    <p>Brigvanti is the controller of your personal data under the GDPR.</p>
+    <p>The Ninth Tee is the controller of your personal data under the GDPR. Brigvanti is our product.</p>
     <p class="muted">The Ninth Tee, Rijswijkstraat 199, 1062 XL Amsterdam, the Netherlands.
     Chamber of Commerce number 98566903. Questions and requests: <b>legal@theninthtee.eu</b>.</p>`)}
 
@@ -1751,6 +1752,7 @@ function vLegal(){
       <li>Your badges, streak and assignment history</li>
       <li>Your portfolio: the text of each assignment you hand in, the coach reply, and what you wrote when you claimed a level</li>
       <li>If you switch reminders on: a push address for each device, your timezone, your app language and a reminder schedule</li>
+      <li>How many coach replies you used today and this month, so we can apply the limits of your plan</li>
       <li>If you buy Plus: your plan, the dates and amounts of your payments, when you agreed that Plus starts straight away, and the reference numbers Mollie gives to you and your payments</li>
     </ul>
     <p style="margin-top:12px">We ask you not to enter special category data. That means health details, political or religious views, trade union membership, ethnic origin, sexual orientation, or biometric and genetic data. We also ask you not to enter identification numbers, bank details, or another person's personal data. The app repeats this warning at every point where you type.</p>`)}
@@ -1758,22 +1760,22 @@ function vLegal(){
   ${b('Where your data goes',`
     <p>Read this part carefully, because it is the part people assume wrongly.</p>
     <p><b>Stored data.</b> Your account, progress and assignment history are stored by Google Firebase. We use European region storage where the service offers it. Google may still process some data outside the European Economic Area under the European Commission's standard contractual clauses.</p>
-    <p><b>Coach replies.</b> When you press send, the text you wrote in the assignment is sent to Anthropic, which provides the AI model behind the coach. <b>This processing is not limited to the European Economic Area.</b> It is covered by a data processing agreement and standard contractual clauses. If you would rather not have your text leave the platform, do not use the coach.</p>
-    <p><b>Hosting.</b> The site is served by Netlify and its code is held on GitHub. Netlify records technical request logs, including your IP address, to deliver and secure the site.</p>
+    <p><b>Coach replies.</b> When you press send, the text you wrote in the assignment is sent to Anthropic, which provides the AI model behind the coach. <b>This processing is not limited to the European Economic Area.</b> It is covered by a data processing agreement and standard contractual clauses. Anthropic deletes this text within 30 days. Text that its safety systems flag is kept for up to two years. If you would rather not have your text leave the platform, do not use the coach.</p>
+    <p><b>Hosting.</b> The site is served by Netlify and its code is held on GitHub. Netlify records technical request logs, including your IP address, to deliver and secure the site. Our server functions run at Netlify in the United States. They pass your text to the coach and handle payments, emails and reminders. This is covered by the EU-US Data Privacy Framework.</p>
     <p><b>Reminders.</b> A push reminder travels through the push service of your browser or phone. That service is run by the company behind it, for example Google, Apple, Microsoft or Mozilla. It may process the reminder outside the European Economic Area. A reminder holds only a title, one sentence and a link.</p>
     <p><b>Payments.</b> Payments for Plus run through Mollie B.V. in Amsterdam. We give Mollie your email address and a reference to your account. You enter your bank or card details at Mollie, not in Brigvanti. We never see or store them. Mollie handles your payment under its own privacy statement.</p>
-    <p><b>Emails about your plan.</b> If you buy Plus, we email you about it: a confirmation when it starts, a receipt for each payment, a confirmation when you cancel or withdraw, one reminder 30 days before a yearly plan ends, and one email if a monthly payment fails. We send them from our mailbox at Hostinger, using the email address of your account.</p>
+    <p><b>Emails about your plan.</b> If you buy Plus, we email you about it: a confirmation when it starts, a receipt for each payment, a confirmation when you cancel or withdraw, one reminder 30 days before a yearly plan ends, and one email if a monthly payment fails. We send them from our mailbox at Hostinger, using the email address of your account. Hostinger may process mail outside the European Economic Area under the European Commission's standard contractual clauses.</p>
     <p>We do not sell your data. We do not use it for advertising. We do not use your assignment text to train any AI model.</p>`)}
 
   ${b('Why we are allowed to hold it',`
     <p><b>Consent</b> for running the scan, storing your progress, and sending your text to the coach. You may withdraw it at any time, and withdrawing does not affect what happened before.</p>
-    <p><b>Legitimate interest</b> for keeping the service secure and working, and for improving the questions using data that no longer identifies you.</p>
+    <p><b>Legitimate interest</b> for keeping the service secure and working, for applying the coach limits of your plan, and for improving the questions using data that no longer identifies you.</p>
     <p><b>Contract</b> for handling your Plus plan and its payments. <b>Legal obligation</b> for keeping payment records, because Dutch tax law requires it.</p>`)}
 
   ${b('Your portfolio',`
     <p>Your portfolio is the record of what you made. It holds the text you wrote in each assignment, the coach reply, and the note you added when you claimed a level.</p>
     <p>It exists for one reason, which is so you can find your own work again and see how it changed. Nobody at Brigvanti reviews it, scores it, or checks whether a level you claimed was deserved. It is not shared with an employer by us.</p>
-    <p>It is stored with the rest of your account in Firebase, and a copy is held on this device so the app works when you are offline. You can download the whole portfolio as a spreadsheet at any time from Your progress.</p>
+    <p>It is stored with the rest of your account in Firebase, and a copy is held on this device so the app works when you are offline. When you log out, we clear that copy once your work is safely saved on the server. You can download the whole portfolio as a spreadsheet at any time from Your progress.</p>
     <p>Because it holds text you wrote yourself, it is the part of your account most likely to contain something personal. That is why we ask you not to enter private details, and why you can erase all of it in one action.</p>`)}
 
   ${b('Reminders',`
@@ -2722,9 +2724,11 @@ window.storage={
       merged=M.mergeState(lobj,sobj)||lobj;
       const s=JSON.stringify(merged);
       await setDoc(doc(db,'users',uid),{ blob:s, updated:Date.now() });
+      this.serverOk=true;
       try{ localStorage.setItem(cacheKey(key),s); }catch(e){}
       return s;
     }catch(e){
+      this.serverOk=false;
       /* The device copy is already saved above, so nothing is lost. The error
          code tells us why the server write failed. permission-denied points at
          the security rules, unavailable at the connection or database. */
