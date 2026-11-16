@@ -55,6 +55,21 @@ const departmentOf = (org, name) => {
   return (org.departments || []).find((d) => d.toLowerCase() === key) || null;
 };
 
+// Merging departments (decided 16 Nov 2026). Two departments under 10 people may merge, and so may two of
+// 10 or more. A department under 10 never merges into one of 10 or more: the new figure, compared with the
+// figure the bigger department showed before, would reveal the hidden group.
+export const DEPARTMENT_MIN = 10;
+export function planMerge(org, members, from, into) {
+  const a = departmentOf(org, from), b = departmentOf(org, into);
+  if (!a || !b) return { error: 'unknown_department' };
+  if (a === b) return { error: 'same_department' };
+  const size = (d) => members.filter((m) => (m.status === 'invited' || m.status === 'active') && m.department === d).length;
+  const small = (d) => size(d) < DEPARTMENT_MIN;
+  if (small(a) !== small(b)) return { error: 'hidden_into_shown' };
+  const moved = members.filter((m) => m.department === a).map((m) => ({ ...m, department: b }));
+  return { departments: org.departments.filter((d) => d !== a), moved, into: b, people: size(a) + size(b) };
+}
+
 export const contractActive = (org, now) => now >= org.contractStart && now < org.contractEnd;
 export const tenantMatches = (token, org) => !!(token && token.firebase && org && token.firebase.tenant === org.tenantId);
 
