@@ -2610,6 +2610,8 @@ window.brigvantiApp={
     window.storage.syncFromServer(KEY).then(function(merged){
       if(merged){
         S=mergeState(S,merged);
+        /* Until the coach server answers, show the plan from the saved copy, not the empty start state. The server answer always wins. */
+        if(!COACH.plan&&merged.plan)S.plan=merged.plan;
         if(S.stage===1&&!NAV.length&&setupDone())S.stage=6;
         LAST=-1;render(); save(); enableAnalytics();
       }
