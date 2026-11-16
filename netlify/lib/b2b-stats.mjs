@@ -1,6 +1,7 @@
 // Company totals and averages for the dashboard and the Article 4 report.
 // Rules (B2B privacy rules, 5 Nov 2026; DPIA B2B section 6.3):
-//   a department figure needs at least 10 people with a seat in that department,
+//   the company level and area averages need at least 10 learners with a level (D11, 16 Nov 2026),
+//   a department figure needs at least 10 people with a seat in that department and 5 with a level,
 //   every other figure needs at least 5 people behind it,
 //   counts of 1 to 4 are never shown,
 //   levels leave as a whole named level, never as a precise average,
@@ -9,6 +10,7 @@
 
 export const MIN_DEPARTMENT = 10;
 export const MIN_GROUP = 5;
+export const MIN_LEVELS = 10;
 export const HIDDEN = Object.freeze({ hidden: true });
 
 const holdsSeat = (m) => m.status === 'invited' || m.status === 'active';
@@ -53,12 +55,12 @@ export function companyStats({ org, members, summaries, now, months = 6, selfRep
   const activeNow = learners.filter((l) => l.handedIn[thisMonth] > 0).length;
 
   const placed = learners.filter((l) => l.overall != null);
-  const companyLevel = placed.length < MIN_GROUP ? HIDDEN : { level: named(placed.map((l) => l.overall)) };
+  const companyLevel = placed.length < MIN_LEVELS ? HIDDEN : { level: named(placed.map((l) => l.overall)) };
 
   const areaIds = [...new Set(learners.flatMap((l) => Object.keys(l.areas)))].sort();
   const areas = Object.fromEntries(areaIds.map((a) => {
     const v = learners.filter((l) => l.areas[a] != null).map((l) => l.areas[a]);
-    return [a, v.length < MIN_GROUP ? HIDDEN : { level: named(v) }];
+    return [a, v.length < MIN_LEVELS ? HIDDEN : { level: named(v) }];
   }));
 
   // Departments: shown only from 10 people with a seat, and 5 placed learners.
@@ -78,6 +80,7 @@ export function companyStats({ org, members, summaries, now, months = 6, selfRep
       shown.sort((a, b) => a.contributors - b.contributors)[0].show = false;
     }
   }
+  if (companyLevel.hidden) for (const d of dept) d.show = false;
   const departments = dept.map((d) => (d.show ? { name: d.name, people: d.people, level: d.level } : { name: d.name, ...HIDDEN }));
 
   return {

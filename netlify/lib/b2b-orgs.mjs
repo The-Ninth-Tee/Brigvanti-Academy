@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 
 export const DAY = 86400000;
 export const READ_ONLY_DAYS = 30; // decided 12 Nov 2026: coach stops at once, account deleted 30 days later
-export const MIN_SEATS = 25;      // decided 16 Nov 2026: no B2B contract under 25 seats
+export const MIN_SEATS = 20;      // decided 16 Nov 2026: no B2B contract under 20 seats; smaller companies get B2C Plus
 export const MAX_DEPARTMENTS = 50;
 
 export const normEmail = (e) => String(e || '').trim().toLowerCase();

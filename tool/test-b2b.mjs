@@ -67,8 +67,8 @@ const ORG = { orgId: 'northwind', name: 'Northwind Logistics', tenantId: 'northw
 const tok = (email, uid = 'u9', tenant = ORG.tenantId) => ({ uid, email, firebase: { tenant } });
 
 check('a company record is validated', () => {
-  assert.deepEqual(O.validateOrg({ ...ORG, seats: 25 }), []);
-  assert.deepEqual(O.validateOrg({ ...ORG, seats: 24 }), ['seats'], 'no contract under 25 seats');
+  assert.deepEqual(O.validateOrg({ ...ORG, seats: 20 }), []);
+  assert.deepEqual(O.validateOrg({ ...ORG, seats: 19 }), ['seats'], 'no contract under 20 seats');
   assert.deepEqual(O.validateOrg({ ...ORG, orgId: 'X', domains: [], seats: 0, contractEnd: T0 }), ['orgId', 'domains', 'seats', 'contract']);
 });
 
@@ -191,7 +191,26 @@ check('a group under 5 shows no figure, and no count of 1 to 4 is shown', () => 
   const u = company(many('Sales', 6, 2, 2));
   assert.equal(u.activeThisMonth, 6);
   assert.equal(u.assignmentsThisMonth, 12);
-  assert.deepEqual(u.companyLevel, { level: 2 });
+});
+
+check('the company level and area averages need 10 learners with a level', () => {
+  const nine = company(many('Sales', 9, 2, 1));
+  assert.deepEqual(nine.companyLevel, HIDDEN);
+  assert.deepEqual(nine.areas.D1, HIDDEN);
+  assert.equal(nine.activeThisMonth, 9, 'counts keep the 5 rule');
+  const ten = company(many('Sales', 10, 2, 1));
+  assert.deepEqual(ten.companyLevel, { level: 2 });
+  assert.deepEqual(ten.areas.D1, { level: 2 });
+});
+
+check('departments show only on top of a shown company level', () => {
+  // Sales has 12 seats and 7 learners with a level: its own rule is met, but the company level is hidden.
+  const invited = Array.from({ length: 5 }, (_, i) => ({ email: `n${i}@northwind.example`, department: 'Sales', status: 'invited', uid: null }));
+  const s = company(many('Sales', 7, 2), invited);
+  assert.deepEqual(s.companyLevel, HIDDEN);
+  assert.deepEqual(s.departments, [{ name: 'Sales', hidden: true }]);
+  const t = company(many('Sales', 10, 2), invited);
+  assert.deepEqual(t.departments, [{ name: 'Sales', people: 15, level: 2 }]);
 });
 
 check('a department needs 10 people with a seat and 5 placed learners', () => {
@@ -229,7 +248,7 @@ check('ended seats and invites without a sign-in are not counted as learners', (
 });
 
 check('company figures are marked self-reported until scoring runs on the server', () => {
-  assert.equal(company(many('Sales', 6, 2)).selfReported, true);
+  assert.equal(company(many('Sales', 10, 2)).selfReported, true);
 });
 
 let failed = 0;
