@@ -8,6 +8,8 @@ import { createPayHandlers } from '../netlify/lib/pay.mjs';
 import { createAccountDelete } from '../netlify/lib/account-delete.mjs';
 import * as O from '../netlify/lib/b2b-orgs.mjs';
 import { learnerSummary, companyStats, HIDDEN } from '../netlify/lib/b2b-stats.mjs';
+import { sweepOrphans } from '../netlify/lib/account-sweep.mjs';
+import { runSeatEnd, DATA_ORDER } from '../netlify/lib/b2b-seat-end.mjs';
 import { resolvePlan } from '../netlify/lib/coach-caps.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -249,6 +251,81 @@ check('ended seats and invites without a sign-in are not counted as learners', (
 
 check('company figures are marked self-reported until scoring runs on the server', () => {
   assert.equal(company(many('Sales', 10, 2)).selfReported, true);
+});
+
+// Consumer sweep and B2B seat end
+check('the consumer sweep still removes orphaned consumer data, and never touches a company seat holder', async () => {
+  const removed = [];
+  const refsById = { c1: ['users/c1', 'usage/c1'], gone: ['users/gone', 'entitlements/gone'], seat: ['users/seat', 'entitlements/seat'], plusGone: ['entitlements/plusGone'] };
+  const ents = { gone: null, seat: { product: 'b2b', orgId: 'northwind', validUntil: 0 }, plusGone: { product: 'b2c', tier: 'plus' } };
+  const r = await sweepOrphans({
+    refsById,
+    getUsers: async (ids) => ({ notFound: ids.filter((u) => u !== 'c1') }),
+    entitlement: async (uid) => ents[uid] || null,
+    remove: async (ref) => removed.push(ref),
+  });
+  assert.deepEqual(removed.sort(), ['entitlements/gone', 'entitlements/plusGone', 'users/gone']);
+  assert.deepEqual(r, { accounts: 4, removed: 2, companySkipped: 1 });
+});
+
+function seatStore(org, members, failSignIn = new Set()) {
+  const log = [], ents = {};
+  const mem = Object.fromEntries(members.map((m) => [m.seatId, { ...m }]));
+  return {
+    log, mem, ents,
+    orgs: async () => [org],
+    members: async () => Object.values(mem).map((m) => ({ ...m })),
+    setMember: async (o, id, m) => { mem[id] = { ...mem[id], ...m }; log.push(['set', id, mem[id].status]); },
+    deleteMember: async (o, id) => { delete mem[id]; log.push(['deleteMember', id]); },
+    setEntitlement: async (uid, e) => { ents[uid] = e; },
+    deleteSignIn: async (t, uid) => { if (failSignIn.has(uid)) throw new Error('auth down'); log.push(['deleteSignIn', t, uid]); },
+    deleteData: async (path, uid) => log.push(['deleteData', path, uid]),
+  };
+}
+const seat = (id, extra) => ({ seatId: id, email: id + '@northwind.example', department: 'Sales', status: 'active', uid: 'u-' + id, invitedAt: T0, firstSignInAt: T0, endedAt: null, deleteAfter: null, ...extra });
+
+check('at contract end every seat ends, the coach stops, and nothing is deleted yet', async () => {
+  const st = seatStore(ORG, [seat('a'), seat('b', { status: 'invited', uid: null, firstSignInAt: null })]);
+  const r = await runSeatEnd({ store: st, now: ORG.contractEnd + O.DAY });
+  assert.equal(r.ended, 2);
+  assert.equal(st.mem.a.status, 'ended');
+  assert.equal(st.mem.a.deleteAfter, ORG.contractEnd + 30 * O.DAY);
+  assert.equal(resolvePlan(st.ents['u-a'], ORG.contractEnd + O.DAY), 'b2b_ended');
+  assert.ok(!st.log.some((l) => l[0] === 'deleteSignIn'), 'no account deleted in the 30 days');
+  assert.equal(r.invitesRemoved, 1, 'an unused invite has nothing to keep');
+});
+
+check('30 days after the seat ended the account goes: sign-in first, plan record last, then the seat', async () => {
+  const st = seatStore(ORG, [seat('a', { status: 'ended', endedAt: T0, deleteAfter: T0 + 30 * O.DAY })]);
+  await runSeatEnd({ store: st, now: T0 + 29 * O.DAY });
+  assert.ok(st.mem.a, 'still there on day 29');
+  const r = await runSeatEnd({ store: st, now: T0 + 30 * O.DAY });
+  assert.equal(r.deleted, 1);
+  const order = st.log.filter((l) => l[0] !== 'set').map((l) => l[0] === 'deleteData' ? l[1] : l[0]);
+  assert.deepEqual(order, ['deleteSignIn', ...DATA_ORDER, 'deleteMember']);
+  assert.equal(DATA_ORDER[DATA_ORDER.length - 1], 'entitlements');
+  assert.equal(st.mem.a, undefined, 'the seat record with the email is gone');
+  assert.deepEqual(st.log.find((l) => l[0] === 'deleteSignIn'), ['deleteSignIn', ORG.tenantId, 'u-a'], 'deleted in the company tenant');
+});
+
+check('a deletion that fails keeps all data, is marked and finishes on the next run', async () => {
+  const fail = new Set(['u-a']);
+  const st = seatStore(ORG, [seat('a', { status: 'ended', endedAt: T0, deleteAfter: T0 })], fail);
+  const r1 = await runSeatEnd({ store: st, now: T0 + O.DAY });
+  assert.equal(r1.failed, 1);
+  assert.equal(st.mem.a.status, 'deleting');
+  assert.ok(!st.log.some((l) => l[0] === 'deleteData'), 'no data deleted while the sign-in still works');
+  fail.clear();
+  const r2 = await runSeatEnd({ store: st, now: T0 + O.DAY });
+  assert.equal(r2.deleted, 1);
+  assert.equal(st.mem.a, undefined);
+});
+
+check('an active seat in a running contract is never touched', async () => {
+  const st = seatStore(ORG, [seat('a')]);
+  const r = await runSeatEnd({ store: st, now: T0 + 100 * O.DAY });
+  assert.deepEqual(st.log, []);
+  assert.equal(r.ended + r.deleted, 0);
 });
 
 let failed = 0;
