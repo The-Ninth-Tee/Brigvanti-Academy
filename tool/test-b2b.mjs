@@ -397,6 +397,40 @@ check('a failed Delete my account keeps the data and the seat end job finishes i
   assert.equal(st.mem[id], undefined);
 });
 
+// Merging departments and one main department per person
+const deptMembers = (counts) => Object.entries(counts).flatMap(([d, n]) => Array.from({ length: n }, (_, i) => ({ email: `${d}${i}@northwind.example`, department: d, status: 'active', uid: d + i })));
+
+check('two small departments may merge, and everyone moves', () => {
+  const members = deptMembers({ HR: 6, Ops: 4, Sales: 18 });
+  const r = O.planMerge(ORG, members, 'ops', 'HR');
+  assert.equal(r.error, undefined);
+  assert.equal(r.people, 10, 'merged group reaches 10');
+  assert.equal(r.moved.length, 4);
+  assert.ok(r.moved.every((m) => m.department === 'HR'));
+  assert.ok(!r.departments.includes('Ops'));
+});
+
+check('a hidden department never merges into a shown one, in either direction', () => {
+  const members = deptMembers({ HR: 6, Sales: 18, Finance: 12 });
+  assert.equal(O.planMerge(ORG, members, 'HR', 'Sales').error, 'hidden_into_shown');
+  assert.equal(O.planMerge(ORG, members, 'Sales', 'HR').error, 'hidden_into_shown');
+  assert.equal(O.planMerge(ORG, members, 'Finance', 'Sales').error, undefined, 'two shown departments may reorganise');
+  assert.equal(O.planMerge(ORG, members, 'HR', 'Nope').error, 'unknown_department');
+  assert.equal(O.planMerge(ORG, members, 'HR', 'hr').error, 'same_department');
+});
+
+check('each person has one main department: a list of departments is refused', () => {
+  const r = O.planInvites(ORG, [], [
+    { email: 'a@northwind.example', department: ['HR', 'Sales'] },
+    { email: 'b@northwind.example', department: 'HR; Sales' },
+    { email: 'c@northwind.example', department: 'HR' },
+    { email: 'c@northwind.example', department: 'Sales' },
+  ], T0);
+  assert.deepEqual(r.refused.map((x) => x.reason), ['unknown_department', 'unknown_department', 'already_has_seat']);
+  assert.equal(r.add.length, 1);
+  assert.equal(r.add[0].member.department, 'HR');
+});
+
 let failed = 0;
 for (const [name, fn] of checks) {
   try { await fn(); console.log(`ok    ${name}`); }
