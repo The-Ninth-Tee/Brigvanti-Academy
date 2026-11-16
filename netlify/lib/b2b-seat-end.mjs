@@ -10,6 +10,15 @@ const holdsSeat = (m) => m.status === 'invited' || m.status === 'active';
 // The plan record goes last, because the consumer sweep skips an account while it says product 'b2b'.
 export const DATA_ORDER = ['users', 'usage', 'reminders', 'entitlements'];
 
+// Deletes one seat holder's account. Used by the seat end job and by Delete my account.
+// The seat is marked first, so a run that stops halfway is finished by the next seat end run.
+export async function deleteSeatAccount(store, org, member) {
+  if (member.status !== 'deleting') await store.setMember(org.orgId, member.seatId, { status: 'deleting' });
+  await store.deleteSignIn(org.tenantId, member.uid);
+  for (const path of DATA_ORDER) await store.deleteData(path, member.uid);
+  await store.deleteMember(org.orgId, member.seatId);
+}
+
 export async function runSeatEnd({ store, now, budgetMs = 24000, clock = Date.now }) {
   const t0 = clock();
   const out = { orgs: 0, ended: 0, deleted: 0, invitesRemoved: 0, failed: 0 };
@@ -28,10 +37,7 @@ export async function runSeatEnd({ store, now, budgetMs = 24000, clock = Date.no
         const due = (cur.status === 'ended' || cur.status === 'removed') && cur.deleteAfter != null && now >= cur.deleteAfter;
         if (!due && cur.status !== 'deleting') continue;
         if (!cur.uid) { await store.deleteMember(org.orgId, cur.seatId); out.invitesRemoved++; continue; }
-        if (cur.status !== 'deleting') await store.setMember(org.orgId, cur.seatId, { status: 'deleting' });
-        await store.deleteSignIn(org.tenantId, cur.uid);
-        for (const path of DATA_ORDER) await store.deleteData(path, cur.uid);
-        await store.deleteMember(org.orgId, cur.seatId);
+        await deleteSeatAccount(store, org, cur);
         out.deleted++;
       } catch (e) {
         out.failed++;
@@ -55,5 +61,8 @@ export function firestoreSeatEndStore(db, auth) {
       catch (e) { if (e.code !== 'auth/user-not-found') throw e; }
     },
     deleteData: (path, uid) => db.recursiveDelete(db.doc(`${path}/${uid}`)),
+    getOrg: async (id) => { const s = await db.doc(`orgs/${id}`).get(); return s.exists ? { orgId: id, ...s.data() } : null; },
+    member: async (orgId, sid) => { const s = await members(orgId).doc(sid).get(); return s.exists ? { seatId: sid, ...s.data() } : null; },
+    entitlement: async (uid) => { const s = await db.doc(`entitlements/${uid}`).get(); return s.exists ? s.data() : null; },
   };
 }

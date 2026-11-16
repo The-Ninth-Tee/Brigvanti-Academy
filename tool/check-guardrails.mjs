@@ -59,10 +59,15 @@ if (!wf.includes('node tool/probe-coach-cap.mjs')) problems.push('the GitHub wat
 const bi = args.indexOf('--base');
 if (bi >= 0) {
   const base = args[bi + 1] || 'origin/main';
+  let changed;
   try {
-    const changed = execFileSync('git', ['-C', ROOT, 'diff', '--name-only', base, '--', ...PROTECTED, LOCK, 'netlify.toml', 'tool/check-guardrails.mjs'], { encoding: 'utf8' }).split('\n').filter(Boolean);
-    console.log(changed.length ? `Guarded files changed against ${base}:\n  ${changed.join('\n  ')}` : `No guarded file changed against ${base}.`);
-  } catch (e) { problems.push(`could not compare with ${base}`); }
+    changed = execFileSync('git', ['-C', ROOT, 'diff', '--name-only', base, '--', ...PROTECTED, LOCK, 'netlify.toml', 'tool/check-guardrails.mjs'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean);
+  } catch {
+    // A typing error in the branch name is not a guardrail problem. Say so, and check nothing.
+    console.error(`Branch name not found: ${base}. Nothing was compared or checked. Try: --base origin/main`);
+    process.exit(2);
+  }
+  console.log(changed.length ? `Guarded files changed against ${base}:\n  ${changed.join('\n  ')}` : `No guarded file changed against ${base}.`);
 }
 
 if (problems.length) {
