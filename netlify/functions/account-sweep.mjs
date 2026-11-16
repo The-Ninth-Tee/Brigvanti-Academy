@@ -1,27 +1,20 @@
 // Daily clean up: plan, usage, reminder and progress data whose sign in no longer
 // exists. Catches a deletion that stopped halfway. Billing and payclaims stay,
-// billing-purge handles those.
+// billing-purge handles those. Company seat holders are skipped: see lib/account-sweep.mjs.
 import { adminAuth, db } from '../lib/firebase-admin.mjs';
-
-const BUDGET_MS = 24000;
-const PATHS = ['entitlements', 'usage', 'users', 'reminders'];
+import { sweepOrphans, SWEEP_PATHS } from '../lib/account-sweep.mjs';
 
 export default async () => {
-  const t0 = Date.now();
-  const refs = {};
+  const refsById = {};
   // listDocuments also returns parents that only hold subcollections, such as usage/{uid}.
-  for (const c of PATHS) for (const r of await db.collection(c).listDocuments()) (refs[r.id] ||= []).push(r);
-  const ids = Object.keys(refs);
-  let removed = 0;
-  for (let i = 0; i < ids.length && Date.now() - t0 < BUDGET_MS; i += 100) {
-    const batch = ids.slice(i, i + 100);
-    const res = await adminAuth.getUsers(batch.map((uid) => ({ uid })));
-    for (const nf of res.notFound) {
-      for (const r of refs[nf.uid]) await db.recursiveDelete(r);
-      removed++;
-    }
-  }
-  console.log('[account-sweep]', JSON.stringify({ accounts: ids.length, removed }));
+  for (const c of SWEEP_PATHS) for (const r of await db.collection(c).listDocuments()) (refsById[r.id] ||= []).push(r);
+  const result = await sweepOrphans({
+    refsById,
+    getUsers: async (uids) => ({ notFound: (await adminAuth.getUsers(uids.map((uid) => ({ uid })))).notFound.map((n) => n.uid) }),
+    entitlement: async (uid) => { const s = await db.doc(`entitlements/${uid}`).get(); return s.exists ? s.data() : null; },
+    remove: (r) => db.recursiveDelete(r),
+  });
+  console.log('[account-sweep]', JSON.stringify(result));
 };
 
 // Daily at 03:45 UTC.
