@@ -10,6 +10,8 @@ import * as O from '../netlify/lib/b2b-orgs.mjs';
 import { learnerSummary, companyStats, HIDDEN } from '../netlify/lib/b2b-stats.mjs';
 import { sweepOrphans } from '../netlify/lib/account-sweep.mjs';
 import { runSeatEnd, DATA_ORDER } from '../netlify/lib/b2b-seat-end.mjs';
+import { tenantOf, companyVerifier } from '../netlify/lib/b2b-auth.mjs';
+import { createB2bAccountDelete } from '../netlify/lib/b2b-account-delete.mjs';
 import { resolvePlan } from '../netlify/lib/coach-caps.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -326,6 +328,73 @@ check('an active seat in a running contract is never touched', async () => {
   const r = await runSeatEnd({ store: st, now: T0 + 100 * O.DAY });
   assert.deepEqual(st.log, []);
   assert.equal(r.ended + r.deleted, 0);
+});
+
+// Company sign-in check and Delete my account
+const jwt = (payload) => ['e30', Buffer.from(JSON.stringify(payload)).toString('base64url'), 'sig'].join('.');
+
+check('a company sign-in is verified inside its own tenant only', async () => {
+  const asked = [];
+  const auth = { tenantManager: () => ({ authForTenant: (t) => ({ verifyIdToken: async (tok) => { asked.push(t); if (tok.endsWith('bad')) throw new Error('sig'); return { uid: 'u-a', email: 'a@northwind.example', firebase: { tenant: t } }; } }) }) };
+  const v = companyVerifier(auth);
+  assert.equal(tenantOf(jwt({ firebase: { tenant: 'northwind-x1y2' } })), 'northwind-x1y2');
+  assert.equal((await v(jwt({ firebase: { tenant: 'northwind-x1y2' } }))).uid, 'u-a');
+  assert.deepEqual(asked, ['northwind-x1y2']);
+  await assert.rejects(v(jwt({ firebase: { sign_in_provider: 'password' } })), /not a company/, 'a consumer token never passes');
+  await assert.rejects(v(jwt({ firebase: { tenant: 'northwind-x1y2' } }) + 'bad'));
+  await assert.rejects(v('nonsense'));
+});
+
+function deleteHarness({ ent, member, failSignIn } = {}) {
+  const st = seatStore(ORG, member === null ? [] : [member || seat('a')], failSignIn);
+  st.getOrg = async (id) => (id === ORG.orgId ? ORG : null);
+  st.member = async (o, sid) => (st.mem[sid] ? { ...st.mem[sid] } : null);
+  st.entitlement = async () => (ent === undefined ? { product: 'b2b', orgId: ORG.orgId, validUntil: ORG.contractEnd } : ent);
+  const user = { uid: 'u-a', email: 'a@northwind.example', firebase: { tenant: ORG.tenantId } };
+  const verify = async (t) => { if (t === 'good') return user; if (t === 'other') return { ...user, firebase: { tenant: 'acme-1' } }; throw new Error('bad'); };
+  const del = createB2bAccountDelete({ verify, store: st });
+  const call = (auth = 'good', method = 'POST') => del(new Request('https://x/', { method, headers: { authorization: 'Bearer ' + auth } }));
+  return { st, call };
+}
+
+check('Delete my account removes the company account at once and frees the seat', async () => {
+  const id = O.seatId('a@northwind.example');
+  const { st, call } = deleteHarness({ member: seat('a', { seatId: id }) });
+  const r = await call();
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { deleted: true });
+  const order = st.log.filter((l) => l[0] !== 'set').map((l) => (l[0] === 'deleteData' ? l[1] : l[0]));
+  assert.deepEqual(order, ['deleteSignIn', ...DATA_ORDER, 'deleteMember']);
+  assert.equal(st.mem[id], undefined, 'seat free for someone else');
+});
+
+check('Delete my account refuses strangers and other companies, and deletes nothing', async () => {
+  const id = O.seatId('a@northwind.example');
+  for (const [opts, auth, status] of [
+    [{}, 'bad', 401],
+    [{ member: seat('a', { seatId: id }) }, 'other', 403],
+    [{ ent: { product: 'b2c', tier: 'plus' } }, 'good', 404],
+    [{ member: seat('a', { seatId: id, uid: 'someone-else' }) }, 'good', 404],
+    [{ member: null }, 'good', 404],
+  ]) {
+    const { st, call } = deleteHarness(opts);
+    assert.equal((await call(auth)).status, status, JSON.stringify(opts));
+    assert.ok(!st.log.some((l) => l[0] !== 'set'), 'nothing deleted');
+  }
+  assert.equal((await deleteHarness().call('good', 'GET')).status, 405);
+});
+
+check('a failed Delete my account keeps the data and the seat end job finishes it', async () => {
+  const id = O.seatId('a@northwind.example');
+  const fail = new Set(['u-a']);
+  const { st, call } = deleteHarness({ member: seat('a', { seatId: id }), failSignIn: fail });
+  assert.equal((await call()).status, 502);
+  assert.equal(st.mem[id].status, 'deleting');
+  assert.ok(!st.log.some((l) => l[0] === 'deleteData'));
+  fail.clear();
+  const r = await runSeatEnd({ store: st, now: T0 + O.DAY });
+  assert.equal(r.deleted, 1);
+  assert.equal(st.mem[id], undefined);
 });
 
 let failed = 0;
