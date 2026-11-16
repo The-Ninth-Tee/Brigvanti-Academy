@@ -1,6 +1,7 @@
 # The coach cap check blocks any deploy that weakens or removes the cap.
+# The guardrail check blocks any deploy that changes or deletes a cap or guardrail file.
 [build]
-  command = "node tool/check-coach-cap.mjs"
+  command = "node tool/check-coach-cap.mjs && node tool/check-guardrails.mjs"
 
 # The Firebase web apiKey is a public client identifier, not a secret.
 # This line tells Netlify's secrets scanner to ignore that specific value.
