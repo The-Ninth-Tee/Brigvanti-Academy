@@ -1,7 +1,7 @@
 // B2B company data. Every path here is server-only: Firestore rules grant the browser nothing
 // under orgs/ or entitlements/, so default deny covers them.
 //
-//   orgs/{orgId}                  name, tenantId, domains, seats, contractStart, contractEnd, founding, source
+//   orgs/{orgId}                  name, tenantId, domains, departments, seats, contractStart, contractEnd, founding, source
 //   orgs/{orgId}/members/{seatId} email, department, status, uid, invitedAt, firstSignInAt, endedAt, deleteAfter
 //   entitlements/{uid}            product 'b2b', orgId, validUntil   (read by the coach gate)
 //
@@ -10,6 +10,8 @@ import { createHash } from 'node:crypto';
 
 export const DAY = 86400000;
 export const READ_ONLY_DAYS = 30; // decided 12 Nov 2026: coach stops at once, account deleted 30 days later
+export const MIN_SEATS = 20;      // decided 16 Nov 2026: no B2B contract under 20 seats; smaller companies get B2C Plus
+export const MAX_DEPARTMENTS = 50;
 
 export const normEmail = (e) => String(e || '').trim().toLowerCase();
 export const emailDomain = (e) => normEmail(e).split('@')[1] || '';
@@ -26,10 +28,32 @@ export function validateOrg(o) {
   if (!String(o.name || '').trim()) errors.push('name');
   if (!String(o.tenantId || '').trim()) errors.push('tenantId');
   if (!Array.isArray(o.domains) || !o.domains.length || o.domains.some((d) => !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(d))) errors.push('domains');
-  if (!Number.isInteger(o.seats) || o.seats < 1) errors.push('seats');
+  if (!Number.isInteger(o.seats) || o.seats < MIN_SEATS) errors.push('seats');
   if (!Number.isFinite(o.contractStart) || !Number.isFinite(o.contractEnd) || o.contractEnd <= o.contractStart) errors.push('contract');
   return errors;
 }
+
+// The employer admin sets the department list in the setup form before inviting anyone (decided 16 Nov 2026).
+// Names are trimmed, unique regardless of case, and at most 60 characters.
+export function cleanDepartments(list) {
+  if (!Array.isArray(list)) return { error: 'not_a_list' };
+  const out = [], seen = new Set();
+  for (const raw of list) {
+    const name = String(raw || '').trim().replace(/\s+/g, ' ');
+    if (!name) continue;
+    if (name.length > 60) return { error: 'name_too_long', name };
+    if (seen.has(name.toLowerCase())) return { error: 'duplicate', name };
+    seen.add(name.toLowerCase());
+    out.push(name);
+  }
+  if (!out.length) return { error: 'empty' };
+  if (out.length > MAX_DEPARTMENTS) return { error: 'too_many' };
+  return { departments: out };
+}
+const departmentOf = (org, name) => {
+  const key = String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  return (org.departments || []).find((d) => d.toLowerCase() === key) || null;
+};
 
 export const contractActive = (org, now) => now >= org.contractStart && now < org.contractEnd;
 export const tenantMatches = (token, org) => !!(token && token.firebase && org && token.firebase.tenant === org.tenantId);
@@ -44,8 +68,10 @@ export function planInvites(org, members, list, now) {
   const add = [], refused = [];
   for (const row of list) {
     const email = normEmail(row.email);
-    const department = String(row.department || '').trim().slice(0, 60);
     if (!EMAIL.test(email)) { refused.push({ email, reason: 'invalid_email' }); continue; }
+    if (!(org.departments || []).length) { refused.push({ email, reason: 'no_departments_set' }); continue; }
+    const department = departmentOf(org, row.department);
+    if (!department) { refused.push({ email, reason: 'unknown_department' }); continue; }
     if (!org.domains.includes(emailDomain(email))) { refused.push({ email, reason: 'wrong_domain' }); continue; }
     const id = seatId(email);
     const had = taken.get(id);
