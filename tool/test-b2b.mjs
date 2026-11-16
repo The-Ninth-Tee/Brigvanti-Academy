@@ -63,11 +63,12 @@ check('both consumer functions are wired through consumerOnly', () => {
 
 // Company data model
 const T0 = Date.UTC(2026, 11, 1, 9);
-const ORG = { orgId: 'northwind', name: 'Northwind Logistics', tenantId: 'northwind-x1y2', domains: ['northwind.example'], seats: 3, contractStart: T0, contractEnd: T0 + 365 * O.DAY, founding: true, source: 'invoice' };
+const ORG = { orgId: 'northwind', name: 'Northwind Logistics', tenantId: 'northwind-x1y2', domains: ['northwind.example'], departments: ['Customer service', 'Sales', 'Finance', 'HR', 'IT', 'Ops'], seats: 3, contractStart: T0, contractEnd: T0 + 365 * O.DAY, founding: true, source: 'invoice' };
 const tok = (email, uid = 'u9', tenant = ORG.tenantId) => ({ uid, email, firebase: { tenant } });
 
 check('a company record is validated', () => {
-  assert.deepEqual(O.validateOrg(ORG), []);
+  assert.deepEqual(O.validateOrg({ ...ORG, seats: 25 }), []);
+  assert.deepEqual(O.validateOrg({ ...ORG, seats: 24 }), ['seats'], 'no contract under 25 seats');
   assert.deepEqual(O.validateOrg({ ...ORG, orgId: 'X', domains: [], seats: 0, contractEnd: T0 }), ['orgId', 'domains', 'seats', 'contract']);
 });
 
@@ -77,14 +78,26 @@ check('invites keep only email and department, and respect seats, domain and dup
     { email: 'sam@northwind.example', department: 'Sales' },
     { email: 'pat@gmail.com', department: 'Sales' },
     { email: 'not-an-email', department: 'Sales' },
-    { email: 'a@northwind.example' }, { email: 'b@northwind.example' }, { email: 'c@northwind.example' },
+    { email: 'a@northwind.example', department: 'sales ' }, { email: 'b@northwind.example', department: 'IT' }, { email: 'c@northwind.example', department: 'Ops' },
   ], T0 + O.DAY);
   assert.equal(r.add.length, 3);
+  assert.equal(r.add[1].member.department, 'Sales', 'department stored as the company spells it');
   assert.deepEqual(Object.keys(r.add[0].member).sort(), ['deleteAfter', 'department', 'email', 'endedAt', 'firstSignInAt', 'invitedAt', 'status', 'uid']);
   assert.equal(r.add[0].member.email, 'sam@northwind.example');
   assert.deepEqual(r.refused.map((x) => x.reason), ['already_has_seat', 'wrong_domain', 'invalid_email', 'no_seats_left']);
   assert.equal(r.left, 0);
-  assert.equal(O.planInvites(ORG, [], [{ email: 'a@northwind.example' }], T0 - O.DAY).refused[0].reason, 'contract_not_active');
+  assert.equal(O.planInvites(ORG, [], [{ email: 'a@northwind.example', department: 'Sales' }], T0 - O.DAY).refused[0].reason, 'contract_not_active');
+});
+
+check('departments come from the setup form and every seat picks one from it', () => {
+  assert.deepEqual(O.cleanDepartments([' Sales ', 'Customer  service', '', 'Finance']), { departments: ['Sales', 'Customer service', 'Finance'] });
+  assert.equal(O.cleanDepartments(['Sales', 'sales']).error, 'duplicate');
+  assert.equal(O.cleanDepartments([]).error, 'empty');
+  assert.equal(O.cleanDepartments(['x'.repeat(61)]).error, 'name_too_long');
+  const none = O.planInvites({ ...ORG, departments: [] }, [], [{ email: 'a@northwind.example', department: 'Sales' }], T0);
+  assert.equal(none.refused[0].reason, 'no_departments_set', 'no invites before the setup form');
+  const typo = O.planInvites(ORG, [], [{ email: 'a@northwind.example', department: 'Sales team' }, { email: 'b@northwind.example' }], T0);
+  assert.deepEqual(typo.refused.map((x) => x.reason), ['unknown_department', 'unknown_department']);
 });
 
 check('first sign-in binds the seat only through the company tenant and the invited email', () => {
@@ -101,7 +114,7 @@ check('first sign-in binds the seat only through the company tenant and the invi
 });
 
 check('a removed seat stops the coach at once and is deleted after 30 days', () => {
-  const m = O.activate(ORG, O.planInvites(ORG, [], [{ email: 'sam@northwind.example' }], T0).add[0].member, tok('sam@northwind.example'), T0).member;
+  const m = O.activate(ORG, O.planInvites(ORG, [], [{ email: 'sam@northwind.example', department: 'Sales' }], T0).add[0].member, tok('sam@northwind.example'), T0).member;
   const at = T0 + 10 * O.DAY;
   const e = O.endSeat(m, at);
   assert.equal(e.status, 'ended');
@@ -114,16 +127,16 @@ check('a removed seat stops the coach at once and is deleted after 30 days', () 
 });
 
 check('the contract end ends access for every seat', () => {
-  const m = O.activate(ORG, O.planInvites(ORG, [], [{ email: 'sam@northwind.example' }], T0).add[0].member, tok('sam@northwind.example'), T0).member;
+  const m = O.activate(ORG, O.planInvites(ORG, [], [{ email: 'sam@northwind.example', department: 'Sales' }], T0).add[0].member, tok('sam@northwind.example'), T0).member;
   assert.equal(resolvePlan(O.entitlementFor(ORG, m), ORG.contractEnd - 1), 'b2b');
   assert.equal(resolvePlan(O.entitlementFor(ORG, m), ORG.contractEnd), 'b2b_ended');
 });
 
 check('self deletion frees the seat for someone else', () => {
-  const r1 = O.planInvites(ORG, [], [{ email: 'a@northwind.example' }, { email: 'b@northwind.example' }, { email: 'c@northwind.example' }], T0);
+  const r1 = O.planInvites(ORG, [], [{ email: 'a@northwind.example', department: 'Sales' }, { email: 'b@northwind.example', department: 'Sales' }, { email: 'c@northwind.example', department: 'Sales' }], T0);
   const members = r1.add.map((x) => x.member);
   members[0] = O.freeSeat(members[0], T0 + O.DAY);
-  const r2 = O.planInvites(ORG, members, [{ email: 'd@northwind.example' }], T0 + O.DAY);
+  const r2 = O.planInvites(ORG, members, [{ email: 'd@northwind.example', department: 'Sales' }], T0 + O.DAY);
   assert.equal(r2.add.length, 1);
   assert.equal(members[0].uid, null);
 });
