@@ -369,12 +369,15 @@ check('PLANS: the server refuses locked areas before any charge', async () => {
   assert.equal((await plus.call('brief', area)).status, 200);
 });
 
-check('PLANS: D7.4 is for B2B only', async () => {
+check('PLANS: D7.4 is open to Plus and B2B, closed to Free', async () => {
   const skill = { compId: 'D7.4', actId: 'OWN' };
   const plus = await harness({ seed: seedFor({ product: 'b2c', tier: 'plus', validUntil: FUTURE }) });
-  assert.equal((await plus.call('brief', skill)).status, 403);
+  assert.equal((await plus.call('brief', skill)).status, 200);
   const b2b = await harness({ seed: seedFor({ product: 'b2b', validUntil: FUTURE }) });
   assert.equal((await b2b.call('brief', skill)).status, 200);
+  const free = await harness();
+  assert.equal((await free.call('brief', skill)).status, 403);
+  assert.equal(free.sent.length, 0);
 });
 
 check('no sign in, no call', async () => {

@@ -910,7 +910,7 @@ const PLUS_MSG='Practice in this area is part of Plus.';
 const plan=()=>COACH.plan||(S&&S.plan)||'free';
 const isFree=()=>plan()==='free';
 const areaOpen=d=>!isFree()||FREE_AREAS.includes(d);
-const skillOpen=c=>areaOpen(c.d)&&(c.id!=='D7.4'||plan().startsWith('b2b'));
+const skillOpen=c=>areaOpen(c.d);
 const rungWall=cid=>isFree()&&!!(S.rung[cid]&&S.rung[cid].passed);
 const practiceLevel=c=>{const cur=(S.scan[c.id]&&S.scan[c.id].confirmed)||0;
   return rungWall(c.id)?Math.max(cur,c.fl):Math.min(Math.max(cur+1,c.fl),4);};
