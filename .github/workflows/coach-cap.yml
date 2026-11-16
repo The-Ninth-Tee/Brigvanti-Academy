@@ -18,6 +18,7 @@ jobs:
         with:
           node-version: 22
       - run: node tool/check-coach-cap.mjs
+      - run: node tool/check-guardrails.mjs
       - name: Test the live coach
         if: github.event_name != 'push'
         run: node tool/probe-coach-cap.mjs
