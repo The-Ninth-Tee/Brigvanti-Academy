@@ -3,7 +3,9 @@
 //
 //   orgs/{orgId}                  name, tenantId, domains, departments, seats, contractStart, contractEnd, founding, source
 //   orgs/{orgId}/members/{seatId} email, department, status, uid, invitedAt, firstSignInAt, endedAt, deleteAfter
-//   entitlements/{uid}            product 'b2b', orgId, validUntil   (read by the coach gate)
+//   entitlements/{uid}            product 'b2b', orgId, tenantId, validUntil   (read by the coach gate)
+//   orgs/{orgId}/admins/{uid}     email   (an admin needs no seat)
+//   orgs/{orgId}/reports/unseated people: sign-ins without a seat, shown to the admin in Seats
 //
 // The employer sends only work email and department. Nothing else about a person is stored here.
 import { createHash } from 'node:crypto';
@@ -105,6 +107,7 @@ export function planInvites(org, members, list, now) {
 export const entitlementFor = (org, member) => ({
   product: 'b2b',
   orgId: org.orgId,
+  tenantId: org.tenantId,
   validUntil: member.status === 'ended' ? member.endedAt : org.contractEnd,
 });
 

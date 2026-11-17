@@ -2,7 +2,7 @@
 // Any failure before the reservation refuses the call. Never fail open.
 import {
   CAPS, LIMITS, assignmentsLeft, decideCall, ledgerEntry, periodKeys, planAllows, refreshDate,
-  resolvePlan, readAssignment, trimUserText, undoCall,
+  resolveSignInPlan, readAssignment, trimUserText, undoCall,
 } from './coach-caps.mjs';
 import { buildPrompt, splitAttempt } from './coach-prompts.mjs';
 
@@ -88,8 +88,12 @@ export function createCoachHandler({ verify, store, fetchImpl = fetch, env = pro
 
     const token = /^Bearer (.+)$/.exec(req.headers.get('authorization') || '');
     if (!token) return json({ error: 'Please sign in to use the coach.' }, 401);
-    let uid;
-    try { uid = (await verify(token[1])).sub; }
+    let uid, tenant;
+    try {
+      const user = await verify(token[1]);
+      uid = user.sub;
+      tenant = (user.firebase && user.firebase.tenant) || null;
+    }
     catch (e) { return json({ error: 'Please sign in to use the coach.' }, 401); }
 
     const now = clock();
@@ -102,7 +106,7 @@ export function createCoachHandler({ verify, store, fetchImpl = fetch, env = pro
 
     if (req.method === 'GET') {
       try {
-        const plan = resolvePlan(await store.entitlement(uid), now);
+        const plan = resolveSignInPlan(await store.entitlement(uid), tenant, now);
         return json(summary(plan, (await store.status(uid, keys)).used), 200);
       } catch (e) { return locked(e); }
     }
@@ -126,7 +130,7 @@ export function createCoachHandler({ verify, store, fetchImpl = fetch, env = pro
     let plan, spot, orgId;
     try {
       const entitlement = await store.entitlement(uid);
-      plan = resolvePlan(entitlement, now);
+      plan = resolveSignInPlan(entitlement, tenant, now);
       orgId = plan === 'b2b' && typeof entitlement.orgId === 'string' ? entitlement.orgId : null;
       if (!planAllows(plan, built.area, built.skill)) {
         const used = (await store.status(uid, keys)).used;

@@ -9,10 +9,10 @@ import { createAccountDelete } from '../netlify/lib/account-delete.mjs';
 import * as O from '../netlify/lib/b2b-orgs.mjs';
 import { learnerSummary, companyStats, HIDDEN } from '../netlify/lib/b2b-stats.mjs';
 import { sweepOrphans } from '../netlify/lib/account-sweep.mjs';
-import { runSeatEnd, DATA_ORDER } from '../netlify/lib/b2b-seat-end.mjs';
+import { runSeatEnd, DATA_ORDER, UNSEATED_DAYS } from '../netlify/lib/b2b-seat-end.mjs';
 import { tenantOf, companyVerifier } from '../netlify/lib/b2b-auth.mjs';
 import { createB2bAccountDelete } from '../netlify/lib/b2b-account-delete.mjs';
-import { resolvePlan } from '../netlify/lib/coach-caps.mjs';
+import { resolvePlan, resolveSignInPlan } from '../netlify/lib/coach-caps.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
@@ -270,17 +270,25 @@ check('the consumer sweep still removes orphaned consumer data, and never touche
   assert.deepEqual(r, { accounts: 4, removed: 2, companySkipped: 1 });
 });
 
-function seatStore(org, members, failSignIn = new Set()) {
-  const log = [], ents = {};
+function seatStore(org, members, failSignIn = new Set(), { users = [], admins = [] } = {}) {
+  const log = [], ents = {}, reports = {};
   const mem = Object.fromEntries(members.map((m) => [m.seatId, { ...m }]));
+  let tenant = [...users];
   return {
-    log, mem, ents,
+    log, mem, ents, reports,
+    tenantUsers: async () => tenant.map((u) => ({ ...u })),
+    adminUids: async () => admins,
+    setUnseatedReport: async (orgId, r) => { reports[orgId] = r; },
     orgs: async () => [org],
     members: async () => Object.values(mem).map((m) => ({ ...m })),
     setMember: async (o, id, m) => { mem[id] = { ...mem[id], ...m }; log.push(['set', id, mem[id].status]); },
     deleteMember: async (o, id) => { delete mem[id]; log.push(['deleteMember', id]); },
     setEntitlement: async (uid, e) => { ents[uid] = e; },
-    deleteSignIn: async (t, uid) => { if (failSignIn.has(uid)) throw new Error('auth down'); log.push(['deleteSignIn', t, uid]); },
+    deleteSignIn: async (t, uid) => {
+      if (failSignIn.has(uid)) throw new Error('auth down');
+      tenant = tenant.filter((u) => u.uid !== uid);
+      log.push(['deleteSignIn', t, uid]);
+    },
     deleteData: async (path, uid) => log.push(['deleteData', path, uid]),
   };
 }
@@ -328,6 +336,65 @@ check('an active seat in a running contract is never touched', async () => {
   const r = await runSeatEnd({ store: st, now: T0 + 100 * O.DAY });
   assert.deepEqual(st.log, []);
   assert.equal(r.ended + r.deleted, 0);
+});
+
+// Sign-ins without a seat (decided 17 Nov 2026)
+const signIn = (uid, email, createdAt) => ({ uid, email, createdAt });
+check('a sign-in without a seat shows in the admin report for 7 days and is not deleted yet', async () => {
+  const users = [signIn('u-a', 'a@northwind.example', T0), signIn('x1', 'X1@Northwind.example', T0),
+    signIn('adm', 'boss@northwind.example', T0), signIn('x2', 'b@northwind.example', T0 + O.DAY)];
+  const st = seatStore(ORG, [seat('a'), seat('b', { status: 'invited', uid: null, firstSignInAt: null, email: 'b@northwind.example' })],
+    new Set(), { users, admins: ['adm'] });
+  const r = await runSeatEnd({ store: st, now: T0 + 3 * O.DAY });
+  assert.ok(!st.log.some((l) => l[0] === 'deleteSignIn'));
+  const rep = st.reports[ORG.orgId];
+  assert.equal(rep.total, 2);
+  assert.deepEqual(rep.people.map((p) => [p.uid, p.email, p.matchesInvite]),
+    [['x1', 'x1@northwind.example', false], ['x2', 'b@northwind.example', true]]);
+  assert.equal(rep.people[0].removeAfter, T0 + UNSEATED_DAYS * O.DAY);
+  assert.deepEqual(r.unseated, { [ORG.orgId]: 2 }, 'your daily line holds counts, never emails');
+  assert.ok(!JSON.stringify(r).includes('@'));
+});
+
+check('after 7 days a sign-in without a seat goes, with its data; seat holders and admins stay', async () => {
+  const users = [signIn('u-a', 'a@northwind.example', T0), signIn('x1', 'x1@northwind.example', T0), signIn('adm', 'boss@northwind.example', T0)];
+  const st = seatStore(ORG, [seat('a')], new Set(), { users, admins: ['adm'] });
+  const r = await runSeatEnd({ store: st, now: T0 + UNSEATED_DAYS * O.DAY });
+  assert.equal(r.unseatedRemoved, 1);
+  assert.deepEqual(st.log.filter((l) => l[0] === 'deleteSignIn'), [['deleteSignIn', ORG.tenantId, 'x1']]);
+  assert.deepEqual(st.log.filter((l) => l[0] === 'deleteData').map((l) => l[2]), DATA_ORDER.map(() => 'x1'));
+  assert.equal(st.reports[ORG.orgId].total, 0);
+  assert.equal(st.mem.a.status, 'active');
+});
+
+check('a failed removal keeps the data and the next run retries', async () => {
+  const fail = new Set(['x1']);
+  const st = seatStore(ORG, [], fail, { users: [signIn('x1', 'x1@northwind.example', T0)] });
+  const r1 = await runSeatEnd({ store: st, now: T0 + 8 * O.DAY });
+  assert.equal(r1.failed, 1);
+  assert.ok(!st.log.some((l) => l[0] === 'deleteData'));
+  fail.clear();
+  const r2 = await runSeatEnd({ store: st, now: T0 + 9 * O.DAY });
+  assert.equal(r2.unseatedRemoved, 1);
+});
+
+check('a sign-in with an unreadable date is reported, never deleted', async () => {
+  const st = seatStore(ORG, [], new Set(), { users: [signIn('x1', 'x1@northwind.example', NaN)] });
+  const r = await runSeatEnd({ store: st, now: T0 + 100 * O.DAY });
+  assert.equal(r.unseatedRemoved, 0);
+  assert.equal(st.reports[ORG.orgId].total, 1);
+});
+
+check('the coach gives a company sign-in the company plan only with a seat bound in that company', () => {
+  const now = T0 + O.DAY;
+  const bound = O.activate(ORG, O.planInvites(ORG, [], [{ email: 'a@northwind.example', department: 'Sales' }], T0).add[0].member,
+    { uid: 'u1', email: 'a@northwind.example', firebase: { tenant: ORG.tenantId } }, T0).entitlement;
+  assert.equal(bound.tenantId, ORG.tenantId);
+  assert.equal(resolveSignInPlan(bound, ORG.tenantId, now), 'b2b');
+  assert.equal(resolveSignInPlan(bound, 'another-tenant', now), 'b2b_ended');
+  assert.equal(resolveSignInPlan(null, ORG.tenantId, now), 'b2b_ended');
+  assert.equal(resolveSignInPlan({ product: 'b2c', tier: 'plus', validUntil: now + O.DAY }, ORG.tenantId, now), 'b2b_ended');
+  assert.equal(resolveSignInPlan({ product: 'b2c', tier: 'plus', validUntil: now + O.DAY }, null, now), 'plus');
 });
 
 // Company sign-in check and Delete my account

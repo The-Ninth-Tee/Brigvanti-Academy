@@ -1,12 +1,12 @@
 {
-  "netlify/lib/coach-gate.mjs": "0fc388bc753731729f911158f35a61ae90f410ae8caf7b9b3f2fea7cb740acfb",
-  "netlify/lib/coach-caps.mjs": "7be531b34882087ec573ee8c1a3b1d736c982504f0c9ee6a952e5007d6281261",
+  "netlify/lib/coach-gate.mjs": "f9ce4a881f50d8c726c7edb66b2981ac9e03644e1c71b493f175cc340d7fbcc8",
+  "netlify/lib/coach-caps.mjs": "1492513f6bd40c0871b91664f36ca209c3e6e82827ce52ed74b475951598133e",
   "netlify/lib/coach-prompts.mjs": "1036660cf4d6fdc6ab7dc64acbd224099d72dd61096dad03c998c66fa1dcd9a6",
   "netlify/lib/coach-content.mjs": "dfe605e37d0f9813b047e253a1115a2fb6c6e76d89cac3b87de5bfd74d673db9",
   "netlify/lib/content-window-en.mjs": "5df9654ce147ad3fe7264e8f5f338c0099cf8545c31c412fe6876ca46a232a38",
   "netlify/lib/content-window-nl.mjs": "de0bb43a211a9f0e0b6b1ceafe655b7a110949d826a50adcc5f6f38cd6fc1ef7",
   "netlify/functions/coach.mjs": "8e5487673d0f10b7fced2d28361a15c3cf9515439f658f2c39c6908464139ff9",
-  "tool/check-coach-cap.mjs": "9579bf581aef384367a30d0833c1b8d23b9375bd50df77ecbf12ed796bb44dfb",
+  "tool/check-coach-cap.mjs": "dcfad2ca5443bd86dedc41ca11e45778a155c0368fc3fadeebf4434b07557ecd",
   "tool/probe-coach-cap.mjs": "88f21d8f68d2dcadd5934f656e0bd995e47f942ad13021646267a20756ab4893",
   ".github/workflows/coach-cap.yml": "d1066883cbb7fbb58d1907099d237c3af5a6b13b2176904f12c7c33c6808dc7c"
 }

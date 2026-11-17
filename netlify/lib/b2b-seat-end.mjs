@@ -3,8 +3,13 @@
 //   2. 30 days after a seat ended, the account is deleted: sign in first, then the data, the plan record last,
 //      then the seat itself. An unused invite is removed straight away.
 //   3. A deletion that stopped halfway is marked 'deleting' and is finished on the next run.
+//   4. A sign-in in the company tenant without a seat is removed 7 days after it was made (decided 17 Nov 2026).
+//      Until then the admin sees it in Seats under "Sign-ins without a seat". Admins need no seat.
 // The org record stays: it holds the contract, which tax law keeps for seven years.
-import { endSeat, entitlementFor } from './b2b-orgs.mjs';
+import { DAY, endSeat, entitlementFor, normEmail } from './b2b-orgs.mjs';
+
+export const UNSEATED_DAYS = 7;
+export const REPORT_MAX = 500;
 
 const holdsSeat = (m) => m.status === 'invited' || m.status === 'active';
 // The plan record goes last, because the consumer sweep skips an account while it says product 'b2b'.
@@ -19,13 +24,48 @@ export async function deleteSeatAccount(store, org, member) {
   await store.deleteMember(org.orgId, member.seatId);
 }
 
+// Sorts the tenant's sign-ins: any uid bound to a seat, in any state, and any admin is left alone.
+export function planUnseated(users, members, adminUids, now) {
+  const bound = new Set(members.map((m) => m.uid).filter(Boolean));
+  const admins = new Set(adminUids);
+  const invited = new Set(members.filter((m) => m.status === 'invited').map((m) => m.email));
+  const remove = [], report = [];
+  for (const u of users) {
+    if (bound.has(u.uid) || admins.has(u.uid)) continue;
+    const firstSignInAt = Number.isFinite(u.createdAt) ? u.createdAt : now;
+    const removeAfter = firstSignInAt + UNSEATED_DAYS * DAY;
+    if (now >= removeAfter) { remove.push(u.uid); continue; }
+    const email = normEmail(u.email);
+    report.push({ uid: u.uid, email, firstSignInAt, removeAfter, matchesInvite: invited.has(email) });
+  }
+  report.sort((a, b) => a.removeAfter - b.removeAfter);
+  return { remove, report };
+}
+
+async function sweepUnseated(store, org, members, now, out) {
+  const { remove, report } = planUnseated(await store.tenantUsers(org.tenantId), members, await store.adminUids(org.orgId), now);
+  for (const uid of remove) {
+    try {
+      await store.deleteSignIn(org.tenantId, uid);
+      for (const path of DATA_ORDER) await store.deleteData(path, uid);
+      out.unseatedRemoved++;
+    } catch (e) {
+      out.failed++;
+      console.error('[b2b-seat-end] unseated sign-in failed, next run retries', org.orgId, e.message);
+    }
+  }
+  await store.setUnseatedReport(org.orgId, { updatedAt: now, total: report.length, people: report.slice(0, REPORT_MAX) });
+  if (report.length) out.unseated[org.orgId] = report.length;
+}
+
 export async function runSeatEnd({ store, now, budgetMs = 24000, clock = Date.now }) {
   const t0 = clock();
-  const out = { orgs: 0, ended: 0, deleted: 0, invitesRemoved: 0, failed: 0 };
+  const out = { orgs: 0, ended: 0, deleted: 0, invitesRemoved: 0, unseatedRemoved: 0, unseated: {}, failed: 0 };
   for (const org of await store.orgs()) {
     if (clock() - t0 > budgetMs) break;
     out.orgs++;
-    for (const m of await store.members(org.orgId)) {
+    const members = await store.members(org.orgId);
+    for (const m of members) {
       try {
         let cur = m;
         if (holdsSeat(cur) && now >= org.contractEnd) {
@@ -44,6 +84,9 @@ export async function runSeatEnd({ store, now, budgetMs = 24000, clock = Date.no
         console.error('[b2b-seat-end] seat failed, next run retries', org.orgId, m.seatId, e.message);
       }
     }
+    // The member list was read before the seat loop, so a seat deleted there still counts as bound.
+    try { await sweepUnseated(store, org, members, now, out); }
+    catch (e) { out.failed++; console.error('[b2b-seat-end] unseated check failed', org.orgId, e.message); }
   }
   return out;
 }
@@ -64,5 +107,18 @@ export function firestoreSeatEndStore(db, auth) {
     getOrg: async (id) => { const s = await db.doc(`orgs/${id}`).get(); return s.exists ? { orgId: id, ...s.data() } : null; },
     member: async (orgId, sid) => { const s = await members(orgId).doc(sid).get(); return s.exists ? { seatId: sid, ...s.data() } : null; },
     entitlement: async (uid) => { const s = await db.doc(`entitlements/${uid}`).get(); return s.exists ? s.data() : null; },
+    tenantUsers: async (tenantId) => {
+      const tenant = auth.tenantManager().authForTenant(tenantId);
+      const users = [];
+      let page;
+      do {
+        const r = await tenant.listUsers(1000, page);
+        for (const u of r.users) users.push({ uid: u.uid, email: u.email || '', createdAt: Date.parse(u.metadata.creationTime) });
+        page = r.pageToken;
+      } while (page);
+      return users;
+    },
+    adminUids: async (orgId) => (await db.doc(`orgs/${orgId}`).collection('admins').get()).docs.map((d) => d.id),
+    setUnseatedReport: (orgId, report) => db.doc(`orgs/${orgId}/reports/unseated`).set(report),
   };
 }
