@@ -74,12 +74,12 @@ const NOW = Date.UTC(2026, 10, 2, 12);
 const DAY = 'usage/u1/days/20261102';
 const MONTH = 'usage/u1/months/202611';
 
-async function harness({ seed, env = ENV, reply = okReply, store } = {}) {
+async function harness({ seed, env = ENV, reply = okReply, store, user = { sub: 'u1' } } = {}) {
   const { createCoachHandler, firestoreUsageStore } = await import(join(ROOT, GATE));
   const db = fakeDb(seed);
   const sent = [];
   const handler = createCoachHandler({
-    verify: async (t) => { if (t !== 'good') throw new Error('bad'); return { sub: 'u1' }; },
+    verify: async (t) => { if (t !== 'good') throw new Error('bad'); return user; },
     store: store || firestoreUsageStore(db, (n) => n),
     fetchImpl: async (url, init) => { sent.push(JSON.parse(init.body)); return reply(); },
     env, clock: () => NOW,
@@ -270,6 +270,29 @@ check('zero cap plans get nothing, even with an open assignment', async () => {
     assert.equal((await call('brief')).status, 429);
     assert.equal(sent.length, 0);
   }
+});
+
+check('PLANS: a company sign-in gets nothing without a seat in its own company', async () => {
+  const company = { sub: 'u1', firebase: { tenant: 't-acme' } };
+  const open = { 'usage/u1/assignment/open': { state: 'open', key: 'a1', rebuilds: 0 } };
+  for (const ent of [null, { product: 'b2c', tier: 'plus', validUntil: FUTURE }, { tier: 'probe' },
+    { product: 'b2b', orgId: 'acme', validUntil: FUTURE },
+    { product: 'b2b', orgId: 'other', tenantId: 't-other', validUntil: FUTURE }]) {
+    const { call, status, sent } = await harness({ user: company, seed: { ...(ent ? seedFor(ent) : {}), ...open } });
+    for (const p of ['brief', 'feedback']) {
+      const r = await call(p);
+      assert.equal(r.status, 429, JSON.stringify(ent));
+      assert.equal((await r.json()).plan, 'b2b_ended');
+    }
+    assert.deepEqual((await (await status()).json()).left, { day: 0, month: 0 });
+    assert.equal(sent.length, 0);
+  }
+  const seat = await harness({ user: company, seed: seedFor({ product: 'b2b', orgId: 'acme', tenantId: 't-acme', validUntil: FUTURE }) });
+  const r = await seat.call('brief');
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).plan, 'b2b');
+  const consumer = await harness({ seed: seedFor({ product: 'b2c', tier: 'plus', validUntil: FUTURE }) });
+  assert.equal((await (await consumer.call('brief')).json()).plan, 'plus');
 });
 
 check('parallel calls cannot pass the cap', async () => {

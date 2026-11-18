@@ -73,6 +73,15 @@ export function resolvePlan(entitlement, now) {
   return 'free';
 }
 
+// A company sign-in gets the company plan only from a seat bound in its own company (decided 17 Nov 2026).
+// Without one it lands on b2b_ended, which has 0 assignments. A consumer sign-in is resolved as before.
+export function resolveSignInPlan(entitlement, tenant, now) {
+  if (!tenant) return resolvePlan(entitlement, now);
+  const e = entitlement || {};
+  if (e.product !== 'b2b' || typeof e.tenantId !== 'string' || e.tenantId !== tenant) return 'b2b_ended';
+  return resolvePlan(e, now);
+}
+
 const fits = (used, caps, need) => {
   if (used.month + need > caps.month) return 'month';
   if (used.day + need > caps.day) return 'day';
