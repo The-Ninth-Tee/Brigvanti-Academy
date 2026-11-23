@@ -25,13 +25,15 @@ export async function deleteSeatAccount(store, org, member) {
 }
 
 // Sorts the tenant's sign-ins: any uid bound to a seat, in any state, and any admin is left alone.
-export function planUnseated(users, members, adminUids, now) {
+// An admin is matched by uid once bound, and by email before the first sign-in has bound it.
+export function planUnseated(users, members, admins, now) {
   const bound = new Set(members.map((m) => m.uid).filter(Boolean));
-  const admins = new Set(adminUids);
+  const adminUids = new Set(admins.map((a) => a.uid).filter(Boolean));
+  const adminEmails = new Set(admins.map((a) => normEmail(a.email)).filter(Boolean));
   const invited = new Set(members.filter((m) => m.status === 'invited').map((m) => m.email));
   const remove = [], report = [];
   for (const u of users) {
-    if (bound.has(u.uid) || admins.has(u.uid)) continue;
+    if (bound.has(u.uid) || adminUids.has(u.uid) || adminEmails.has(normEmail(u.email))) continue;
     const firstSignInAt = Number.isFinite(u.createdAt) ? u.createdAt : now;
     const removeAfter = firstSignInAt + UNSEATED_DAYS * DAY;
     if (now >= removeAfter) { remove.push(u.uid); continue; }
@@ -43,7 +45,7 @@ export function planUnseated(users, members, adminUids, now) {
 }
 
 async function sweepUnseated(store, org, members, now, out) {
-  const { remove, report } = planUnseated(await store.tenantUsers(org.tenantId), members, await store.adminUids(org.orgId), now);
+  const { remove, report } = planUnseated(await store.tenantUsers(org.tenantId), members, await store.admins(org.orgId), now);
   for (const uid of remove) {
     try {
       await store.deleteSignIn(org.tenantId, uid);
@@ -118,7 +120,7 @@ export function firestoreSeatEndStore(db, auth) {
       } while (page);
       return users;
     },
-    adminUids: async (orgId) => (await db.doc(`orgs/${orgId}`).collection('admins').get()).docs.map((d) => d.id),
+    admins: async (orgId) => (await db.doc(`orgs/${orgId}`).collection('admins').get()).docs.map((d) => ({ uid: d.data().uid || null, email: d.data().email || '' })),
     setUnseatedReport: (orgId, report) => db.doc(`orgs/${orgId}/reports/unseated`).set(report),
   };
 }
