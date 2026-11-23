@@ -4,7 +4,7 @@
 //   orgs/{orgId}                  name, tenantId, domains, departments, seats, contractStart, contractEnd, founding, source
 //   orgs/{orgId}/members/{seatId} email, department, status, uid, invitedAt, firstSignInAt, endedAt, deleteAfter
 //   entitlements/{uid}            product 'b2b', orgId, tenantId, validUntil   (read by the coach gate)
-//   orgs/{orgId}/admins/{uid}     email   (an admin needs no seat)
+//   orgs/{orgId}/admins/{adminId} email, uid, addedAt, firstSignInAt   (an admin needs no seat; adminId is seatId(email))
 //   orgs/{orgId}/reports/unseated people: sign-ins without a seat, shown to the admin in Seats
 //
 // The employer sends only work email and department. Nothing else about a person is stored here.
@@ -134,6 +134,26 @@ export function endSeat(member, at) {
 // The learner deleted their own account: the seat frees up at once.
 export const freeSeat = (member, at) => ({ ...member, status: 'removed', uid: null, endedAt: at, deleteAfter: at });
 
+// Company admins (decided 19 Nov 2026). Keyed by email like seats, because the blocking sign-in function
+// must recognise an admin before the account exists. The uid is bound at the first sign-in.
+export const adminId = seatId;
+
+export function planAdmin(org, email, now) {
+  const e = normEmail(email);
+  if (!EMAIL.test(e)) return { error: 'invalid_email' };
+  if (!(org.domains || []).includes(emailDomain(e))) return { error: 'wrong_domain' };
+  return { adminId: adminId(e), admin: { email: e, uid: null, addedAt: now, firstSignInAt: null } };
+}
+
+export function bindAdmin(org, admin, token, now) {
+  if (!admin) return { error: 'not_admin' };
+  if (!tenantMatches(token, org)) return { error: 'wrong_tenant' };
+  if (normEmail(token.email) !== admin.email) return { error: 'wrong_email' };
+  if (admin.uid && admin.uid !== token.uid) return { error: 'admin_bound' };
+  if (admin.uid) return { admin, changed: false };
+  return { admin: { ...admin, uid: token.uid, firstSignInAt: now }, changed: true };
+}
+
 export function firestoreOrgStore(db) {
   const org = (id) => db.doc(`orgs/${id}`);
   return {
@@ -143,5 +163,12 @@ export function firestoreOrgStore(db) {
     member: async (id, sid) => { const s = await org(id).collection('members').doc(sid).get(); return s.exists ? { seatId: sid, ...s.data() } : null; },
     setMember: (id, sid, m) => org(id).collection('members').doc(sid).set(m, { merge: true }),
     setEntitlement: (uid, e) => db.doc(`entitlements/${uid}`).set(e, { merge: true }),
+    orgByTenant: async (tenantId) => {
+      const q = await db.collection('orgs').where('tenantId', '==', tenantId).limit(2).get();
+      return q.size === 1 ? { orgId: q.docs[0].id, ...q.docs[0].data() } : null;
+    },
+    admin: async (id, aid) => { const s = await org(id).collection('admins').doc(aid).get(); return s.exists ? { adminId: aid, ...s.data() } : null; },
+    setAdmin: (id, aid, a) => org(id).collection('admins').doc(aid).set(a, { merge: true }),
+    deleteAdmin: (id, aid) => org(id).collection('admins').doc(aid).delete(),
   };
 }

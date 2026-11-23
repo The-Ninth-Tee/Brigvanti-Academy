@@ -12,6 +12,7 @@ import { sweepOrphans } from '../netlify/lib/account-sweep.mjs';
 import { runSeatEnd, DATA_ORDER, UNSEATED_DAYS } from '../netlify/lib/b2b-seat-end.mjs';
 import { tenantOf, companyVerifier } from '../netlify/lib/b2b-auth.mjs';
 import { createB2bAccountDelete } from '../netlify/lib/b2b-account-delete.mjs';
+import { createB2bAdmin } from '../netlify/lib/b2b-admin.mjs';
 import { resolvePlan, resolveSignInPlan } from '../netlify/lib/coach-caps.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -277,7 +278,7 @@ function seatStore(org, members, failSignIn = new Set(), { users = [], admins = 
   return {
     log, mem, ents, reports,
     tenantUsers: async () => tenant.map((u) => ({ ...u })),
-    adminUids: async () => admins,
+    admins: async () => admins,
     setUnseatedReport: async (orgId, r) => { reports[orgId] = r; },
     orgs: async () => [org],
     members: async () => Object.values(mem).map((m) => ({ ...m })),
@@ -344,7 +345,7 @@ check('a sign-in without a seat shows in the admin report for 7 days and is not 
   const users = [signIn('u-a', 'a@northwind.example', T0), signIn('x1', 'X1@Northwind.example', T0),
     signIn('adm', 'boss@northwind.example', T0), signIn('x2', 'b@northwind.example', T0 + O.DAY)];
   const st = seatStore(ORG, [seat('a'), seat('b', { status: 'invited', uid: null, firstSignInAt: null, email: 'b@northwind.example' })],
-    new Set(), { users, admins: ['adm'] });
+    new Set(), { users, admins: [{ uid: 'adm', email: 'boss@northwind.example' }] });
   const r = await runSeatEnd({ store: st, now: T0 + 3 * O.DAY });
   assert.ok(!st.log.some((l) => l[0] === 'deleteSignIn'));
   const rep = st.reports[ORG.orgId];
@@ -358,7 +359,7 @@ check('a sign-in without a seat shows in the admin report for 7 days and is not 
 
 check('after 7 days a sign-in without a seat goes, with its data; seat holders and admins stay', async () => {
   const users = [signIn('u-a', 'a@northwind.example', T0), signIn('x1', 'x1@northwind.example', T0), signIn('adm', 'boss@northwind.example', T0)];
-  const st = seatStore(ORG, [seat('a')], new Set(), { users, admins: ['adm'] });
+  const st = seatStore(ORG, [seat('a')], new Set(), { users, admins: [{ uid: 'adm', email: 'boss@northwind.example' }] });
   const r = await runSeatEnd({ store: st, now: T0 + UNSEATED_DAYS * O.DAY });
   assert.equal(r.unseatedRemoved, 1);
   assert.deepEqual(st.log.filter((l) => l[0] === 'deleteSignIn'), [['deleteSignIn', ORG.tenantId, 'x1']]);
@@ -496,6 +497,70 @@ check('each person has one main department: a list of departments is refused', (
   assert.deepEqual(r.refused.map((x) => x.reason), ['unknown_department', 'unknown_department', 'already_has_seat']);
   assert.equal(r.add.length, 1);
   assert.equal(r.add[0].member.department, 'HR');
+});
+
+// Company admins, keyed by email (decided 19 Nov 2026)
+check('an admin is keyed by email like a seat, and only on the company domain', () => {
+  const r = O.planAdmin(ORG, ' Boss@Northwind.example ', T0);
+  assert.equal(r.adminId, O.seatId('boss@northwind.example'));
+  assert.deepEqual(r.admin, { email: 'boss@northwind.example', uid: null, addedAt: T0, firstSignInAt: null });
+  assert.equal(O.planAdmin(ORG, 'boss@gmail.com', T0).error, 'wrong_domain');
+  assert.equal(O.planAdmin(ORG, 'not an email', T0).error, 'invalid_email');
+});
+
+check('the first admin sign-in binds the uid; later sign-ins must bring the same uid', () => {
+  const a = O.planAdmin(ORG, 'boss@northwind.example', T0).admin;
+  const tk = (uid, email = 'boss@northwind.example', tenant = ORG.tenantId) => ({ uid, email, firebase: { tenant } });
+  const first = O.bindAdmin(ORG, a, tk('adm'), T0 + 5);
+  assert.equal(first.changed, true);
+  assert.equal(first.admin.uid, 'adm');
+  assert.equal(first.admin.firstSignInAt, T0 + 5);
+  assert.equal(O.bindAdmin(ORG, first.admin, tk('adm'), T0 + 9).changed, false);
+  assert.equal(O.bindAdmin(ORG, first.admin, tk('adm'), T0 + 9).admin.firstSignInAt, T0 + 5);
+  assert.equal(O.bindAdmin(ORG, first.admin, tk('other'), T0).error, 'admin_bound');
+  assert.equal(O.bindAdmin(ORG, a, tk('adm', 'boss@northwind.example', 'other-tenant'), T0).error, 'wrong_tenant');
+  assert.equal(O.bindAdmin(ORG, a, { uid: 'adm', email: 'boss@northwind.example' }, T0).error, 'wrong_tenant', 'a consumer token is never an admin');
+  assert.equal(O.bindAdmin(ORG, a, tk('adm', 'pat@northwind.example'), T0).error, 'wrong_email');
+  assert.equal(O.bindAdmin(ORG, null, tk('adm'), T0).error, 'not_admin');
+});
+
+check('an admin who has not signed in yet is matched by email and is never swept as a sign-in without a seat', async () => {
+  const users = [signIn('adm', 'Boss@northwind.example', T0), signIn('x1', 'x1@northwind.example', T0)];
+  const st = seatStore(ORG, [], new Set(), { users, admins: [{ uid: null, email: 'boss@northwind.example' }] });
+  const r = await runSeatEnd({ store: st, now: T0 + 30 * O.DAY });
+  assert.equal(r.unseatedRemoved, 1);
+  assert.deepEqual(st.log.filter((l) => l[0] === 'deleteSignIn').map((l) => l[2]), ['x1']);
+});
+
+function adminHarness(admins = {}) {
+  const writes = [];
+  const store = {
+    orgByTenant: async (t) => (t === ORG.tenantId ? ORG : null),
+    admin: async (o, id) => (admins[id] ? { adminId: id, ...admins[id] } : null),
+    setAdmin: async (o, id, a) => { writes.push([o, id, a]); admins[id] = { ...admins[id], ...a }; },
+  };
+  const users = {
+    boss: { uid: 'adm', email: 'boss@northwind.example', firebase: { tenant: ORG.tenantId } },
+    staff: { uid: 'u-a', email: 'a@northwind.example', firebase: { tenant: ORG.tenantId } },
+    elsewhere: { uid: 'adm', email: 'boss@northwind.example', firebase: { tenant: 'other-tenant' } },
+  };
+  const verify = async (t) => { if (!users[t]) throw new Error('bad'); return users[t]; };
+  return { writes, admins, handler: createB2bAdmin({ verify, store, now: () => T0 + 1 }) };
+}
+
+check('the admin check binds on the first call and answers only for an admin of the same company', async () => {
+  const id = O.seatId('boss@northwind.example');
+  const h = adminHarness({ [id]: O.planAdmin(ORG, 'boss@northwind.example', T0).admin });
+  const r1 = await h.handler(req('boss'));
+  assert.equal(r1.status, 200);
+  assert.deepEqual(await r1.json(), { admin: true, orgId: ORG.orgId, name: ORG.name });
+  assert.deepEqual(h.writes, [[ORG.orgId, id, { uid: 'adm', firstSignInAt: T0 + 1 }]]);
+  assert.equal((await h.handler(req('boss'))).status, 200);
+  assert.equal(h.writes.length, 1, 'a later call writes nothing');
+  assert.equal((await h.handler(req('staff'))).status, 403);
+  assert.equal((await h.handler(req('elsewhere'))).status, 403);
+  assert.equal((await h.handler(req('nonsense'))).status, 401);
+  assert.equal((await h.handler(new Request('https://x/', { method: 'GET' }))).status, 405);
 });
 
 let failed = 0;
