@@ -13,6 +13,7 @@ import { runSeatEnd, DATA_ORDER, UNSEATED_DAYS } from '../netlify/lib/b2b-seat-e
 import { tenantOf, companyVerifier } from '../netlify/lib/b2b-auth.mjs';
 import { createB2bAccountDelete } from '../netlify/lib/b2b-account-delete.mjs';
 import { createB2bAdmin } from '../netlify/lib/b2b-admin.mjs';
+import * as G from '../gcp/seatgate/core.mjs';
 import { resolvePlan, resolveSignInPlan } from '../netlify/lib/coach-caps.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -561,6 +562,88 @@ check('the admin check binds on the first call and answers only for an admin of 
   assert.equal((await h.handler(req('elsewhere'))).status, 403);
   assert.equal((await h.handler(req('nonsense'))).status, 401);
   assert.equal((await h.handler(new Request('https://x/', { method: 'GET' }))).status, 405);
+});
+
+// seatgate, the blocking sign-in function (measure A, proofs of 19 and 23 Nov 2026)
+const MS_TID = '0b5d2a3c-1111-4222-8333-944455556666';
+const msToken = (tid) => 'x.' + Buffer.from(JSON.stringify({ tid, upn: 'pat@northwind.example' })).toString('base64url') + '.y';
+function gateStore({ orgs = [{ ...ORG, signIn: 'emailLink' }], admins = {}, seats = {} } = {}) {
+  const calls = [];
+  return {
+    calls,
+    orgsByTenant: async (t) => { calls.push('orgs'); return orgs.filter((o) => o.tenantId === t); },
+    admin: async (o, id) => { calls.push('admin'); return admins[id] || null; },
+    seat: async (o, id) => { calls.push('seat'); return seats[id] || null; },
+  };
+}
+const gate = (input, store, now = T0 + 1) => G.decide({ tenantId: ORG.tenantId, method: 'emailLink', email: 'pat@northwind.example', ...input }, store, now);
+const seatOf = (status) => ({ [O.seatId('pat@northwind.example')]: { status } });
+
+check('seatgate uses exactly the same seat key as b2b-orgs', () => {
+  for (const e of ['pat@northwind.example', ' Pat@Northwind.Example ', 'x.y+z@a.b']) assert.equal(G.seatId(e), O.seatId(e));
+});
+
+check('seatgate reads the sign-in method from the event type', () => {
+  assert.equal(G.methodOf('providers/cloud.auth/eventTypes/user.beforeCreate:emailLink'), 'emailLink');
+  assert.equal(G.methodOf('providers/cloud.auth/eventTypes/user.beforeCreate:microsoft.com'), 'microsoft.com');
+  assert.equal(G.methodOf('providers/cloud.auth/eventTypes/user.beforeCreate'), 'unknown');
+  assert.equal(G.methodOf(undefined), 'unknown');
+});
+
+check('seatgate lets every consumer sign-up through without reading anything', async () => {
+  for (const method of ['password', 'emailLink', 'google.com', 'unknown']) {
+    const st = gateStore();
+    assert.deepEqual(await G.decide({ tenantId: null, method, email: 'a@b.c' }, st, T0), { ok: true, reason: 'consumer_pass' });
+    assert.deepEqual(st.calls, []);
+  }
+});
+
+check('seatgate refuses every company account created with a password, before any read', async () => {
+  const st = gateStore({ seats: seatOf('invited') });
+  assert.deepEqual(await gate({ method: 'password' }, st), { ok: false, reason: 'password_signup' });
+  assert.deepEqual(st.calls, []);
+});
+
+check('seatgate passes a seat holder and an admin, and refuses everyone else', async () => {
+  assert.deepEqual(await gate({}, gateStore({ seats: seatOf('invited') })), { ok: true, reason: 'seat_pass' });
+  assert.deepEqual(await gate({ email: ' PAT@northwind.example ' }, gateStore({ seats: seatOf('active') })), { ok: true, reason: 'seat_pass' });
+  assert.deepEqual(await gate({}, gateStore({ admins: { [O.seatId('pat@northwind.example')]: { email: 'pat@northwind.example' } } })), { ok: true, reason: 'admin_pass' });
+  assert.equal((await gate({}, gateStore())).reason, 'not_on_seat_list');
+  assert.equal((await gate({}, gateStore({ seats: seatOf('ended') }))).reason, 'seat_ended');
+  assert.equal((await gate({}, gateStore({ seats: seatOf('removed') }))).reason, 'seat_removed');
+  assert.equal((await gate({ email: '' }, gateStore({ seats: seatOf('invited') }))).reason, 'no_email');
+});
+
+check('seatgate refuses an unknown or doubled tenant and a contract that is not running', async () => {
+  assert.equal((await gate({ tenantId: 'other' }, gateStore())).reason, 'tenant_unknown');
+  const org = { ...ORG, signIn: 'emailLink' };
+  assert.equal((await gate({}, gateStore({ orgs: [org, { ...org, orgId: 'copy' }] }))).reason, 'tenant_ambiguous');
+  assert.equal((await gate({}, gateStore({ seats: seatOf('invited') }), T0 - 1)).reason, 'contract_not_active');
+  assert.equal((await gate({}, gateStore({ seats: seatOf('invited') }), ORG.contractEnd)).reason, 'contract_not_active');
+});
+
+check('seatgate accepts only the company\'s own sign-in method', async () => {
+  assert.equal((await gate({}, gateStore({ orgs: [{ ...ORG }] }))).reason, 'signin_not_set', 'no method set means no sign-up at all');
+  assert.equal((await gate({ method: 'google.com' }, gateStore({ seats: seatOf('invited') }))).reason, 'wrong_method');
+  const g = gateStore({ orgs: [{ ...ORG, signIn: 'google' }], seats: seatOf('invited') });
+  assert.equal((await gate({ method: 'google.com' }, g)).reason, 'seat_pass');
+  assert.equal((await gate({ method: 'emailLink' }, g)).reason, 'wrong_method');
+  const s = gateStore({ orgs: [{ ...ORG, signIn: 'saml' }], seats: seatOf('invited') });
+  assert.equal((await gate({ method: 'saml.northwind' }, s)).reason, 'seat_pass');
+  assert.equal((await gate({ method: 'oidc.northwind' }, s)).reason, 'wrong_method');
+});
+
+check('seatgate lets Microsoft accounts in only from the company\'s own Microsoft tenant', async () => {
+  const st = (org = {}) => gateStore({ orgs: [{ ...ORG, signIn: 'microsoft', microsoftTenantId: MS_TID, ...org }], seats: seatOf('invited') });
+  assert.equal((await gate({ method: 'microsoft.com', idToken: msToken(MS_TID) }, st())).reason, 'seat_pass');
+  assert.equal((await gate({ method: 'microsoft.com', idToken: msToken(MS_TID.toUpperCase()) }, st())).reason, 'seat_pass');
+  assert.equal((await gate({ method: 'microsoft.com', idToken: msToken('99999999-0000-0000-0000-000000000000') }, st())).reason, 'microsoft_tenant_mismatch');
+  assert.equal((await gate({ method: 'microsoft.com' }, st())).reason, 'microsoft_tenant_missing');
+  assert.equal((await gate({ method: 'microsoft.com', idToken: 'not-a-token' }, st())).reason, 'microsoft_tenant_missing');
+  assert.equal((await gate({ method: 'microsoft.com', idToken: msToken(MS_TID) }, st({ microsoftTenantId: '' }))).reason, 'microsoft_tenant_not_set');
+  const other = st();
+  assert.equal((await gate({ method: 'microsoft.com', idToken: msToken('99999999-0000-0000-0000-000000000000') }, other)).reason, 'microsoft_tenant_mismatch');
+  assert.ok(!other.calls.includes('seat') && !other.calls.includes('admin'), 'a foreign Microsoft tenant never reaches the seat list');
 });
 
 let failed = 0;
