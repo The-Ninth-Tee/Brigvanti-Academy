@@ -14,6 +14,7 @@ import { tenantOf, companyVerifier } from '../netlify/lib/b2b-auth.mjs';
 import { createB2bAccountDelete } from '../netlify/lib/b2b-account-delete.mjs';
 import { createB2bAdmin } from '../netlify/lib/b2b-admin.mjs';
 import * as G from '../gcp/seatgate/core.mjs';
+import { createB2bSigninLink, planLinkMail, overLimit } from '../netlify/lib/b2b-signin-link.mjs';
 import { resolvePlan, resolveSignInPlan } from '../netlify/lib/coach-caps.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -644,6 +645,84 @@ check('seatgate lets Microsoft accounts in only from the company\'s own Microsof
   const other = st();
   assert.equal((await gate({ method: 'microsoft.com', idToken: msToken('99999999-0000-0000-0000-000000000000') }, other)).reason, 'microsoft_tenant_mismatch');
   assert.ok(!other.calls.includes('seat') && !other.calls.includes('admin'), 'a foreign Microsoft tenant never reaches the seat list');
+});
+
+// Sign-in links for email link companies (D13, P1.11 route 1)
+function linkHarness({ org = { ...ORG, signIn: 'emailLink' }, seats = {}, admins = {}, t = T0 + 1, failSend = false } = {}) {
+  const sent = [], links = [], times = {};
+  const store = {
+    orgByTenant: async (x) => (org && x === org.tenantId ? org : null),
+    admin: async (o, id) => admins[id] || null,
+    member: async (o, id) => seats[id] || null,
+    linkTimes: async (id) => times[id] || [],
+    setLinkTimes: async (id, v) => { times[id] = v; },
+  };
+  const makeLink = async (tenantId, email, url) => { links.push([tenantId, email, url]); return `https://auth.example/link?oob=1&tenantId=${tenantId}`; };
+  const send = async (m) => { if (failSend) throw new Error('smtp down'); sent.push(m); return true; };
+  const h = createB2bSigninLink({ store, makeLink, send, appUrl: 'https://app.example', now: () => t });
+  const post = (body) => h(new Request('https://x/', { method: 'POST', body: JSON.stringify(body) }));
+  return { sent, links, times, post, set: (v) => { t = v; } };
+}
+const linkBody = (email = 'pat@northwind.example', extra = {}) => ({ tenantId: ORG.tenantId, email, lang: 'en', ...extra });
+
+check('a sign-in link goes only to a seat holder or an admin, and the answer never tells them apart', async () => {
+  const id = O.seatId('pat@northwind.example');
+  const seat = linkHarness({ seats: { [id]: { status: 'invited' } } });
+  const r1 = await seat.post(linkBody(' Pat@Northwind.example '));
+  assert.equal(r1.status, 200);
+  assert.equal(seat.sent.length, 1);
+  assert.equal(seat.sent[0].to, 'pat@northwind.example');
+  assert.deepEqual(seat.links[0], [ORG.tenantId, 'pat@northwind.example', `https://app.example/?b2b=${ORG.tenantId}`]);
+  const admin = linkHarness({ admins: { [id]: { email: 'pat@northwind.example' } } });
+  await admin.post(linkBody());
+  assert.equal(admin.sent.length, 1, 'an admin without a seat gets a link');
+  const answers = [await r1.json()];
+  for (const h of [linkHarness(), linkHarness({ seats: { [id]: { status: 'ended' } } }), linkHarness({ seats: { [id]: { status: 'removed' } } }),
+    linkHarness({ org: { ...ORG, signIn: 'microsoft' }, seats: { [id]: { status: 'invited' } } }),
+    linkHarness({ seats: { [id]: { status: 'invited' } }, t: ORG.contractEnd }), linkHarness({ org: null })]) {
+    const r = await h.post(linkBody());
+    assert.equal(r.status, 200);
+    answers.push(await r.json());
+    assert.equal(h.sent.length, 0);
+    assert.equal(h.links.length, 0, 'no link is even created');
+  }
+  assert.ok(answers.every((a) => JSON.stringify(a) === JSON.stringify(answers[0])), 'the same answer for every address');
+});
+
+check('sign-in link requests are limited per address, for every address alike', async () => {
+  const id = O.seatId('pat@northwind.example');
+  const h = linkHarness({ seats: { [id]: { status: 'active' } } });
+  for (let i = 0; i < 3; i++) assert.equal((await h.post(linkBody())).status, 200);
+  assert.equal((await h.post(linkBody())).status, 429);
+  assert.equal(h.sent.length, 3);
+  const stranger = linkHarness();
+  for (let i = 0; i < 3; i++) await stranger.post(linkBody('nobody@northwind.example'));
+  assert.equal((await stranger.post(linkBody('nobody@northwind.example'))).status, 429, 'a stranger hits the same limit');
+  assert.equal(overLimit([T0], T0 + 16 * 60 * 1000), false);
+  assert.equal(overLimit(Array.from({ length: 10 }, (_, i) => T0 + i * 20 * 60 * 1000), T0 + 10 * 20 * 60 * 1000), true, '10 a day');
+  assert.equal(overLimit(Array.from({ length: 10 }, (_, i) => T0 + i), T0 + 25 * 60 * 60 * 1000), false, 'the day window moves on');
+});
+
+check('a sign-in link request with bad input is refused, and a failed send still gives the same answer', async () => {
+  const h = linkHarness();
+  assert.equal((await h.post({ tenantId: ORG.tenantId, email: 'not an email' })).status, 400);
+  assert.equal((await h.post({ email: 'pat@northwind.example' })).status, 400);
+  assert.equal((await h.post({ tenantId: 'x'.repeat(129), email: 'pat@northwind.example' })).status, 400);
+  const id = O.seatId('pat@northwind.example');
+  const down = linkHarness({ seats: { [id]: { status: 'invited' } }, failSend: true });
+  assert.equal((await down.post(linkBody())).status, 200);
+});
+
+check('the sign-in link email exists in English and Dutch and escapes the company name', () => {
+  const en = planLinkMail('en', 'A & B <Co>', 'https://auth.example/l?a=1&b=2', 'https://app.example');
+  assert.equal(en.subject, 'Your sign-in link for Brigvanti');
+  assert.ok(en.text.includes('https://auth.example/l?a=1&b=2'));
+  assert.ok(en.html.includes('A &amp; B &lt;Co&gt;') && !en.html.includes('<Co>'));
+  assert.ok(en.html.includes('href="https://auth.example/l?a=1&amp;b=2"'));
+  const nl = planLinkMail('nl', 'Northwind', 'https://l', 'https://app.example');
+  assert.equal(nl.lang, 'nl');
+  assert.equal(nl.subject, 'Je inloglink voor Brigvanti');
+  assert.equal(planLinkMail('fr', 'X', 'https://l', 'https://a').lang, 'en');
 });
 
 let failed = 0;
