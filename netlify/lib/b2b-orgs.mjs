@@ -1,7 +1,9 @@
 // B2B company data. Every path here is server-only: Firestore rules grant the browser nothing
 // under orgs/ or entitlements/, so default deny covers them.
 //
-//   orgs/{orgId}                  name, tenantId, domains, departments, seats, contractStart, contractEnd, founding, source
+//   orgs/{orgId}                  name, tenantId, domains, departments, seats, contractStart, contractEnd, founding, source,
+//                                 signIn ('microsoft' | 'google' | 'emailLink' | 'saml' | 'oidc'), microsoftTenantId (with 'microsoft')
+//                                 seatgate (gcp/seatgate) refuses every sign-up in the tenant until signIn is set.
 //   orgs/{orgId}/members/{seatId} email, department, status, uid, invitedAt, firstSignInAt, endedAt, deleteAfter
 //   entitlements/{uid}            product 'b2b', orgId, tenantId, validUntil   (read by the coach gate)
 //   orgs/{orgId}/admins/{adminId} email, uid, addedAt, firstSignInAt   (an admin needs no seat; adminId is seatId(email))

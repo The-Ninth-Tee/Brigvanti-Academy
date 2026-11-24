@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "proof": "brigvanti-tenant-proof",
+    "live": "brigvanti-academy"
+  }
+}
