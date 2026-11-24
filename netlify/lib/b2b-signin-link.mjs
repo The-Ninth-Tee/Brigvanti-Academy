@@ -21,7 +21,7 @@ const FOOT = {
   en: 'The Ninth Tee, Rijswijkstraat 199, 1062 XL Amsterdam, the Netherlands. Chamber of Commerce number 98566903. Questions: support@theninthtee.eu.',
   nl: 'The Ninth Tee, Rijswijkstraat 199, 1062 XL Amsterdam, Nederland. KvK-nummer 98566903. Vragen: support@theninthtee.eu.',
 };
-// Dutch text needs Robbie's review before it ships.
+// Dutch text reviewed by Robbie on 24 Nov 2026.
 const T = {
   en: (org) => ({
     subject: 'Your sign-in link for Brigvanti',
@@ -38,8 +38,8 @@ const T = {
     button: 'Inloggen bij Brigvanti',
     lines: [
       `Gebruik de knop hieronder om in te loggen bij Brigvanti via ${org}.`,
-      'Open de link op het apparaat waarop je wilt inloggen. De link werkt één keer. Werkt hij niet meer, vraag dan een nieuwe aan op de inlogpagina.',
-      'Na het inloggen kun je in Account een wachtwoord instellen. Dan kun je ook op andere apparaten inloggen zonder nieuwe link.',
+      'Open de link op het apparaat waarop je wilt inloggen. De link werkt één keer. Werkt de link niet meer, vraag dan een nieuwe aan op de inlogpagina.',
+      'Na het inloggen kun je in Account een wachtwoord aanmaken. Hiermee kun je ook op andere apparaten inloggen zonder nieuwe link.',
       'Heb je deze link niet aangevraagd? Dan kun je deze e-mail negeren. Zonder de link kan niemand inloggen.',
     ],
   }),
