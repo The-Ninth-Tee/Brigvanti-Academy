@@ -193,6 +193,13 @@ async function dropFromReport(store, org, report, uid) {
 
 export const COMPANY_ACTIONS = Object.keys(ACTIONS);
 
+// Two admins at once (26 Nov 2026). Every change runs in one transaction on the company record, so two
+// changes never interleave. The page sends the version it last saw. If another admin changed something
+// since, the change is refused with 409 and the page reloads before the admin tries again.
+export const MUTATIONS = new Set(['seatAdd', 'uploadCommit', 'seatRemove', 'unseatedGive', 'unseatedRemove',
+  'departmentsAdd', 'departmentRename', 'departmentMerge', 'departmentRemove', 'adminAdd', 'adminRemove']);
+const CHANGED = Symbol('changed');
+
 export function createB2bCompany({ verify, store, now = () => Date.now() }) {
   const gate = adminGate({ verify, store, now });
   return async (req) => {
@@ -204,13 +211,26 @@ export function createB2bCompany({ verify, store, now = () => Date.now() }) {
       if (text.length > BODY_MAX) return json({ code: 'too_large' }, 413);
       body = JSON.parse(text || '{}');
     } catch { return no('bad_request'); }
-    const act = body && typeof body.action === 'string' && Object.hasOwn(ACTIONS, body.action) ? ACTIONS[body.action] : null;
-    if (!act) return no('unknown_action');
+    const name = body && typeof body.action === 'string' && Object.hasOwn(ACTIONS, body.action) ? body.action : null;
+    if (!name) return no('unknown_action');
     try {
-      const out = await act({ org: g.org, me: g.adminId, store, now: now(), body });
-      return out instanceof Response ? out : json(out);
+      if (!MUTATIONS.has(name)) {
+        const out = await ACTIONS[name]({ org: g.org, me: g.adminId, store, now: now(), body });
+        return out instanceof Response ? out : json({ ...out, rev: g.org.rev || 0 });
+      }
+      const result = await store.transaction(g.org.orgId, async (tx) => {
+        const org = await tx.getOrg(g.org.orgId);
+        const rev = (org && org.rev) || 0;
+        if (body.rev !== undefined && body.rev !== rev) return CHANGED;
+        const out = await ACTIONS[name]({ org, me: g.adminId, store: tx, now: now(), body });
+        if (out instanceof Response) return out;
+        await tx.setRev(g.org.orgId, rev + 1);
+        return { ...out, rev: rev + 1 };
+      });
+      if (result === CHANGED) return json({ code: 'changed' }, 409);
+      return result instanceof Response ? result : json(result);
     } catch (e) {
-      console.error('[b2b-company] failed', g.org.orgId, body.action, String((e && e.message) || e));
+      console.error('[b2b-company] failed', g.org.orgId, name, String((e && e.message) || e));
       return json({ code: 'failed', error: 'Something went wrong. Try again.' }, 500);
     }
   };
@@ -240,5 +260,32 @@ export function firestoreCompanyStore(db, auth, orgStore) {
       catch (e) { if (e.code !== 'auth/user-not-found') throw e; }
     },
     deleteData: (path, uid) => db.recursiveDelete(db.doc(`${path}/${uid}`)),
+    // All reads come before all writes in every action, as a Firestore transaction requires.
+    // Deleting a sign-in and its data cannot be part of a transaction; both are safe to repeat on a retry.
+    transaction(orgId, fn) {
+      const outer = this;
+      return db.runTransaction(async (t) => {
+        const orgRef = db.doc(`orgs/${orgId}`);
+        const members = orgRef.collection('members'), admins = orgRef.collection('admins');
+        const report = db.doc(`orgs/${orgId}/reports/unseated`);
+        return fn({
+          getOrg: async (id) => { const s = await t.get(orgRef); return s.exists ? { orgId: id, ...s.data() } : null; },
+          members: async () => (await t.get(members)).docs.map((d) => ({ seatId: d.id, ...d.data() })),
+          member: async (o, sid) => { const s = await t.get(members.doc(sid)); return s.exists ? { seatId: sid, ...s.data() } : null; },
+          admins: async () => (await t.get(admins)).docs.map((d) => ({ adminId: d.id, ...d.data() })),
+          admin: async (o, aid) => { const s = await t.get(admins.doc(aid)); return s.exists ? { adminId: aid, ...s.data() } : null; },
+          unseated: async () => { const s = await t.get(report); return s.exists ? s.data() : null; },
+          setMember: (o, sid, m) => { t.set(members.doc(sid), m, { merge: true }); },
+          setEntitlement: (uid, e) => { t.set(db.doc(`entitlements/${uid}`), e, { merge: true }); },
+          setDepartments: (o, departments) => { t.set(orgRef, { departments }, { merge: true }); },
+          setAdmin: (o, aid, a) => { t.set(admins.doc(aid), a, { merge: true }); },
+          deleteAdmin: (o, aid) => { t.delete(admins.doc(aid)); },
+          setUnseated: (o, r) => { t.set(report, r); },
+          setRev: (o, rev) => { t.set(orgRef, { rev }, { merge: true }); },
+          deleteSignIn: outer.deleteSignIn,
+          deleteData: outer.deleteData,
+        });
+      });
+    },
   };
 }

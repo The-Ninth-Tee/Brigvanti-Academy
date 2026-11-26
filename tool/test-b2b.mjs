@@ -13,7 +13,7 @@ import { runSeatEnd, DATA_ORDER, UNSEATED_DAYS } from '../netlify/lib/b2b-seat-e
 import { tenantOf, companyVerifier } from '../netlify/lib/b2b-auth.mjs';
 import { createB2bAccountDelete } from '../netlify/lib/b2b-account-delete.mjs';
 import { createB2bAdmin } from '../netlify/lib/b2b-admin.mjs';
-import { createB2bCompany, COMPANY_ACTIONS } from '../netlify/lib/b2b-company.mjs';
+import { createB2bCompany, COMPANY_ACTIONS, MUTATIONS } from '../netlify/lib/b2b-company.mjs';
 import { createB2bCompanyInfo } from '../netlify/lib/b2b-company-info.mjs';
 import * as G from '../gcp/seatgate/core.mjs';
 import { createB2bSigninLink, planLinkMail, overLimit } from '../netlify/lib/b2b-signin-link.mjs';
@@ -861,7 +861,12 @@ function companyHarness({ org = { ...ORG, seats: 5, departments: ['Sales', 'HR',
     setUnseated: async (o, r) => { db.log.push(['setUnseated']); db.unseated = r; },
     deleteSignIn: async (t, uid) => db.log.push(['deleteSignIn', t, uid]),
     deleteData: async (p, uid) => db.log.push(['deleteData', p, uid]),
+    getOrg: async () => ({ ...db.org }),
+    setRev: async (o, rev) => { db.log.push(['setRev', rev]); db.org = { ...db.org, rev }; },
   };
+  // One change at a time, as a Firestore transaction on the company record gives.
+  let queue = Promise.resolve();
+  store.transaction = (orgId, fn) => { const run = queue.then(() => fn(store)); queue = run.catch(() => {}); return run; };
   const users = {
     boss: { uid: 'adm', email: 'boss@northwind.example', firebase: { tenant: ORG.tenantId } },
     staff: { uid: 'u-a', email: 'a@northwind.example', firebase: { tenant: ORG.tenantId } },
@@ -869,7 +874,7 @@ function companyHarness({ org = { ...ORG, seats: 5, departments: ['Sales', 'HR',
   };
   const verify = async (t) => { if (!users[t]) throw new Error('bad'); return users[t]; };
   const handler = createB2bCompany({ verify, store, now: () => T0 + 1 });
-  const call = async (action, body = {}, who = 'boss') => { const r = await handler(req(who, { action, ...body })); return { status: r.status, body: await r.json() }; };
+  const call = async (action, body = {}, who = 'boss') => { const r = await handler(req(who, { action, ...body })); const { rev, ...rest } = await r.json(); return { status: r.status, body: rest, rev }; };
   return { db, handler, call };
 }
 const mem = (email, extra = {}) => ({ seatId: O.seatId(email), email, department: 'Sales', status: 'active', uid: 'u-' + email.split('@')[0], invitedAt: T0, firstSignInAt: T0, endedAt: null, deleteAfter: null, ...extra });
@@ -1129,6 +1134,44 @@ check('the Article 4 period totals count from the contract start and follow the 
   assert.equal(t.period, null, 'no period without a start');
   const u = companyStats({ org: { ...ORG, seats: 200 }, members: [], summaries: {}, now: NOW, since });
   assert.deepEqual(u.period, { from: since, to: NOW, assignments: HIDDEN, areasCovered: 0 });
+});
+
+check('every company answer carries the version, and each change moves it on by one', async () => {
+  const h = companyHarness();
+  assert.equal((await h.call('admins')).rev, 0);
+  const a = await h.call('adminAdd', { email: 'it@northwind.example', rev: 0 });
+  assert.equal(a.rev, 1);
+  assert.equal((await h.call('admins')).rev, 1);
+  const refused = await h.call('adminAdd', { email: 'it@gmail.com', rev: 1 });
+  assert.equal(refused.body.code, 'wrong_domain');
+  assert.equal((await h.call('admins')).rev, 1, 'a refused change does not move the version');
+});
+
+check('two admins: a change made on an older view is refused with 409 and changes nothing', async () => {
+  const h = companyHarness();
+  const seen = (await h.call('departments')).rev;
+  assert.equal((await h.call('departmentsAdd', { name: 'IT', rev: seen })).status, 200, 'admin A');
+  const b = await h.call('departmentRename', { from: 'Sales', to: 'Sales team', rev: seen });
+  assert.equal(b.status, 409, 'admin B worked on the view before A changed it');
+  assert.deepEqual(b.body, { code: 'changed' });
+  assert.deepEqual(h.db.org.departments, ['Sales', 'HR', 'Finance', 'IT']);
+  assert.equal((await h.call('departmentRename', { from: 'Sales', to: 'Sales team', rev: seen + 1 })).status, 200, 'B reloads and tries again');
+});
+
+check('two changes sent at the same moment never interleave, so no department and no seat is lost', async () => {
+  const h = companyHarness({ org: { ...ORG, seats: 1, departments: ['Sales'] } });
+  const [a, b] = await Promise.all([h.call('departmentsAdd', { name: 'IT' }), h.call('departmentsAdd', { name: 'Ops' })]);
+  assert.equal(a.status + b.status, 400);
+  assert.deepEqual(h.db.org.departments, ['Sales', 'IT', 'Ops'], 'both departments kept');
+  const [c, d] = await Promise.all([h.call('seatAdd', { email: 'a@northwind.example', department: 'Sales' }), h.call('seatAdd', { email: 'b@northwind.example', department: 'Sales' })]);
+  assert.deepEqual([c.status, d.status].sort(), [200, 400]);
+  assert.equal(Object.values(h.db.members).filter((m) => m.status === 'invited').length, 1, 'one seat bought, one seat given');
+});
+
+check('the Firestore store runs every change in a transaction with all reads first', () => {
+  const s = read('netlify/lib/b2b-company.mjs');
+  assert.ok(/return db\.runTransaction\(/.test(s));
+  for (const a of ['seatAdd', 'uploadCommit', 'seatRemove', 'unseatedGive', 'unseatedRemove', 'departmentsAdd', 'departmentRename', 'departmentMerge', 'departmentRemove', 'adminAdd', 'adminRemove']) assert.ok(MUTATIONS.has(a), a);
 });
 
 let failed = 0;

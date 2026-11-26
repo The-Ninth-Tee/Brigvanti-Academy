@@ -215,8 +215,12 @@ const S = {
   company: null, admin: null, view: 'loading', screen: null, depth: 0,
   msg: '', err: false, busy: false,
   overview: null, seats: null, unseated: null, depts: null, admins: null,
-  setupList: [], upload: null, flash: null, open: null,
+  setupList: [], upload: null, flash: null, open: null, rev: null, notice: null,
 };
+// Changes carry the version this page last saw, so a change made on an older view is refused (409).
+const MUTATIONS = new Set(['seatAdd', 'uploadCommit', 'seatRemove', 'unseatedGive', 'unseatedRemove',
+  'departmentsAdd', 'departmentRename', 'departmentMerge', 'departmentRemove', 'adminAdd', 'adminRemove']);
+const CHANGED = 'Another admin changed something a moment ago. This page now shows the latest version. Check it and try again.';
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 const fmtDate = (t) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -405,11 +409,12 @@ async function api(action, body = {}){
   const r = await fetch('/.netlify/functions/b2b-company', {
     method: 'POST',
     headers: { authorization: 'Bearer ' + (await user.getIdToken()), 'content-type': 'application/json' },
-    body: JSON.stringify({ action, ...body }),
+    body: JSON.stringify({ action, ...body, ...(MUTATIONS.has(action) && S.rev != null ? { rev: S.rev } : {}) }),
   });
   if (r.status === 401 || r.status === 403) { showPanel('notAdmin'); throw new Error('no access'); }
   let data = {};
   try { data = await r.json(); } catch (e) {}
+  if (Number.isInteger(data.rev)) S.rev = data.rev;
   return { ok: r.ok, status: r.status, data };
 }
 
@@ -440,6 +445,7 @@ async function load(what){
 async function enter(screen, opts = {}){
   if (opts.push) { S.depth += 1; history.pushState({ screen, depth: S.depth }, '', location.href); }
   const changed = screen !== S.screen;
+  if (changed) S.notice = null;
   S.screen = screen; S.open = null;
   if (changed) renderShell(true);
   try { await load(NEEDS[screen] || []); }
@@ -486,6 +492,7 @@ const refresh = () => renderShell(false);
 function topOf(eyebrow, title, lead){
   const showBack = S.depth > 0 || (S.screen !== 'overview' && S.screen !== 'setup');
   return `${showBack ? '<button class="back" type="button" data-act="back">‹ Back</button>' : ''}
+    ${S.notice ? `<p class="msg err" role="alert" style="margin:0 0 20px">${esc(S.notice)}</p>` : ''}
     <p class="eyebrow">${esc(eyebrow)}</p><h1>${esc(title)}</h1>${lead ? `<p class="lead">${lead}</p>` : ''}`;
 }
 function screenHtml(){
@@ -586,7 +593,9 @@ Hi,
 ${c.name} gives you a seat in Brigvanti. Brigvanti helps you learn to use AI well in your own work.
 
 How it works:
-- A short scan shows where you stand in seven areas, from the basics of AI to using it responsibly.
+- Brigvanti has seven areas, from the basics of AI to using it responsibly. You pick one area to start with.
+- A short scan shows where you stand in that area. You do not need to scan all seven at once.
+- After that one scan you can start practising in that area. You add other areas when you are ready.
 - You practise on a real task from your own work, step by step.
 - An AI coach gives you feedback on what you made. It advises, it does not grade you.
 
@@ -771,7 +780,9 @@ async function run(action, body, after, msgId = 'msg'){
   try {
     const r = await api(action, body);
     busy(false);
+    if (r.status === 409) { S.notice = CHANGED; await enter(S.screen); return; }
     if (!r.ok) { fieldError(msgId, errorText(r.data.code)); return; }
+    S.notice = null;
     await after(r.data);
   } catch (e) { busy(false); }
 }
