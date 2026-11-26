@@ -9,7 +9,7 @@ import { createAccountDelete } from '../netlify/lib/account-delete.mjs';
 import * as O from '../netlify/lib/b2b-orgs.mjs';
 import { learnerSummary, companyStats, HIDDEN } from '../netlify/lib/b2b-stats.mjs';
 import { sweepOrphans } from '../netlify/lib/account-sweep.mjs';
-import { runSeatEnd, DATA_ORDER, UNSEATED_DAYS } from '../netlify/lib/b2b-seat-end.mjs';
+import { runSeatEnd, DATA_ORDER, UNSEATED_DAYS, planUnseated } from '../netlify/lib/b2b-seat-end.mjs';
 import { tenantOf, companyVerifier } from '../netlify/lib/b2b-auth.mjs';
 import { createB2bAccountDelete } from '../netlify/lib/b2b-account-delete.mjs';
 import { createB2bAdmin } from '../netlify/lib/b2b-admin.mjs';
@@ -18,6 +18,7 @@ import { createB2bCompanyInfo } from '../netlify/lib/b2b-company-info.mjs';
 import * as G from '../gcp/seatgate/core.mjs';
 import { createB2bSigninLink, planLinkMail, overLimit } from '../netlify/lib/b2b-signin-link.mjs';
 import { resolvePlan, resolveSignInPlan } from '../netlify/lib/coach-caps.mjs';
+import { createB2bActivate } from '../netlify/lib/b2b-activate.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
@@ -1172,6 +1173,119 @@ check('the Firestore store runs every change in a transaction with all reads fir
   const s = read('netlify/lib/b2b-company.mjs');
   assert.ok(/return db\.runTransaction\(/.test(s));
   for (const a of ['seatAdd', 'uploadCommit', 'seatRemove', 'unseatedGive', 'unseatedRemove', 'departmentsAdd', 'departmentRename', 'departmentMerge', 'departmentRemove', 'adminAdd', 'adminRemove']) assert.ok(MUTATIONS.has(a), a);
+});
+
+const runUnseatedPlan = (members) => planUnseated([{ uid: 'u9', email: SAM, createdAt: T0 }], Object.values(members), [], T0 + O.DAY);
+
+// Seat activation (B2): the learner app calls b2b-activate after every company sign-in.
+function activateHarness({ org = ORG, members = {}, entitlements = {}, at = T0 + O.DAY } = {}) {
+  const db = { members: { ...members }, entitlements: { ...entitlements }, writes: [] };
+  let lock = Promise.resolve();
+  const store = {
+    orgByTenant: async (t) => (t === org.tenantId ? org : null),
+    // Transactions run one at a time, as Firestore serialises two that touch the same document.
+    transaction: (orgId, fn) => {
+      const run = lock.then(() => fn({
+        member: async (sid) => (db.members[sid] ? { seatId: sid, ...db.members[sid] } : null),
+        entitlement: async (uid) => db.entitlements[uid] || null,
+        setMember: (sid, m) => { db.writes.push('member'); db.members[sid] = { ...db.members[sid], ...m }; },
+        setEntitlement: (uid, e) => { db.writes.push('entitlement'); db.entitlements[uid] = { ...e }; },
+      }));
+      lock = run.catch(() => {});
+      return run;
+    },
+  };
+  const verify = async (t) => { const u = JSON.parse(t); if (!u.firebase || !u.firebase.tenant) throw new Error('not a company sign-in'); return u; };
+  const h = createB2bActivate({ verify, store, now: () => at });
+  const call = async (user, method = 'POST') => {
+    const r = await h(new Request('https://x/', { method, headers: user ? { authorization: 'Bearer ' + JSON.stringify(user) } : {} }));
+    return { status: r.status, body: r.status === 405 ? null : await r.json() };
+  };
+  return { db, call };
+}
+const SAM = 'sam@northwind.example';
+const invite = (email = SAM) => ({ [O.seatId(email)]: { email, department: 'Sales', status: 'invited', uid: null, invitedAt: T0, firstSignInAt: null, endedAt: null, deleteAfter: null } });
+
+check('activation binds an invited seat on the first sign-in and writes the entitlement the coach reads', async () => {
+  const h = activateHarness({ members: invite() });
+  const r = await h.call(tok(SAM, 'u9'));
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body, { status: 'active', until: ORG.contractEnd, company: ORG.name });
+  const m = h.db.members[O.seatId(SAM)];
+  assert.equal(m.status, 'active'); assert.equal(m.uid, 'u9'); assert.equal(m.firstSignInAt, T0 + O.DAY);
+  assert.equal(m.department, 'Sales', 'the department stays');
+  assert.deepEqual(h.db.entitlements.u9, { product: 'b2b', orgId: ORG.orgId, tenantId: ORG.tenantId, validUntil: ORG.contractEnd });
+  assert.equal(resolveSignInPlan(h.db.entitlements.u9, ORG.tenantId, T0 + O.DAY), 'b2b', 'the coach now gives assignments');
+  assert.equal(runUnseatedPlan(h.db.members).remove.length + runUnseatedPlan(h.db.members).report.length, 0, 'the seat end job no longer sees a sign-in without a seat');
+});
+
+check('a later sign-in writes nothing, and a missing entitlement is written again', async () => {
+  const h = activateHarness({ members: invite() });
+  await h.call(tok(SAM, 'u9'));
+  h.db.writes.length = 0;
+  assert.equal((await h.call(tok(SAM, 'u9'))).status, 200);
+  assert.deepEqual(h.db.writes, [], 'nothing written on an ordinary sign-in');
+  delete h.db.entitlements.u9;
+  assert.equal((await h.call(tok(SAM, 'u9'))).status, 200);
+  assert.deepEqual(h.db.writes, ['entitlement']);
+});
+
+check('activation gives the same refusal for a stranger, another company, a bound seat, a removed seat and an ended contract', async () => {
+  const seats = { ...invite(), ...invite('kim@northwind.example') };
+  seats[O.seatId('kim@northwind.example')] = { ...seats[O.seatId('kim@northwind.example')], status: 'removed' };
+  const h = activateHarness({ members: seats });
+  const refusals = [
+    await h.call(tok('stranger@northwind.example', 'u1')),
+    await h.call(tok(SAM, 'u2', 'other-tenant')),
+    await h.call(tok('kim@northwind.example', 'u3')),
+    await h.call({ uid: 'u4', firebase: { tenant: ORG.tenantId } }),
+  ];
+  await h.call(tok(SAM, 'u9'));
+  refusals.push(await h.call(tok(SAM, 'u5')));
+  for (const r of refusals) assert.deepEqual(r, { status: 403, body: { code: 'no_seat' } });
+  assert.equal(h.db.members[O.seatId(SAM)].uid, 'u9', 'a bound seat never moves to another account');
+  const late = activateHarness({ members: invite(), at: ORG.contractEnd + 1 });
+  assert.deepEqual(await late.call(tok(SAM, 'u9')), { status: 403, body: { code: 'no_seat' } });
+  assert.deepEqual(late.db.writes, []);
+});
+
+check('activation refuses a seat that is being deleted and never sets it back to active', async () => {
+  const seats = invite();
+  seats[O.seatId(SAM)] = { ...seats[O.seatId(SAM)], status: 'deleting', uid: 'u9' };
+  const h = activateHarness({ members: seats });
+  assert.equal((await h.call(tok(SAM, 'u9'))).status, 403);
+  assert.equal(h.db.members[O.seatId(SAM)].status, 'deleting');
+  assert.deepEqual(h.db.writes, []);
+});
+
+check('an ended seat answers read-only to its own account and writes nothing', async () => {
+  const seats = invite();
+  seats[O.seatId(SAM)] = { ...seats[O.seatId(SAM)], status: 'ended', uid: 'u9', endedAt: T0, deleteAfter: T0 + 30 * O.DAY };
+  const h = activateHarness({ members: seats });
+  assert.deepEqual(await h.call(tok(SAM, 'u9')), { status: 200, body: { status: 'ended', deleteAfter: T0 + 30 * O.DAY, company: ORG.name } });
+  assert.equal((await h.call(tok(SAM, 'u7'))).status, 403, 'another account on the same email gets nothing');
+  assert.deepEqual(h.db.writes, []);
+});
+
+check('activation refuses a consumer token, no token and a GET', async () => {
+  const h = activateHarness({ members: invite() });
+  assert.equal((await h.call({ uid: 'u1', email: SAM, firebase: {} })).status, 401);
+  assert.equal((await h.call(null)).status, 401);
+  assert.equal((await h.call(tok(SAM), 'GET')).status, 405);
+  assert.deepEqual(h.db.writes, []);
+});
+
+check('activation runs in one Firestore transaction, reading the seat and the entitlement before any write', () => {
+  const src = read('netlify/lib/b2b-activate.mjs');
+  assert.ok(/return db\.runTransaction\(/.test(src));
+  const body = src.slice(src.indexOf('store.transaction('), src.indexOf('if (!r) return NO_SEAT'));
+  assert.ok(body.indexOf('tx.entitlement(') < body.indexOf('tx.setMember('), 'reads come first');
+});
+
+check('the learner app activates the seat after a company sign-in, behind the B2B check', () => {
+  const s = read('index.html');
+  assert.ok(s.includes("/.netlify/functions/b2b-activate"), 'index.html calls b2b-activate');
+  assert.ok(/if\(TENANT\)/.test(s), 'the company route runs only with a company link');
 });
 
 let failed = 0;

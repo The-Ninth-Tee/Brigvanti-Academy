@@ -218,6 +218,21 @@ textarea,input,select{font-family:inherit;font-size:16px;width:100%;padding:13px
 textarea:focus,input:focus{outline:2px solid var(--focus);outline-offset:2px}
 :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .pdw{margin:6px 0 0;font-size:12.5px;color:var(--amber-d)}
+/* Company sign-in (B2). Desktop first: two columns from 900 px, one column below. */
+.cs{min-height:100vh;display:grid;grid-template-columns:1fr}
+.cs-side{background:var(--violet);color:var(--on-violet);padding:28px 16px;display:flex;flex-direction:column;gap:20px}
+.cs-brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:800;font-size:22px}
+.cs-mark{width:48px;height:48px;border-radius:12px;background:var(--lime);display:grid;place-items:center}
+.cs-mark .emblem{width:38px;height:38px}
+.cs-side h1{color:#FFFFFF;font-size:32px}
+.cs-lede,.cs-by{color:#EDE9FF;margin:0;font-size:15px}
+.cs-main{display:flex;justify-content:center;padding:28px 16px 48px}
+.cs-box{width:100%;max-width:420px}
+.cs-link,.cs-back{background:none;border:none;padding:0;color:var(--teal-d);font-weight:600;font-size:14px;cursor:pointer;text-align:left}
+.cs-link{text-decoration:underline}
+.cs-back{display:inline-block;margin-bottom:14px;font-size:15px}
+@media(min-width:900px){.cs{grid-template-columns:1fr 1fr}.cs-side{padding:64px;justify-content:space-between}
+  .cs-side h1{font-size:56px;line-height:1}.cs-lede{font-size:19px;max-width:520px}.cs-main{align-items:center;padding:64px}}
 textarea{min-height:120px;resize:vertical}
 label.fl{display:block;font-size:12px;font-weight:700;margin:0 0 6px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink3)}
 .err{color:var(--rose);font-size:14px;margin-top:8px;font-weight:500}
@@ -981,6 +996,7 @@ function go(n){
   S.stage=n;V={};save();render();
 }
 function back(){
+  if(!S.signed&&B2B.tenant&&b2bBack())return;
   if(V.menu){V.menu=false;render();return;}
   if(V.instHelp){V.instHelp=false;render();return;}
   if(V.leaving){V.leaving=false;render();return;}
@@ -1298,6 +1314,7 @@ function goScan(){
 
 /* ---------- 0. access ---------- */
 function vAccess(){
+  if(B2B.tenant)return vCompanyAccess();
   return `<div class="app"><div style="padding:56px 0 20px">
     <div class="hero-logo"><span class="emblem" role="img" aria-label="Brigvanti emblem"></span></div>
     <p class="wordmark">Brigvanti</p>
@@ -1343,6 +1360,112 @@ async function signIn(how){
     V.err=window.brigvantiAuth.msg(e);render();
   }
 }
+/* ---------- company sign-in (B2) ----------
+   Runs only for a company link (/?b2b=<tenant>) or a company sign-in saved on this
+   device (S4). The Firebase layer below sets B2B.tenant. Without it, B2C is unchanged. */
+const B2B={tenant:null,company:null,view:'loading',msg:'',err:false,busy:false,user:false,seat:null,email:''};
+window.brigB2B=B2B;
+const b2bOn=()=>B2B.user||plan().startsWith('b2b');
+const B2B_SUPPORT='support@theninthtee.eu';
+function b2bMethod(){
+  const m=B2B.company&&B2B.company.signIn;
+  if(m==='microsoft')return `<button class="btn go full" type="button" data-b2b-act onclick="b2bOAuth('microsoft')">Sign in with Microsoft</button>`;
+  if(m==='google')return `<button class="btn go full" type="button" data-b2b-act onclick="b2bOAuth('google')">Sign in with Google</button>`;
+  if(m==='emailLink')return `<form onsubmit="b2bSubmit(event,'link')" novalidate>
+    <label class="fl" for="csEmail">Work email</label>
+    <input id="csEmail" type="email" inputmode="email" autocomplete="email" maxlength="254" value="${esc(B2B.email)}">
+    <p class="pdw">Enter your work email only. Do not enter other personal details.</p>
+    <div class="row"><button class="btn go full" type="submit" data-b2b-act>Send sign-in link</button></div></form>`;
+  return `<p class="lede">Your company signs in through its own login system. That sign-in is not ready here yet. Email ${B2B_SUPPORT} for help.</p>`;
+}
+function b2bMsg(){return `<p id="csMsg" class="${B2B.err?'err':'muted'}" role="${B2B.err?'alert':'status'}" style="min-height:1em">${esc(B2B.msg)}</p>`;}
+const b2bPersonalLink=()=>`<p class="muted" style="margin-top:20px"><button class="cs-link" type="button" onclick="b2bPersonal()">Not from ${esc(B2B.company?B2B.company.name:'this company')}? Use a personal account</button></p>`;
+const b2bBackBtn=()=>`<button class="cs-back" type="button" onclick="b2bView('signin')">&#8592; Back</button>`;
+const B2B_VIEWS={
+  loading:()=>`<p class="muted">Connecting...</p>`,
+  unknown:()=>`<h1>This link does not work</h1>
+    <p class="lede">We do not recognise this company link. Check the link you received from your company, or email ${B2B_SUPPORT}.</p>
+    <div class="row"><button class="btn sec full" type="button" onclick="b2bPersonal()">Go to personal sign-in</button></div>`,
+  offline:()=>`<h1>No connection</h1>
+    <p class="lede">We could not load your company sign-in. Check your network and try again.</p>
+    <div class="row"><button class="btn go full" type="button" onclick="location.reload()">Try again</button></div>`,
+  signin:()=>{const sso=['microsoft','google','saml','oidc'].includes(B2B.company.signIn);
+    return `<h1>Sign in</h1>
+    <p class="lede">Use the work account ${esc(B2B.company.name)} gave you.</p>
+    ${b2bMethod()}${b2bMsg()}
+    <p class="muted">${sso?'Your company login records that you signed in. ':''}Your company sees totals and averages only. It never sees your answers, your level or your work.</p>
+    ${b2bPersonalLink()}`;},
+  sent:()=>`${b2bBackBtn()}<h1>Check your email</h1>
+    <p class="lede">If this address has a seat at ${esc(B2B.company.name)}, a sign-in link is on its way. Open it on this device. The link works once.</p>
+    <div class="row"><button class="btn sec full" type="button" onclick="b2bView('signin')">Use another email</button></div>`,
+  confirm:()=>`${b2bBackBtn()}<h1>Confirm your work email</h1>
+    <p class="lede">You opened the link on another device or browser. Enter the work email the link was sent to.</p>
+    <form onsubmit="b2bSubmit(event,'confirm')" novalidate>
+    <label class="fl" for="csEmail">Work email</label>
+    <input id="csEmail" type="email" inputmode="email" autocomplete="email" maxlength="254">
+    <p class="pdw">Enter your work email only. Do not enter other personal details.</p>
+    <div class="row"><button class="btn go full" type="submit" data-b2b-act>Sign in</button></div></form>${b2bMsg()}`,
+  expired:()=>`<h1>This link no longer works</h1>
+    <p class="lede">A sign-in link works once and expires after a while. Ask for a new one.</p>
+    <div class="row"><button class="btn go full" type="button" onclick="b2bView('signin')">Send a new link</button></div>`,
+  denied:()=>`${b2bBackBtn()}<h1>No seat for this account</h1>
+    <p class="lede">This account has no seat at ${esc(B2B.company.name)}. Ask your HR team or your manager to add your work email. Then sign in with that email.</p>
+    <div class="row"><button class="btn sec full" type="button" onclick="b2bView('signin')">Back to sign-in</button></div>`,
+  noseat:()=>`<h1>No seat for this account</h1>
+    <p class="lede">You signed in as ${esc(B2B.email)}, but this account has no seat at ${esc(B2B.company.name)}. Ask your HR team or your manager to add your work email.</p>
+    <div class="row"><button class="btn sec full" type="button" onclick="b2bSignOut()">Log out</button></div>`,
+  error:()=>`<h1>We could not check your seat</h1>
+    <p class="lede">Something went wrong while we checked your seat at ${esc(B2B.company.name)}. Check your network and try again.</p>
+    <div class="row"><button class="btn go full" type="button" onclick="b2bRetry()">Try again</button></div>
+    <div class="row"><button class="btn sec full" type="button" onclick="b2bSignOut()">Log out</button></div>`,
+  other:()=>`<h1>You are signed in with another account</h1>
+    <p class="lede">A personal account and a company seat are separate. Log out first to sign in with ${esc(B2B.company.name)}.</p>
+    <div class="row"><button class="btn go full" type="button" onclick="b2bSignOut()">Log out</button></div>
+    <div class="row"><button class="btn sec full" type="button" onclick="b2bPersonal()">Stay in my personal account</button></div>`,
+};
+function vCompanyAccess(){
+  const name=B2B.company?esc(B2B.company.name):'';
+  return `<div class="cs"><div class="cs-side">
+    <div class="cs-brand"><span class="cs-mark"><span class="emblem" role="img" aria-label="Brigvanti emblem"></span></span>Brigvanti</div>
+    <div><h1>Build real AI skill on your own work</h1>
+    <p class="cs-lede">Short assignments built on the tasks you already do. Your coach guides you. Nothing here is a test you can fail.</p></div>
+    ${name?`<p class="cs-by">Provided by ${name}</p>`:''}</div>
+    <main class="cs-main"><div class="cs-box">${(B2B_VIEWS[B2B.view]||B2B_VIEWS.loading)()}</div></main></div>`;
+}
+function b2bView(v,msg,err){B2B.view=v;B2B.msg=msg||'';B2B.err=!!err;B2B.busy=false;render();
+  const i=document.getElementById('csEmail');if(i&&!i.value)i.focus();}
+/* Messages and busy state change in place, so a typed email keeps its value and focus. */
+function b2bNote(msg,err){B2B.msg=msg||'';B2B.err=!!err;const m=document.getElementById('csMsg');
+  if(m){m.textContent=B2B.msg;m.className=err?'err':'muted';m.setAttribute('role',err?'alert':'status');}}
+function b2bBusy(on){B2B.busy=on;document.querySelectorAll('[data-b2b-act]').forEach(b=>{b.disabled=on;});}
+function b2bBack(){
+  if(['sent','confirm','denied','expired'].includes(B2B.view)){b2bView('signin');return true;}
+  return false;
+}
+async function b2bOAuth(kind){
+  if(B2B.busy||!window.brigB2BAuth)return;
+  b2bBusy(true);b2bNote('');
+  const r=await window.brigB2BAuth.oauth(kind);
+  /* On success the auth layer moves the screen, so the button stays busy. */
+  if(r.ok)return;
+  if(r.view)return b2bView(r.view);
+  b2bBusy(false);b2bNote(r.msg,true);
+}
+async function b2bSubmit(ev,kind){
+  ev.preventDefault();
+  if(B2B.busy||!window.brigB2BAuth)return;
+  const email=(document.getElementById('csEmail').value||'').trim();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){b2bNote('Enter a valid work email.',true);return;}
+  B2B.email=email;b2bBusy(true);b2bNote('');
+  const r=kind==='confirm'?await window.brigB2BAuth.confirm(email):await window.brigB2BAuth.sendLink(email);
+  if(r.ok)return;
+  if(r.view)return b2bView(r.view);
+  b2bBusy(false);b2bNote(r.msg,true);
+}
+async function b2bSignOut(){if(window.brigB2BAuth)await window.brigB2BAuth.signOut();}
+function b2bRetry(){if(window.brigB2BAuth)window.brigB2BAuth.retry();}
+/* Leaves the company route on this device. A personal account signs in as before. */
+async function b2bPersonal(){if(window.brigB2BAuth)await window.brigB2BAuth.forget();location.replace(location.pathname);}
 async function signOutUser(){
   /* Save to the server first. The device copy is cleared only once the server
      confirms the save. If it fails, the copy stays as a backstop. */
@@ -2602,7 +2725,7 @@ window.brigvantiApp={
     save();
     enableAnalytics();
     remindInit();
-    payLoad();
+    if(!b2bOn())payLoad();
     if(PAY_RETURN){PAY_RETURN=false;payReturned();}
     /* Pull the server copy in the background. When it arrives, merge it in and
        refresh. Login never waits on this, so a slow or down server does not
@@ -2617,6 +2740,8 @@ window.brigvantiApp={
       }
     }).catch(function(){});
   },
+  /* Company route screens shown while the account is not let into the app (B2). */
+  b2bShow(){ S.signed=false; LAST=-1; render(); },
   onSignedOut(){
     RM.loaded=false;RM.devices=[];
     S=fresh();V={};LAST=-1;NAV=[];render();
@@ -2652,7 +2777,9 @@ window.addEventListener('popstate',function(){
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup,
          signInWithEmailAndPassword, createUserWithEmailAndPassword,
-         signOut, deleteUser, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+         signOut, deleteUser, sendPasswordResetEmail,
+         OAuthProvider, signInWithRedirect, getRedirectResult,
+         isSignInWithEmailLink, signInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { initializeFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -2839,8 +2966,158 @@ window.brigvantiSendReset=async function(){
   if(u&&u.email) await sendPasswordResetEmail(auth,u.email);
 };
 
-onAuthStateChanged(auth,async function(user){
+/* ---------- Company route (B2, S4) ----------
+   Runs only with a company link (/?b2b=<tenant>) or a company sign-in saved on this
+   device. Every sign-in then happens inside the company's own tenant. Without a
+   tenant, the consumer flow below runs exactly as before. */
+const B2B_KEY='brig_b2b_tenant', B2B_NAME_KEY='brig_b2b_company', B2B_EMAIL_KEY='brig_b2b_link_email';
+const B2B_RE=/^[A-Za-z0-9-]{1,128}$/;
+const ls={
+  get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+};
+const B2B_ASKED=new URLSearchParams(location.search).get('b2b');
+const TENANT=B2B_ASKED!=null?B2B_ASKED:(B2B_RE.test(ls.get(B2B_KEY)||'')?ls.get(B2B_KEY):null);
+const B2B=window.brigB2B;
+const b2bApp=()=>window.brigvantiApp;
+
+function b2bAuthMessage(e){
+  const c=(e&&e.code)||'';
+  if(c==='auth/popup-closed-by-user'||c==='auth/cancelled-popup-request'||c==='auth/user-cancelled') return 'Sign-in was cancelled.';
+  if(c==='auth/network-request-failed') return 'No connection. Check your network and try again.';
+  if(c==='auth/invalid-email') return 'Enter a valid work email.';
+  if(c==='auth/operation-not-allowed'||c==='auth/admin-restricted-operation') return 'This sign-in is not set up for your company yet. Email support@theninthtee.eu.';
+  if(c==='auth/account-exists-with-different-credential') return 'This email already signs in another way. Email support@theninthtee.eu.';
+  return 'Sign-in failed. Please try again.';
+}
+/* seatgate refuses an address without a seat before the account exists (P1.4c).
+   The browser receives that as auth/internal-error carrying PERMISSION_DENIED (P1.15). */
+const b2bDenied=e=>(e&&e.code)==='auth/internal-error'&&/PERMISSION_DENIED/.test(String((e&&e.message)||''));
+const b2bLinkGone=e=>['auth/invalid-action-code','auth/expired-action-code'].includes(e&&e.code);
+const b2bCleanUrl=()=>{ try{ history.replaceState(history.state,'',location.pathname+'?b2b='+encodeURIComponent(TENANT)); }catch(e){} };
+const b2bFail=e=>b2bDenied(e)?{ view:'denied' }:b2bLinkGone(e)?{ view:'expired' }:{ msg:b2bAuthMessage(e) };
+
+async function b2bFinishLink(email){
+  try{
+    await signInWithEmailLink(auth,email,location.href);
+    ls.del(B2B_EMAIL_KEY);
+    b2bCleanUrl();
+    return { ok:true };
+  }catch(e){
+    if(b2bLinkGone(e)||b2bDenied(e)) b2bCleanUrl();
+    return b2bFail(e);
+  }
+}
+
+/* Binds the seat on the first sign-in and writes the entitlement the coach reads. */
+async function b2bActivate(user){
+  try{
+    const r=await fetch('/.netlify/functions/b2b-activate',{ method:'POST', headers:{ 'Authorization':'Bearer '+await user.getIdToken() } });
+    if(r.status===403) return { code:'no_seat' };
+    if(!r.ok) return { code:'error' };
+    return await r.json();
+  }catch(e){ return { code:'error' }; }
+}
+
+async function b2bUser(user){
   window.__brigAuthPending=false;
+  if(!user){
+    stopSnapshot();
+    uid=null;
+    B2B.user=false; B2B.seat=null;
+    if(!['unknown','offline','sent','confirm','expired','denied'].includes(B2B.view)){ B2B.view='signin'; B2B.msg=''; B2B.err=false; }
+    if(b2bApp()) b2bApp().onSignedOut();
+    return;
+  }
+  if(user.tenantId!==TENANT){
+    uid=null;
+    B2B.view='other';
+    if(b2bApp()) b2bApp().b2bShow();
+    return;
+  }
+  B2B.view='loading';
+  if(b2bApp()) b2bApp().b2bShow();
+  const seat=await b2bActivate(user);
+  if(auth.currentUser!==user) return;
+  if(seat.code==='no_seat'){ B2B.email=user.email||''; B2B.view='noseat'; if(b2bApp()) b2bApp().b2bShow(); return; }
+  if(seat.code==='error'){ B2B.view='error'; if(b2bApp()) b2bApp().b2bShow(); return; }
+  B2B.seat=seat; B2B.user=true;
+  uid=user.uid;
+  if(b2bApp()) await b2bApp().onSignedIn(user);
+}
+
+window.brigB2BAuth={
+  async oauth(kind){
+    const provider=kind==='microsoft'?new OAuthProvider('microsoft.com'):new GoogleAuthProvider();
+    /* No prompt parameter, so Microsoft does not force the account picker and an
+       intranet tile passes a signed-in employee straight through. */
+    try{ await signInWithPopup(auth,provider); return { ok:true }; }
+    catch(e){
+      if(e&&e.code==='auth/popup-blocked'){
+        try{ await signInWithRedirect(auth,provider); return { ok:true }; }catch(e2){ return b2bFail(e2); }
+      }
+      return b2bFail(e);
+    }
+  },
+  async sendLink(email){
+    try{
+      const r=await fetch('/.netlify/functions/b2b-signin-link',{ method:'POST', headers:{ 'content-type':'application/json' },
+        body:JSON.stringify({ tenantId:TENANT, email, lang:window.BRIG_LANG==='nl'?'nl':'en' }) });
+      if(r.status===429) return { msg:'Too many requests. Try again later.' };
+      if(!r.ok) throw new Error('send '+r.status);
+      ls.set(B2B_EMAIL_KEY,email);
+      return { view:'sent' };
+    }catch(e){ return { msg:'The link could not be sent. Please try again.' }; }
+  },
+  confirm(email){ return b2bFinishLink(email); },
+  async signOut(){ try{ await signOut(auth); }catch(e){} },
+  retry(){ if(auth.currentUser) b2bUser(auth.currentUser); },
+  /* A company session never continues in the consumer app (S4). */
+  async forget(){
+    ls.del(B2B_KEY); ls.del(B2B_NAME_KEY); ls.del(B2B_EMAIL_KEY);
+    if(auth.currentUser&&auth.currentUser.tenantId){ try{ await signOut(auth); }catch(e){} }
+  }
+};
+
+async function startCompany(){
+  B2B.tenant=TENANT;
+  if(!B2B_RE.test(TENANT)){ B2B.view='unknown'; window.__brigAuthPending=false; b2bApp().b2bShow(); return; }
+  let info=null;
+  try{
+    const r=await fetch('/.netlify/functions/b2b-company-info?tenant='+encodeURIComponent(TENANT));
+    if(r.ok) info=await r.json();
+    else if(r.status===404) info=false;
+  }catch(e){}
+  if(info===false){
+    ls.del(B2B_KEY); ls.del(B2B_NAME_KEY);
+    /* A saved company that no longer exists falls back to the consumer flow. A link shows why it fails. */
+    if(B2B_ASKED==null){ B2B.tenant=null; onAuthStateChanged(auth,consumerUser); return; }
+    B2B.view='unknown'; window.__brigAuthPending=false; b2bApp().b2bShow(); return;
+  }
+  if(!info){
+    try{ info=JSON.parse(ls.get(B2B_NAME_KEY)||'null'); }catch(e){ info=null; }
+    if(!info||!info.signIn){ B2B.view='offline'; window.__brigAuthPending=false; b2bApp().b2bShow(); return; }
+  }
+  B2B.company={ name:String(info.name||''), signIn:info.signIn };
+  ls.set(B2B_KEY,TENANT);
+  ls.set(B2B_NAME_KEY,JSON.stringify(B2B.company));
+  auth.tenantId=TENANT;
+  B2B.view='signin';
+  if(isSignInWithEmailLink(auth,location.href)){
+    const saved=ls.get(B2B_EMAIL_KEY);
+    if(saved){ const r=await b2bFinishLink(saved); if(r.view) B2B.view=r.view; else if(r.msg){ B2B.msg=r.msg; B2B.err=true; } }
+    else B2B.view='confirm';
+  }else{
+    try{ await getRedirectResult(auth); }catch(e){ const r=b2bFail(e); if(r.view) B2B.view=r.view; else{ B2B.msg=r.msg; B2B.err=true; } }
+  }
+  onAuthStateChanged(auth,b2bUser);
+}
+
+async function consumerUser(user){
+  window.__brigAuthPending=false;
+  /* A company sign-in never runs the consumer app (S4). Inert for consumer accounts. */
+  if(user&&user.tenantId){ try{ await signOut(auth); }catch(e){} return; }
   if(user){
     uid=user.uid;
     if(window.brigvantiApp) await window.brigvantiApp.onSignedIn(user);
@@ -2849,7 +3126,8 @@ onAuthStateChanged(auth,async function(user){
     uid=null;
     if(window.brigvantiApp) window.brigvantiApp.onSignedOut();
   }
-});
+}
+if(TENANT) startCompany(); else onAuthStateChanged(auth,consumerUser);
 </script>
 </body>
 </html>
