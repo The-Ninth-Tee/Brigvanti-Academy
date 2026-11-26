@@ -94,13 +94,14 @@ The Microsoft tenant check (`microsoft_tenant_*`) needs a separate run with `SIG
 
 ## 2. Live deploy, only with Robbie's approval
 
-On live, `seatgate` refuses every company sign-up until a company record exists. B2C sign-ups pass. So it can go live before the first company.
+**Decided 26 November 2026:** the live project is upgraded to Identity Platform and `seatgate` is deployed in one session, shortly before the first company. Until then B2C stays untouched. On live, `seatgate` refuses every company sign-up until a company record exists, and B2C sign-ups pass.
 
 **Before the deploy**
 
-1. Google Cloud console, project `brigvanti-academy` > IAM & Admin > IAM. Find `<project number>-compute@developer.gserviceaccount.com`. It needs **Cloud Build Service Account** and **Cloud Datastore User**. Grant them if they are missing.
-2. Firebase console of `brigvanti-academy` > Authentication. The page title must say **with Identity Platform**. Blocking functions need it.
+1. **Identity Platform upgrade.** Firebase console of `brigvanti-academy` > Authentication. On 26 November 2026 the title read only "Authentication", so live is not upgraded yet. Blocking functions and tenants need the upgrade. Treat it as one-way: Google does not document a way back. Google states that apps keep working without changes. Cost: free up to 50,000 monthly active users for email, Google and Microsoft sign-in. SAML and OIDC are free up to 50 monthly active users per project, then $0.015 each. Upgrade under Authentication > Settings, then check that the title reads **Authentication with Identity Platform**.
+2. **Compute account and roles.** Done on 26 November 2026. The Compute Engine API was switched on, which created `951390386116-compute@developer.gserviceaccount.com`, and it holds **Cloud Build Service Account** and **Cloud Datastore User**. Check under IAM & Admin > IAM that both roles are still there. Never let the first deploy create this account itself: in the test project, that first deploy failed on the missing roles.
 3. Have a new test address ready for a B2C sign-up, one that has never signed up before.
+4. Plan a full B2C regression pass right after the upgrade, before the deploy: sign up, sign in, password reset, Delete my account, on 375 px and 1280 px.
 
 **Deploy**
 
