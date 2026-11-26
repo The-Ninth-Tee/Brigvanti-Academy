@@ -37,7 +37,7 @@ const ACTIONS = {
   async overview({ org, store, now }) {
     const members = await store.members(org.orgId);
     const uids = members.filter((m) => m.status === 'active' && m.uid && !m.outOfAverages).map((m) => m.uid);
-    const stats = companyStats({ org, members, summaries: await store.summaries(uids), now });
+    const stats = companyStats({ org, members, summaries: await store.summaries(uids), now, since: org.contractStart });
     return { company: companyCard(org), stats };
   },
 

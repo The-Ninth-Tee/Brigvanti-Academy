@@ -942,7 +942,7 @@ check('upload: the preview writes nothing and names each refused line; the commi
   const csv = 'email;department\npat@northwind.example;Sales\nsam@northwind.example;HR\nkim@gmail.com;HR\nlee@northwind.example;Marketing\nmo@northwind.example;Finance\n';
   const p = await h.call('uploadPreview', { csv });
   assert.deepEqual(p.body.accepted, [{ email: 'sam@northwind.example', department: 'HR' }, { email: 'mo@northwind.example', department: 'Finance' }]);
-  assert.deepEqual(p.body.refused, [{ line: 2, email: 'pat@northwind.example', reason: 'already_has_seat' }, { line: 4, email: 'kim@gmail.com', reason: 'wrong_domain' }, { line: 5, email: 'lee@northwind.example', reason: 'unknown_department' }]);
+  assert.deepEqual(p.body.refused, [{ line: 2, email: 'pat@northwind.example', reason: 'already_has_seat' }, { line: 4, email: 'kim@gmail.com', reason: 'wrong_domain' }, { line: 5, email: 'lee@northwind.example', reason: 'unknown_department', department: 'Marketing' }]);
   assert.equal(p.body.left, 2);
   assert.deepEqual(h.db.log, [], 'a preview writes nothing');
   await h.call('seatAdd', { email: 'mo@northwind.example', department: 'Finance' });
@@ -1099,16 +1099,36 @@ check('company.html signs in only inside the company tenant and never with a pas
   assert.ok(/user\.tenantId !== TENANT\) \{ await signOut/.test(s), 'a session from another tenant is signed out');
   assert.ok(!/createUserWithEmailAndPassword|signInWithEmailAndPassword|sendPasswordResetEmail/.test(s));
   const calls = [...s.matchAll(/\/\.netlify\/functions\/([a-z0-9-]+)/g)].map((m) => m[1]);
-  assert.deepEqual([...new Set(calls)].sort(), ['b2b-admin', 'b2b-company-info', 'b2b-signin-link']);
+  assert.deepEqual([...new Set(calls)].sort(), ['b2b-admin', 'b2b-company', 'b2b-company-info', 'b2b-signin-link']);
 });
 
 check('company.html warns at every free text field and never re-renders while typing', () => {
   const s = read('company.html');
-  const inputs = (s.match(/<input /g) || []).length;
-  assert.equal(inputs, 2);
-  assert.equal((s.match(/class="warn"/g) || []).length, inputs);
+  const fields = [...s.matchAll(/<input id="(\w+)" type="(email|text)"[^>]*>/g)];
+  assert.ok(fields.length >= 7, 'every free text field is found');
+  for (const f of fields) assert.ok(/^\s*\$\{WARN_(EMAIL|DEPT)\}/.test(s.slice(f.index + f[0].length)), f[1] + ' has its warning right after it');
+  assert.ok(/Put only work email and main department in the file/.test(s), 'the upload warns about the file content');
   assert.ok(!/oninput|addEventListener\('input'/.test(s));
   assert.ok(!/\bL[1-4]\b/.test(s), 'no numbered levels');
+});
+
+check('company.html shows levels by name, explains hidden figures and keeps the PDF button as coming', () => {
+  const s = read('company.html');
+  assert.ok(/const LEVELS = \['No level yet', 'Aware', 'Explorer', 'Integrator', 'Creator'\]/.test(s));
+  assert.ok(/This report is not legal advice\./.test(s) && !/not a lawyer/i.test(s));
+  assert.ok(/<button class="btn" type="button" disabled>Download report as PDF<\/button><span class="small muted">Coming soon<\/span>/.test(s));
+  assert.ok(/It never shows who signed in, what they did or their level/.test(s));
+  assert.ok(!/firstSignInAt[^}]*seats/.test(s.slice(s.indexOf('function vSeats'), s.indexOf('/* Upload, DS8 */'))), 'the seat list shows no sign-in data');
+});
+
+check('the Article 4 period totals count from the contract start and follow the 5 rule', () => {
+  const since = Date.UTC(2026, 10, 1);
+  const s = companyStats({ org: { ...ORG, seats: 200 }, members: Array.from({ length: 6 }, (_, i) => ({ email: `r${i}@northwind.example`, department: 'Sales', status: 'active', uid: 'r' + i, firstSignInAt: NOW - 90 * O.DAY })), summaries: Object.fromEntries(Array.from({ length: 6 }, (_, i) => ['r' + i, learnerSummary(act({ reps: [NOW, NOV, NOV - 40 * O.DAY] }))])), now: NOW, since });
+  assert.deepEqual(s.period, { from: since, to: NOW, assignments: 12, areasCovered: 2 }, 'October hand-ins fall before the contract');
+  const t = activity([...n(4, { reps: [NOW] }), ...n(6, {})]);
+  assert.equal(t.period, null, 'no period without a start');
+  const u = companyStats({ org: { ...ORG, seats: 200 }, members: [], summaries: {}, now: NOW, since });
+  assert.deepEqual(u.period, { from: since, to: NOW, assignments: HIDDEN, areasCovered: 0 });
 });
 
 let failed = 0;
