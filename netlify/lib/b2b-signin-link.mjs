@@ -4,6 +4,7 @@
 //   - the answer is the same for every address, so it never reveals who has a seat,
 //   - the sender is the Brigvanti mailbox, not noreply@<project>.firebaseapp.com.
 // The link only signs in or creates the account. seatgate still checks the seat when the account is created.
+// page 'company' returns the admin to company.html. It is taken from the request alone, so it reveals nothing.
 import { adminId, contractActive, normEmail } from './b2b-orgs.mjs';
 
 const json = (obj, status = 200) => Response.json(obj, { status });
@@ -92,7 +93,8 @@ export function createB2bSigninLink({ store, makeLink, send, appUrl, now = () =>
     if (!admin && !(seat && (seat.status === 'invited' || seat.status === 'active'))) return json(SENT);
 
     try {
-      const link = await makeLink(tenantId, email, `${appUrl}/?b2b=${encodeURIComponent(tenantId)}`);
+      const page = body.page === 'company' ? '/company.html' : '/';
+      const link = await makeLink(tenantId, email, `${appUrl}${page}?b2b=${encodeURIComponent(tenantId)}`);
       const m = planLinkMail(body.lang, org.name, link, appUrl);
       await send({ to: email, subject: m.subject, text: m.text, html: m.html });
     } catch (e) {
