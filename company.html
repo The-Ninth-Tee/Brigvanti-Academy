@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brigvanti company dashboard</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0B0B14">
+<link rel="icon" href="/Icons/favicon-32.png" sizes="32x32">
+<style>
+@font-face{
+  font-family:"Bricolage Grotesque";
+  font-style:normal; font-weight:200 800; font-display:swap;
+  src:url(/fonts/bricolage-grotesque-latin.woff2) format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Bricolage Grotesque";
+  font-style:normal; font-weight:200 800; font-display:swap;
+  src:url(/fonts/bricolage-grotesque-latin-ext.woff2) format("woff2");
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+/* Theme B, dark. Same tokens as index.html. */
+:root{
+  --ink:#F5F5F7; --ink2:#B9B9C6; --ink3:#8C8CA0;
+  --bg:#0B0B14; --card:#15151F; --soft:#1E1E2B; --line:#2E2E40;
+  --lime:#C6F432; --lime-h:#DDFB7A; --on-lime:#0B0B14;
+  --violet:#7357F6; --violet-t:#B3A1FF; --violet-l:#221C45; --lilac:#DCD3FF;
+  --amber:#FBBF24; --rose:#FF8A8A;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --display:"Bricolage Grotesque",var(--sans);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.5}
+a{color:var(--violet-t);font-weight:700;text-decoration:none}
+a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--violet-t);outline-offset:2px}
+.wrap{min-height:100vh;display:grid;place-items:center;padding:40px 16px}
+.panel{width:100%;max-width:460px;background:var(--card);border:1.5px solid var(--line);border-radius:20px;padding:32px 28px}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.brand img{width:40px;height:40px;border-radius:12px;display:block}
+.brand b{font-family:var(--display);font-weight:800;font-size:22px}
+.sub{margin:0 0 28px 50px;font-size:13px;color:var(--ink3)}
+.eyebrow{margin:0 0 6px;font-size:13px;font-weight:800;letter-spacing:.06em;color:var(--violet-t);text-transform:uppercase}
+h1{margin:0 0 8px;font-family:var(--display);font-weight:800;font-size:32px;line-height:1.1;letter-spacing:-.02em}
+p{margin:0 0 16px;color:var(--ink2)}
+.back{display:inline-block;margin-bottom:14px;color:var(--lime);font-size:15px;background:none;border:0;padding:0;font-weight:700;cursor:pointer;font-family:inherit}
+.btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:48px;padding:0 24px;border:0;border-radius:999px;background:var(--lime);color:var(--on-lime);font:inherit;font-weight:800;font-size:16px;cursor:pointer}
+.btn:hover{background:var(--lime-h)}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--violet-t)}
+.btn.ghost:hover{background:var(--violet-l)}
+.btn[disabled]{opacity:.6;cursor:default}
+.btn + .btn{margin-top:12px}
+label{display:block;font-size:14px;font-weight:700;margin-bottom:6px}
+input{width:100%;height:48px;background:var(--bg);border:1.5px solid var(--line);border-radius:14px;padding:0 14px;font:inherit;font-size:16px;color:var(--ink)}
+input:focus{border-color:var(--violet-t);outline:none}
+.warn{margin:8px 0 18px;font-size:13px;color:var(--amber)}
+.msg{margin:16px 0 0;padding:12px 14px;border-radius:14px;font-size:14px;background:var(--violet-l);color:var(--lilac)}
+.msg.err{background:#2E1518;color:var(--rose)}
+.msg:empty{display:none}
+.note{margin:24px 0 0;padding-top:16px;border-top:1.5px solid var(--line);font-size:13px;color:var(--ink3)}
+.spin{color:var(--ink3);text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap"><main class="panel" id="app" aria-live="polite"><p class="spin">Loading…</p></main></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getAuth, onAuthStateChanged, OAuthProvider, GoogleAuthProvider, signInWithPopup, signInWithRedirect,
+         getRedirectResult, isSignInWithEmailLink, signInWithEmailLink, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAh70QZBMIycuK1hMkKD9mp7S7ubiPJF4A",
+  authDomain: "brigvanti-academy.firebaseapp.com",
+  projectId: "brigvanti-academy",
+  storageBucket: "brigvanti-academy.firebasestorage.app",
+  messagingSenderId: "951390386116",
+  appId: "1:951390386116:web:c1ec0d8b0fced5212d1691"
+};
+const auth = getAuth(initializeApp(firebaseConfig));
+auth.languageCode = 'en';
+
+const KEY_TENANT = 'brig_company_tenant', KEY_EMAIL = 'brig_company_link_email';
+const store = {
+  get(k){ try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v){ try { localStorage.setItem(k, v); } catch (e) {} },
+  del(k){ try { localStorage.removeItem(k); } catch (e) {} },
+};
+const TENANT_RE = /^[A-Za-z0-9-]{1,128}$/;
+const fromUrl = new URLSearchParams(location.search).get('b2b');
+const TENANT = TENANT_RE.test(fromUrl || '') ? fromUrl : (TENANT_RE.test(store.get(KEY_TENANT) || '') ? store.get(KEY_TENANT) : null);
+
+const S = { company: null, view: 'loading', msg: '', err: false, busy: false, admin: null };
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+const HEAD = () => `<div class="brand"><img src="/Icons/app-icon-192.png" alt=""><b>Brigvanti</b></div><p class="sub">Company dashboard</p>`;
+const BACK = '<button class="back" type="button" data-go="signin">‹ Back</button>';
+const MSG = () => `<p class="msg${S.err ? ' err' : ''}" id="msg" role="${S.err ? 'alert' : 'status'}">${esc(S.msg)}</p>`;
+const SUPPORT = '<a href="mailto:support@theninthtee.eu">support@theninthtee.eu</a>';
+
+function methodBlock(){
+  const m = S.company.signIn;
+  if (m === 'microsoft') return `<button class="btn" type="button" data-act="microsoft">Sign in with Microsoft</button>`;
+  if (m === 'google') return `<button class="btn" type="button" data-act="google">Sign in with Google</button>`;
+  if (m === 'emailLink') return `<form id="linkForm" novalidate>
+      <label for="email">Work email</label>
+      <input id="email" type="email" autocomplete="email" inputmode="email" maxlength="254" required>
+      <p class="warn">Enter your work email only. Do not enter any other personal details.</p>
+      <button class="btn" type="submit"${S.busy ? ' disabled' : ''}>Send sign-in link</button></form>`;
+  return `<p>Your company signs in through its own login system. That sign-in is not ready here yet. Email ${SUPPORT} for help.</p>`;
+}
+
+const VIEWS = {
+  loading: () => '<p class="spin">Loading…</p>',
+  noLink: () => `${HEAD()}<h1>Open your company link</h1>
+    <p>Open the dashboard through the link from your Brigvanti welcome email or your intranet. That link tells us which company you belong to.</p>
+    <p class="note">Questions? Email ${SUPPORT}.</p>`,
+  unknown: () => `${HEAD()}<h1>This link does not work</h1>
+    <p>We do not recognise this company link. Check the link in your Brigvanti welcome email, or email ${SUPPORT}.</p>`,
+  signin: () => `${HEAD()}<p class="eyebrow">Admin sign-in</p><h1>${esc(S.company.name)}</h1>
+    <p>Sign in to manage seats and departments and to see your company totals.</p>
+    ${methodBlock()}${MSG()}
+    <p class="note">You see totals and averages only. You never see anyone's answers, work or level.</p>`,
+  sent: () => `${HEAD()}${BACK}<h1>Check your email</h1>
+    <p>If this address is an admin for ${esc(S.company.name)}, a sign-in link is on its way. Open it on this device. The link works once.</p>
+    <button class="btn ghost" type="button" data-go="signin">Use another email</button>`,
+  confirm: () => `${HEAD()}${BACK}<h1>Confirm your work email</h1>
+    <p>You opened the link on another device or browser. Enter the work email the link was sent to.</p>
+    <form id="confirmForm" novalidate>
+      <label for="email">Work email</label>
+      <input id="email" type="email" autocomplete="email" inputmode="email" maxlength="254" required>
+      <p class="warn">Enter your work email only. Do not enter any other personal details.</p>
+      <button class="btn" type="submit"${S.busy ? ' disabled' : ''}>Sign in</button></form>${MSG()}`,
+  expired: () => `${HEAD()}<h1>This link no longer works</h1>
+    <p>A sign-in link works once and expires after a while. Ask for a new one.</p>
+    <button class="btn" type="button" data-go="signin">Send a new link</button>`,
+  notAdmin: () => `${HEAD()}<h1>No admin access</h1>
+    <p>This account is not an admin for ${esc(S.company ? S.company.name : 'this company')}. Ask an admin of your company to add you in Company settings.</p>
+    <button class="btn ghost" type="button" data-act="logout">Log out</button>`,
+  // Placeholder until PR 3 adds the dashboard screens.
+  ready: () => `${HEAD()}<p class="eyebrow">Signed in</p><h1>${esc(S.admin.name)}</h1>
+    <p>You are signed in as an admin. The dashboard screens follow in the next update.</p>
+    <button class="btn ghost" type="button" data-act="logout">Log out</button>`,
+};
+
+function show(view, msg = '', err = false){
+  const changed = view !== S.view;
+  S.view = view; S.msg = msg; S.err = err;
+  $('app').innerHTML = VIEWS[view]();
+  if (changed) window.scrollTo(0, 0);
+  const email = $('email');
+  if (email) email.focus();
+}
+// Updates the message in place, so a typed email keeps its focus and value.
+function note(msg, err = false){
+  S.msg = msg; S.err = err;
+  const m = $('msg');
+  if (m) { m.textContent = msg; m.className = 'msg' + (err ? ' err' : ''); m.setAttribute('role', err ? 'alert' : 'status'); }
+}
+function busy(on){
+  S.busy = on;
+  document.querySelectorAll('#app button').forEach((b) => { b.disabled = on; });
+}
+
+function authMessage(e){
+  const c = (e && e.code) || '', text = String((e && e.message) || '');
+  if (c === 'auth/internal-error' && /PERMISSION_DENIED/.test(text)) return 'This account has no access to this company. Ask an admin of your company to add you.';
+  if (c === 'auth/popup-closed-by-user' || c === 'auth/cancelled-popup-request' || c === 'auth/user-cancelled') return 'Sign-in was cancelled.';
+  if (c === 'auth/network-request-failed') return 'No connection. Check your network and try again.';
+  if (c === 'auth/invalid-email') return 'Enter a valid work email.';
+  if (c === 'auth/operation-not-allowed' || c === 'auth/admin-restricted-operation') return 'This sign-in is not set up for your company yet. Email support@theninthtee.eu.';
+  if (c === 'auth/account-exists-with-different-credential') return 'This email already signs in another way. Email support@theninthtee.eu.';
+  return 'Sign-in failed. Please try again.';
+}
+const linkGone = (e) => ['auth/invalid-action-code', 'auth/expired-action-code'].includes(e && e.code);
+
+async function oauth(kind){
+  const provider = kind === 'microsoft' ? new OAuthProvider('microsoft.com') : new GoogleAuthProvider();
+  busy(true); note('');
+  try { await signInWithPopup(auth, provider); }
+  catch (e) {
+    if (e && e.code === 'auth/popup-blocked') { await signInWithRedirect(auth, provider); return; }
+    busy(false); note(authMessage(e), true);
+  }
+}
+
+async function sendLink(email){
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { note('Enter a valid work email.', true); return; }
+  busy(true); note('');
+  try {
+    const r = await fetch('/.netlify/functions/b2b-signin-link', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ tenantId: TENANT, email, lang: 'en', page: 'company' }),
+    });
+    if (r.status === 429) { busy(false); note('Too many requests. Try again later.', true); return; }
+    if (!r.ok) throw new Error('send ' + r.status);
+    store.set(KEY_EMAIL, email);
+    S.busy = false;
+    show('sent');
+  } catch (e) {
+    busy(false); note('The link could not be sent. Please try again.', true);
+  }
+}
+
+async function finishLink(email){
+  busy(true);
+  try {
+    await signInWithEmailLink(auth, email, location.href);
+    store.del(KEY_EMAIL);
+    history.replaceState(null, '', location.pathname + '?b2b=' + encodeURIComponent(TENANT));
+  } catch (e) {
+    busy(false);
+    if (linkGone(e)) { history.replaceState(null, '', location.pathname + '?b2b=' + encodeURIComponent(TENANT)); show('expired'); return; }
+    if (S.view === 'confirm') note(authMessage(e), true); else show('signin', authMessage(e), true);
+  }
+}
+
+async function checkAdmin(user){
+  show('loading');
+  try {
+    const r = await fetch('/.netlify/functions/b2b-admin', { method: 'POST', headers: { authorization: 'Bearer ' + (await user.getIdToken()) } });
+    if (r.status === 403 || r.status === 401) { show('notAdmin'); return; }
+    if (!r.ok) throw new Error('admin ' + r.status);
+    S.admin = await r.json();
+    show('ready');
+  } catch (e) {
+    show('signin', 'We could not check your access. Please try again.', true);
+  }
+}
+
+document.addEventListener('click', async (ev) => {
+  const go = ev.target.closest('[data-go]'), act = ev.target.closest('[data-act]');
+  if (go) { S.busy = false; show(go.dataset.go); return; }
+  if (!act || S.busy) return;
+  const a = act.dataset.act;
+  if (a === 'microsoft' || a === 'google') oauth(a);
+  if (a === 'logout') { await signOut(auth); S.admin = null; show(S.company ? 'signin' : 'noLink'); }
+});
+document.addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  if (S.busy) return;
+  const email = ($('email').value || '').trim().toLowerCase();
+  if (ev.target.id === 'linkForm') sendLink(email);
+  if (ev.target.id === 'confirmForm') {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { note('Enter a valid work email.', true); return; }
+    finishLink(email);
+  }
+});
+
+async function start(){
+  if (!TENANT) { show('noLink'); return; }
+  try {
+    const r = await fetch('/.netlify/functions/b2b-company-info?tenant=' + encodeURIComponent(TENANT));
+    if (r.status === 404) { store.del(KEY_TENANT); show('unknown'); return; }
+    if (!r.ok) throw new Error('info ' + r.status);
+    S.company = await r.json();
+  } catch (e) {
+    show('unknown');
+    return;
+  }
+  store.set(KEY_TENANT, TENANT);
+  // Every sign-in on this page happens inside the company's own tenant.
+  auth.tenantId = TENANT;
+
+  if (isSignInWithEmailLink(auth, location.href)) {
+    const saved = store.get(KEY_EMAIL);
+    if (saved) await finishLink(saved); else show('confirm');
+  } else {
+    try { await getRedirectResult(auth); } catch (e) { show('signin', authMessage(e), true); }
+  }
+
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) { if (S.view === 'loading' || S.view === 'ready' || S.view === 'notAdmin') show('signin'); return; }
+    if (user.tenantId !== TENANT) { await signOut(auth); return; }
+    checkAdmin(user);
+  });
+}
+start();
+</script>
+</body>
+</html>

@@ -14,6 +14,7 @@ import { tenantOf, companyVerifier } from '../netlify/lib/b2b-auth.mjs';
 import { createB2bAccountDelete } from '../netlify/lib/b2b-account-delete.mjs';
 import { createB2bAdmin } from '../netlify/lib/b2b-admin.mjs';
 import { createB2bCompany, COMPANY_ACTIONS } from '../netlify/lib/b2b-company.mjs';
+import { createB2bCompanyInfo } from '../netlify/lib/b2b-company-info.mjs';
 import * as G from '../gcp/seatgate/core.mjs';
 import { createB2bSigninLink, planLinkMail, overLimit } from '../netlify/lib/b2b-signin-link.mjs';
 import { resolvePlan, resolveSignInPlan } from '../netlify/lib/coach-caps.mjs';
@@ -1042,6 +1043,72 @@ check('admins: list with "you", add on the company domain only, and an admin can
 check('the admin check still answers the same after moving into the shared gate', async () => {
   const s = read('netlify/lib/b2b-admin.mjs');
   assert.ok(/export function adminGate/.test(s) && /createB2bAdmin/.test(s));
+});
+
+// The company link and the admin sign-in screen (P1.14, B2)
+function infoHarness(orgs = [{ ...ORG, signIn: 'microsoft', microsoftTenantId: 'ms-1', departments: ['Sales'], seats: 40 }]) {
+  const asked = [];
+  const store = { orgByTenant: async (t) => { asked.push(t); return orgs.find((o) => o.tenantId === t) || null; } };
+  const h = createB2bCompanyInfo({ store });
+  const get = (q, method = 'GET') => h(new Request('https://x/.netlify/functions/b2b-company-info' + q, { method }));
+  return { asked, get };
+}
+
+check('the company link answers with the company name and sign-in method, and nothing else', async () => {
+  const h = infoHarness();
+  const r = await h.get('?tenant=' + ORG.tenantId);
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { name: ORG.name, signIn: 'microsoft' });
+  assert.equal(r.headers.get('cache-control'), 'no-store');
+});
+
+check('an unknown, malformed or unfinished company link gets the same 404', async () => {
+  const h = infoHarness([{ ...ORG, tenantId: 'half-done', signIn: undefined }]);
+  for (const q of ['?tenant=nobody-1', '?tenant=half-done', '?tenant=', '', '?tenant=a%2Fb', '?tenant=' + 'x'.repeat(129)]) {
+    const r = await h.get(q);
+    assert.equal(r.status, 404, q);
+    assert.deepEqual(await r.json(), { code: 'unknown' });
+  }
+  assert.deepEqual(h.asked, ['nobody-1', 'half-done'], 'a malformed tenant never reaches the database');
+  assert.equal((await h.get('?tenant=' + ORG.tenantId, 'POST')).status, 405);
+});
+
+check('the wiring: b2b-company-info reads only the org store', () => {
+  const s = read('netlify/functions/b2b-company-info.mjs');
+  assert.ok(/createB2bCompanyInfo\(\{ store: firestoreOrgStore\(db\) \}\)/.test(s));
+  assert.ok(!/adminAuth/.test(s));
+});
+
+check('a sign-in link asked from company.html returns the admin to company.html, for every address alike', async () => {
+  const id = O.seatId('pat@northwind.example');
+  const h = linkHarness({ admins: { [id]: { email: 'pat@northwind.example' } } });
+  await h.post(linkBody('pat@northwind.example', { page: 'company' }));
+  assert.equal(h.links[0][2], `https://app.example/company.html?b2b=${ORG.tenantId}`);
+  await h.post(linkBody('pat@northwind.example', { page: 'https://evil.example' }));
+  assert.equal(h.links[1][2], `https://app.example/?b2b=${ORG.tenantId}`, 'any other page value goes to the app');
+  const stranger = linkHarness();
+  const a = await stranger.post(linkBody('nobody@northwind.example', { page: 'company' }));
+  const b = await h.post(linkBody('pat@northwind.example', { page: 'company' }));
+  assert.deepEqual(await a.json(), await b.json());
+});
+
+check('company.html signs in only inside the company tenant and never with a password', () => {
+  const s = read('company.html');
+  assert.ok(s.indexOf('auth.tenantId = TENANT') > 0);
+  assert.ok(s.indexOf('auth.tenantId = TENANT') < s.indexOf('isSignInWithEmailLink(auth'), 'the tenant is set before any sign-in');
+  assert.ok(/user\.tenantId !== TENANT\) \{ await signOut/.test(s), 'a session from another tenant is signed out');
+  assert.ok(!/createUserWithEmailAndPassword|signInWithEmailAndPassword|sendPasswordResetEmail/.test(s));
+  const calls = [...s.matchAll(/\/\.netlify\/functions\/([a-z0-9-]+)/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(calls)].sort(), ['b2b-admin', 'b2b-company-info', 'b2b-signin-link']);
+});
+
+check('company.html warns at every free text field and never re-renders while typing', () => {
+  const s = read('company.html');
+  const inputs = (s.match(/<input /g) || []).length;
+  assert.equal(inputs, 2);
+  assert.equal((s.match(/class="warn"/g) || []).length, inputs);
+  assert.ok(!/oninput|addEventListener\('input'/.test(s));
+  assert.ok(!/\bL[1-4]\b/.test(s), 'no numbered levels');
 });
 
 let failed = 0;
