@@ -942,7 +942,8 @@ function capMessage(d){
 }
 const REBUILD_MSG='Send your current assignment to your coach, or start a new one.';
 function coachLeftText(){
-  if(!COACH.left||COACH.plan==='b2b_ended'||COACH.plan==='probe')return '';
+  /* A company seat shows no counters, so usage feels unlimited (board decision 16 Nov 2026). */
+  if(!COACH.left||plan().startsWith('b2b')||COACH.plan==='probe')return '';
   const {day,month}=COACH.left;
   return `${day} assignment${day===1?'':'s'} left today, ${month} left this month`;
 }
@@ -1248,8 +1249,9 @@ function sideBar(){
       <button onclick="V.menu=false;practiseDom('')" ${cur===4?'aria-current="page"':''}><i></i>Practice</button>
       ${it(5,'Level up')}${it(8,'Portfolio')}${it(10,'Badges')}${it(9,'Account')}</nav>
     <div class="sb-fill"></div>
-    <div class="sb-plan"><div class="sb-plan-h"><b>Your plan</b><span class="lvchip">${planName()}</span></div>
-      <p id="coachLeftSide">${left||planName()}</p></div>
+    ${b2bOn()?`<div class="sb-plan"><div class="sb-plan-h"><b>Company seat</b><span class="lvchip">${plan()==='b2b_ended'?'Ended':'All areas'}</span></div></div>`
+    :`<div class="sb-plan"><div class="sb-plan-h"><b>Your plan</b><span class="lvchip">${planName()}</span></div>
+      <p id="coachLeftSide">${left||planName()}</p></div>`}
     <div class="sb-sw"><span id="sbLm">Light mode</span><button class="sw" onclick="toggleTheme()" aria-pressed="${isLight()?'true':'false'}" aria-labelledby="sbLm"><i></i></button></div>
     <button class="sb-foot" onclick="exportPortfolioDoc()">Download my work</button>
     <button class="sb-foot" onclick="tabGo(7)">Privacy &amp; legal</button>
@@ -1371,11 +1373,22 @@ function b2bMethod(){
   const m=B2B.company&&B2B.company.signIn;
   if(m==='microsoft')return `<button class="btn go full" type="button" data-b2b-act onclick="b2bOAuth('microsoft')">Sign in with Microsoft</button>`;
   if(m==='google')return `<button class="btn go full" type="button" data-b2b-act onclick="b2bOAuth('google')">Sign in with Google</button>`;
+  /* D13: the link creates the account. A password set later in Account signs in on other devices.
+     Forgot password sends a new sign-in link, never a reset email. */
+  if(m==='emailLink'&&B2B.pwMode)return `<form onsubmit="b2bSubmit(event,'password')" novalidate>
+    <label class="fl" for="csEmail">Work email</label>
+    <input id="csEmail" type="email" inputmode="email" autocomplete="email" maxlength="254" value="${esc(B2B.email)}">
+    <p class="pdw">Enter your work email only. Do not enter other personal details.</p>
+    <label class="fl" for="csPw" style="margin-top:10px">Password</label>
+    <input id="csPw" type="password" autocomplete="current-password">
+    <div class="row"><button class="btn go full" type="submit" data-b2b-act>Sign in</button></div></form>
+    <p class="muted" style="margin-top:12px"><button class="cs-link" type="button" onclick="b2bForgot()">Forgot your password? Get a sign-in link</button></p>`;
   if(m==='emailLink')return `<form onsubmit="b2bSubmit(event,'link')" novalidate>
     <label class="fl" for="csEmail">Work email</label>
     <input id="csEmail" type="email" inputmode="email" autocomplete="email" maxlength="254" value="${esc(B2B.email)}">
     <p class="pdw">Enter your work email only. Do not enter other personal details.</p>
-    <div class="row"><button class="btn go full" type="submit" data-b2b-act>Send sign-in link</button></div></form>`;
+    <div class="row"><button class="btn go full" type="submit" data-b2b-act>Send sign-in link</button></div></form>
+    <p class="muted" style="margin-top:12px"><button class="cs-link" type="button" onclick="b2bPwMode(true)">I set a password. Sign in with it</button></p>`;
   return `<p class="lede">Your company signs in through its own login system. That sign-in is not ready here yet. Email ${B2B_SUPPORT} for help.</p>`;
 }
 function b2bMsg(){return `<p id="csMsg" class="${B2B.err?'err':'muted'}" role="${B2B.err?'alert':'status'}" style="min-height:1em">${esc(B2B.msg)}</p>`;}
@@ -1457,15 +1470,60 @@ async function b2bSubmit(ev,kind){
   const email=(document.getElementById('csEmail').value||'').trim();
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){b2bNote('Enter a valid work email.',true);return;}
   B2B.email=email;b2bBusy(true);b2bNote('');
-  const r=kind==='confirm'?await window.brigB2BAuth.confirm(email):await window.brigB2BAuth.sendLink(email);
+  let r;
+  if(kind==='password'){const pw=document.getElementById('csPw').value||'';
+    if(!pw){b2bBusy(false);b2bNote('Enter your password.',true);return;}
+    r=await window.brigB2BAuth.password(email,pw);}
+  else r=kind==='confirm'?await window.brigB2BAuth.confirm(email):await window.brigB2BAuth.sendLink(email);
   if(r.ok)return;
   if(r.view)return b2bView(r.view);
   b2bBusy(false);b2bNote(r.msg,true);
 }
+function b2bPwMode(on){const e=document.getElementById('csEmail');if(e)B2B.email=e.value.trim();B2B.pwMode=on;b2bView('signin');}
+function b2bForgot(){b2bPwMode(false);}
 async function b2bSignOut(){if(window.brigB2BAuth)await window.brigB2BAuth.signOut();}
 function b2bRetry(){if(window.brigB2BAuth)window.brigB2BAuth.retry();}
 /* Leaves the company route on this device. A personal account signs in as before. */
 async function b2bPersonal(){if(window.brigB2BAuth)await window.brigB2BAuth.forget();location.replace(location.pathname);}
+const handedInToday=()=>{const k=dayKey(Date.now());return (S.reps||[]).filter(r=>dayKey(r.t)===k).length;};
+/* Account, company seat (board B2B21). The seat end text follows the 30 day rule (B7). */
+function seatCard(){
+  const s=B2B.seat||{}, name=esc(s.company||(B2B.company&&B2B.company.name)||'your company');
+  if(plan()==='b2b_ended'||s.status==='ended')return `<div class="card plan"><div class="eyebrow">Your access</div>
+    <b>Your company seat has ended</b>
+    <p class="muted" style="margin:6px 0 0">The coach is closed.${s.deleteAfter?` Your account and your work are deleted on ${fmtDay(s.deleteAfter)}.`:''} Download your work before that date.</p>
+    <div class="row" style="margin-top:12px"><button class="btn go full" onclick="exportPortfolioDoc()">Download my work</button></div></div>`;
+  return `<div class="card plan"><div class="eyebrow">Your access</div>
+    <b>Company seat from ${name}</b>
+    <p class="muted" style="margin:6px 0 0">All 7 areas are open.${s.until?` Your seat runs until ${fmtDay(s.until)}.`:''}</p>
+    <p class="muted" style="margin:8px 0 0">When your seat ends, the coach closes. Your account and your work are deleted 30 days later, so download your work before then.</p></div>`;
+}
+/* Password inside the company tenant (D13, P1.12): only for email link sign-ins, never a reset email. */
+function b2bPasswordRow(){
+  if(S.authProvider&&S.authProvider!=='password')return `<div class="srow"><span>Sign in</span><span class="v">Your company login</span></div>`;
+  if(!V.pw)return `<button class="srow" onclick="V.pw=true;render()"><span>Password<small>Set one to sign in on other devices without a new link</small></span><span class="v">Set or change &#8250;</span></button>`;
+  return `<form class="sconfirm" onsubmit="b2bSavePassword(event)" novalidate><b>Set a password</b>
+    <label class="fl" for="npw" style="margin-top:10px">New password</label>
+    <input id="npw" type="password" autocomplete="new-password" placeholder="At least eight characters">
+    <label class="fl" for="npw2" style="margin-top:10px">Repeat the password</label>
+    <input id="npw2" type="password" autocomplete="new-password">
+    <p class="pdw">Use a password you do not use anywhere else.</p>
+    <p id="pwMsg" class="muted" role="status" style="min-height:1em"></p>
+    <div class="row"><button class="btn sec" style="flex:1" type="button" onclick="V.pw=false;render()">Cancel</button><button class="btn go" style="flex:1" type="submit" data-pw-act>Save password</button></div></form>`;
+}
+function pwNote(msg,err){const m=document.getElementById('pwMsg');if(m){m.textContent=msg;m.className=err?'err':'muted';m.setAttribute('role',err?'alert':'status');}}
+async function b2bSavePassword(ev){
+  ev.preventDefault();
+  const a=document.getElementById('npw').value, b=document.getElementById('npw2').value;
+  if(a.length<8){pwNote('Choose a password of at least eight characters.',true);return;}
+  if(a!==b){pwNote('The two passwords do not match.',true);return;}
+  const btn=document.querySelector('[data-pw-act]');if(btn)btn.disabled=true;
+  const r=await window.brigB2BAuth.setPassword(a);
+  if(btn)btn.disabled=false;
+  if(r.ok){V.pw=false;render();toast('Your password is saved.');return;}
+  if(r.relogin){V.pw=false;render();toast('For your safety, log out and sign in with a new link first. Then set your password.');return;}
+  pwNote(r.msg,true);
+}
 async function signOutUser(){
   /* Save to the server first. The device copy is cleared only once the server
      confirms the save. If it fails, the copy stays as a backstop. */
@@ -2137,6 +2195,7 @@ function vPractice(){
   return shell(`<h1>Practise on real tasks</h1>
   <p class="lede">${S.focus?`You are practising <b>${esc(DATA.doms[S.focus])}</b>. Pick something you actually have to do this week.`
     :'Pick something you actually have to do this week. The assignment is the task itself.'}</p>
+  ${b2bOn()?'<p class="muted" style="margin:0 0 12px">Most people get the most out of one or two assignments a day, spread over the week.</p>':''}
   <p class="muted" id="coachLeftPractice" style="margin:0 0 12px;display:none"></p>
   ${tabs}
   ${st?`<div class="streak pop"><div class="flame">${st}</div>
@@ -2235,6 +2294,7 @@ function vRep(){
       <div class="flame" style="margin:0 auto 12px">${st}</div>
       <h2>Handed in</h2>
       <p class="muted" style="margin:6px 0 0">${st} day streak. That is assignment ${n} on this skill.</p></div>
+    ${b2bOn()&&handedInToday()>=3?'<div class="note">Good work today. Your next assignment will stick better tomorrow.</div>':''}
     ${due?`<div class="note">Come back around <b>${fmtDate(due)}</b> for the next one. It will be a little harder. Spacing is what turns this into a habit.</div>`:''}
     ${pushInvite()}
     <div class="row">${canLevelUp(c.id)?`<button class="btn go full" onclick="V.rep=null;go(5)">Try the level up test</button>`:''}</div>
@@ -2608,6 +2668,7 @@ function vAccount(){
   if(!anyDone){
     return shell(`<h1>Welcome${nm?', '+nm:''}</h1>
     <p class="lede">This is your account page. Everything about you will live here.</p>
+    ${b2bOn()?seatCard():''}
     <div class="card"><h3>First, the scan</h3>
       <p class="muted" style="margin:6px 0 0">Let us start with a short scan. After your first area, you can come back here and edit your account details.</p></div>
     <div class="row"><button class="btn go full" onclick="goScan()">Go to the scan</button></div>
@@ -2616,13 +2677,13 @@ function vAccount(){
     <button class="srow" onclick="signOutUser()"><span>Log out</span><span class="v">&#8250;</span></button>`,
     {crumb:'Account'});
   }
-  const isG=S.authProvider==='google.com';
+  const isG=S.authProvider==='google.com', co=b2bOn();
   const modeLbl={work:'At work',personal:'In my own life',both:'Work and life'}[S.mode]||'Not set';
   const focusSub=S.role?esc(S.role):modeLbl;
   const nameRow=V.editName
     ?`<div class="srow edit"><label class="sr" for="anm">Your name</label><input id="anm" value="${esc(S.name)}" placeholder="Your name" oninput="S.name=this.value" onkeydown="if(event.key==='Enter')saveName()"><button class="iconbtn" onclick="saveName()" aria-label="Save">${ic('check',16)}</button></div>${PDW_NAME}`
     :`<button class="srow" onclick="V.editName=true;render()"><span>Your name</span><span class="v">${esc(S.name||'Not set')} ${ic('pencil',14)}</span></button>`;
-  const pwRow=isG
+  const pwRow=co?b2bPasswordRow():isG
     ?`<div class="srow"><span>Sign in</span><span class="v">Google</span></div>`
     :`<button class="srow" onclick="doPasswordReset()"><span>Password<small>A secure reset link is emailed to you</small></span><span class="v">Change &#8250;</span></button>`;
   const confirm=(title,body,keep,act,label)=>`<div class="sconfirm"><b>${title}</b><p>${body}</p>
@@ -2631,10 +2692,10 @@ function vAccount(){
     ?confirm('Reset your account?','This deletes your levels, badges, streak and your whole portfolio, from this device and from our storage. It cannot be undone. Your sign in, your plan and your coach limits stay. Download your record first if you want to keep it.','V.reset=false;render()',`${V.busyReset?'disabled':''} onclick="resetAccount()"`,V.busyReset?'Resetting':'Reset')
     :`<button class="srow" onclick="V.reset=true;render()"><span>Reset account<small>Erase all progress and start again</small></span><span class="v">&#8250;</span></button>`;
   const delRow=V.del
-    ?confirm('Delete your account?','This erases everything except payment records, which we must keep by law. It cannot be undone.','V.del=false;render()','onclick="doDelete()"','Delete')
+    ?confirm('Delete your account?',co?'This erases your account and all your work. Your seat goes back to your company. It cannot be undone.':'This erases everything except payment records, which we must keep by law. It cannot be undone.','V.del=false;render()','onclick="doDelete()"','Delete')
     :`<button class="srow danger" onclick="V.del=true;render()"><span>Delete my account<small>Erase everything, permanently</small></span><span class="v">&#8250;</span></button>`;
   return shell(`<h1>Account</h1>
-  ${planCard()}
+  ${co?seatCard():planCard()}
 
   <div class="sgrp">Personal</div>
   ${nameRow}
@@ -2779,7 +2840,7 @@ import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup,
          signInWithEmailAndPassword, createUserWithEmailAndPassword,
          signOut, deleteUser, sendPasswordResetEmail,
          OAuthProvider, signInWithRedirect, getRedirectResult,
-         isSignInWithEmailLink, signInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+         isSignInWithEmailLink, signInWithEmailLink, updatePassword } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { initializeFirestore, doc, getDoc, setDoc, deleteDoc, onSnapshot, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -2957,7 +3018,8 @@ window.brigvantiDeleteAccount=async function(){
      usage and reminder data. Payment records stay for the tax retention period. */
   const u=auth.currentUser;
   if(!u) return;
-  const r=await fetch('/.netlify/functions/account-delete',{method:'POST',headers:{'Authorization':'Bearer '+await u.getIdToken()}});
+  /* A company seat is deleted inside its tenant and frees the seat (B8). */
+  const r=await fetch(u.tenantId?'/.netlify/functions/b2b-account-delete':'/.netlify/functions/account-delete',{method:'POST',headers:{'Authorization':'Bearer '+await u.getIdToken()}});
   if(!r.ok){const d=await r.json().catch(()=>({}));const e=new Error(d.error||'Your account could not be deleted. Please try again.');e.brigMsg=e.message;throw e;}
   try{ await signOut(auth); }catch(e){}
 };
@@ -2987,6 +3049,8 @@ function b2bAuthMessage(e){
   if(c==='auth/popup-closed-by-user'||c==='auth/cancelled-popup-request'||c==='auth/user-cancelled') return 'Sign-in was cancelled.';
   if(c==='auth/network-request-failed') return 'No connection. Check your network and try again.';
   if(c==='auth/invalid-email') return 'Enter a valid work email.';
+  if(c==='auth/invalid-credential'||c==='auth/wrong-password'||c==='auth/user-not-found') return 'Email or password is not correct.';
+  if(c==='auth/too-many-requests') return 'Too many tries. Wait a moment, or get a sign-in link.';
   if(c==='auth/operation-not-allowed'||c==='auth/admin-restricted-operation') return 'This sign-in is not set up for your company yet. Email support@theninthtee.eu.';
   if(c==='auth/account-exists-with-different-credential') return 'This email already signs in another way. Email support@theninthtee.eu.';
   return 'Sign-in failed. Please try again.';
@@ -3071,6 +3135,23 @@ window.brigB2BAuth={
     }catch(e){ return { msg:'The link could not be sent. Please try again.' }; }
   },
   confirm(email){ return b2bFinishLink(email); },
+  async password(email,pw){
+    try{ await signInWithEmailAndPassword(auth,email,pw); return { ok:true }; }
+    catch(e){ return b2bFail(e); }
+  },
+  /* Runs inside the company tenant, because the signed-in user belongs to it (P1.12). */
+  async setPassword(pw){
+    const u=auth.currentUser;
+    if(!u||!u.tenantId) return { msg:'Please sign in again.' };
+    try{ await updatePassword(u,pw); return { ok:true }; }
+    catch(e){
+      const c=(e&&e.code)||'';
+      if(c==='auth/requires-recent-login') return { relogin:true };
+      if(c==='auth/weak-password'||c==='auth/password-does-not-meet-requirements') return { msg:'Choose a password of at least eight characters.' };
+      if(c==='auth/network-request-failed') return { msg:'No connection. Check your network and try again.' };
+      return { msg:'Your password could not be saved. Please try again.' };
+    }
+  },
   async signOut(){ try{ await signOut(auth); }catch(e){} },
   retry(){ if(auth.currentUser) b2bUser(auth.currentUser); },
   /* A company session never continues in the consumer app (S4). */
