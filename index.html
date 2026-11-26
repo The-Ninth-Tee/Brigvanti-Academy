@@ -218,6 +218,8 @@ textarea,input,select{font-family:inherit;font-size:16px;width:100%;padding:13px
 textarea:focus,input:focus{outline:2px solid var(--focus);outline-offset:2px}
 :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .pdw{margin:6px 0 0;font-size:12.5px;color:var(--amber-d)}
+.cnt{margin:4px 0 0;font-size:12.5px;color:var(--ink2);text-align:right}
+.cnt.over{color:var(--rose);font-weight:700}
 /* Company sign-in (B2). Desktop first: two columns from 900 px, one column below. */
 .cs{min-height:100vh;display:grid;grid-template-columns:1fr}
 .cs-side{background:var(--violet);color:var(--on-violet);padding:28px 16px;display:flex;flex-direction:column;gap:20px}
@@ -275,6 +277,15 @@ label.fl{display:block;font-size:12px;font-weight:700;margin:0 0 6px;text-transf
 .badge span{font-size:11.5px;line-height:1.3}
 .badge.got{border:0;color:var(--on-tile)}
 .badge.got b{color:var(--on-tile)}
+.emgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media(max-width:900px){.emgrid{grid-template-columns:1fr}}
+.emrow{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:12px;margin-top:10px}
+.em{text-align:center;font-size:13px;line-height:1.25;color:var(--ink3)}
+.em b{display:block;font-weight:600}
+.em.got{color:var(--ink)}
+.emh{position:relative;display:grid;place-items:center;width:92px;height:92px;margin:0 auto 8px}
+.emh .emf{position:absolute;inset:0;width:92px;height:92px}
+.ems{position:relative;width:34px;height:34px}
 .sgrp{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--violet-t);margin:22px 0 4px}
 .srow{display:flex;width:100%;justify-content:space-between;align-items:center;gap:12px;min-height:52px;padding:8px 0;border-top:1.5px solid var(--line);text-align:left;color:var(--ink);font-size:15px}
 .srow>span:first-child{flex:1;min-width:0}
@@ -620,7 +631,7 @@ function mergeRung(a,b){
     const x=a[k]||{},y=b[k]||{};
     const passed=!!(x.passed||y.passed),at=Math.max(x.at||0,y.at||0);
     const src=(y.passed&&(y.at||0)>=(x.at||0))?y:x;
-    out[k]=Object.assign({},x,y,{passed:passed,at:at,t:src.t,ev:src.ev,grew:src.grew});
+    out[k]=Object.assign({},x,y,{passed:passed,at:at,t:src.t,ev:src.ev,grew:src.grew},src.prompt?{prompt:src.prompt}:{});
   });
   return out;
 }
@@ -907,6 +918,33 @@ const ICONS={
 function ic(n,sz){sz=sz||20;return `<svg class="ico" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;}
 const PDW='<p class="pdw">Leave out names, emails and other personal details.</p>';
 const PDW_NAME='<p class="pdw">Do not enter private or sensitive data.</p>';
+/* DPIA B2: a company seat also gets told to keep company and client information out. */
+const PDW_B2B='<p class="pdw">Leave out personal details and confidential company or client information.</p>';
+const PDW_NAME_B2B=PDW_B2B;
+const pdw=()=>b2bOn()?PDW_B2B:PDW;
+const pdwName=()=>b2bOn()?PDW_NAME_B2B:PDW_NAME;
+/* Character limits for a company seat (B2B10, B2B12, B2B13, B2B16). The counter
+   updates in place from oninput, never through render(). Past the limit the
+   counter turns red and the send button waits. Nothing is cut. */
+const LIMS={sit:1500,f1:2000,f2:6000,f3:1500,rf:500,rup:2000,ev:1000};
+const LIM_BTN={sit:'buildBtn',f1:'sendBtn',f2:'sendBtn',f3:'sendBtn',rf:'handBtn',rup:'ruConfirm',ev:'ruConfirm'};
+const fmtN=n=>n.toLocaleString('en-GB');
+function limVal(id){const R=V.rep||{},U=V.ru||{};return ({sit:R.sit,f1:R.prompt,f2:R.back,f3:R.did,rf:R.reflect,rup:U.prompt,ev:U.ev})[id]||'';}
+const limTxt=id=>`${fmtN(limVal(id).length)} / ${fmtN(LIMS[id])} characters`;
+function limCnt(id){
+  if(!b2bOn())return '';
+  return `<p class="cnt${limVal(id).length>LIMS[id]?' over':''}" id="${id}Cnt">${limTxt(id)}</p>`;
+}
+const limOver=(...ids)=>b2bOn()&&ids.some(id=>limVal(id).length>LIMS[id]);
+function limTick(id){
+  if(!b2bOn())return;
+  const c=document.getElementById(id+'Cnt');
+  if(c){c.textContent=limTxt(id);c.classList.toggle('over',limVal(id).length>LIMS[id]);}
+  if(LIM_BTN[id]==='ruConfirm'){ruSync();return;}
+  const b=document.getElementById(LIM_BTN[id]);
+  if(!b||b.querySelector('.spin'))return;
+  b.disabled=limOver(...Object.keys(LIM_BTN).filter(k=>LIM_BTN[k]===LIM_BTN[id]));
+}
 function badgeBanner(){
   if(!V.earned||!V.earned.length)return '';
   const html=V.earned.map(id=>{const b=byBadge[id];return `<div class="card pop" style="display:flex;gap:14px;align-items:center">
@@ -1535,7 +1573,50 @@ async function signOutUser(){
 }
 
 /* ---------- 1. set up ---------- */
+/* B2B02 and B2B03. A company seat is at work by definition, so the mode is fixed
+   and there are no life topics. The role list and the aim fallback are the B2C ones. */
+function vStartB2B(){
+  if(!S.consent) return shell(`
+  <h1>Four things that stay true</h1>
+  <p class="lede">Read these once. They hold for as long as you use Brigvanti.</p>
+  <div class="card"><h3>Your level is advice, never a verdict</h3>
+    <p class="muted" style="margin:6px 0 0">It is a mirror you may disagree with. It decides nothing about your job.</p></div>
+  <div class="card"><h3>The coach guides you, it never scores you</h3>
+    <p class="muted" style="margin:6px 0 0">Moving up is decided by fixed checks and by what you confirm yourself.</p></div>
+  <div class="card"><h3>Your employer never sees your work</h3>
+    <p class="muted" style="margin:6px 0 0">Your company sees totals and averages only. It never sees your answers, your level or your portfolio.</p></div>
+  <div class="card"><h3>Use real tasks, but never private data</h3>
+    <p class="muted" style="margin:6px 0 0">Leave out client names, account numbers, health information and other people's data.</p></div>
+  <div class="row"><button class="btn go full" onclick="S.consent=true;S.mode='work';save();render()">I understand, let us begin</button></div>`,
+  {crumb:'Before you start'});
+
+  if(S.mode!=='work'){S.mode='work';S.topics=[];}
+  /* First setup lasts until the first scan answer, so the name field stays while a role is picked. */
+  const showRole=!S.roleSkipped,ready=Object.keys(S.targets).length>0,again=Object.keys(S.scan||{}).length>0;
+  return shell(`<h1>${again?'Change your focus':'Tell your coach about you'}</h1>
+  <p class="lede">${again?'Update your role, then re-run the scan.':'Your role shapes your assignments. It never changes how you are placed.'}</p>
+
+  ${!again?`<div class="card"><label class="fl" for="nm">What should your coach call you?</label>
+    <input id="nm" placeholder="Your first name" value="${esc(S.name)}" oninput="S.name=this.value;var b=document.getElementById('startBtn');if(b)b.disabled=!this.value.trim();">
+    ${PDW_NAME_B2B}<p class="muted" style="margin:8px 0 0">A nickname is fine. This is needed to continue.</p></div>`:''}
+
+  ${showRole?`<div class="card"><h3>What is your role?</h3>
+    <p class="muted" style="margin:6px 0 14px">Pick the nearest one. It does not have to be exact.</p>
+    ${DATA.roles.map((r,i)=>`<button class="opt ${S.role===r.r?'sel':''}" onclick="pickRole(${i})">
+      <b>${esc(r.r)}</b></button>`).join('')}
+    <button class="opt" onclick="S.roleSkipped=true;S.role=null;S.targets={};save();render()">
+      <b>My role is not listed</b><span class="sub">Choose what you are aiming for instead.</span></button></div>`
+  :`<div class="card pop"><h3>What are you aiming for?</h3>
+    <p class="muted" style="margin:6px 0 14px">Pick the honest one, not the flattering one. You can raise it whenever you like.</p>
+    ${AMB.map(a=>`<button class="opt ${S.ambition===a[0]?'sel':''}" onclick="pickAmb(${a[0]})">
+      <b>${a[1]}</b><span class="sub">${a[2]}</span></button>`).join('')}
+    <button class="opt" onclick="S.roleSkipped=false;S.ambition=null;S.targets={};save();render()">
+      <b>Show me the role list again</b></button></div>`}
+
+  ${ready?`<div class="row"><button id="startBtn" class="btn go full" ${S.name&&S.name.trim()?'':'disabled'} onclick="go(2)">Start the scan</button></div>`:''}`);
+}
 function vStart(){
+  if(b2bOn()) return vStartB2B();
   if(!S.consent) return shell(`
   <h1>Three things that stay true</h1>
   <p class="lede">Read these once. They hold for as long as you use Brigvanti.</p>
@@ -1666,7 +1747,7 @@ function vClaim(c,d,cs){
   <p class="muted" style="margin:-6px 0 14px;font-size:13px">Area ${scanOrder().indexOf(d)+1} of ${DK.length} &#183; ${DK.filter(x=>domDone(x)).length} placed so far.</p>
   <div class="card">${rungs}
   </div>
-  <p class="muted" style="margin:0">You can stop here and come back. Everything is saved.</p>`,
+  <p class="muted" style="margin:0">You can stop here and come back. Everything is saved.${b2bOn()?' Your company never sees your answers.':''}</p>`,
   {crumb:`Skill ${done+1} of ${cs.length}`,pct});
 }
 function claim(cid,l){
@@ -1750,7 +1831,44 @@ function vAllDone(){
 }
 
 /* ---------- 10. badges ---------- */
+/* B2B20, emblem style, for company seats only: a hexagon in the section colour with a
+   line symbol inside, dashed and grey until earned. C2 brings it to B2C later. */
+const BSYM={
+ first:'<path d="M5 21V4"/><path d="M5 4h11l-2.5 4L16 12H5"/>',
+ ten:'<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+ fifty:'<path d="M3 20l6-11 4 6 2.5-3.5L21 20z"/><path d="M9 9l1.5-2.5"/>',
+ own:'<path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>',
+ cameback:'<path d="M9 14l-5-5 5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
+ ramp:'<path d="M4 20h4v-4h4v-4h4V8h4"/><path d="M16 4h4v4"/>',
+ st3:'<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/><path d="M9 15.5l2 2 4-4"/>',
+ st14:'<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/><path d="M8 14h8M8 17.5h5"/>',
+ backon:'<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/>',
+ lv2:'<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>',
+ lv3:'<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+ lv4:'<path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><path d="M12 8l1.5 2.5L16 12l-2.5 1.5L12 16l-1.5-2.5L8 12l2.5-1.5z"/>',
+ held:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+ area:'<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 16V8"/><path d="M8.5 11.5L12 8l3.5 3.5"/>',
+ aim:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+ grounded:'<path d="M12 4v16"/><path d="M5 12a7 7 0 0 0 14 0"/><circle cx="12" cy="5" r="2"/>',
+ rounded:'<circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/>',
+ mirror:'<path d="M12 3v18"/><path d="M8 7l-4 5 4 5"/><path d="M16 7l4 5-4 5"/>',
+ careful:'<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-4.5"/>'
+};
+function vBadgesB2B(){
+  const tone=['--tile-sky','--tile-coral','--tile-lilac','--tile-mint'];
+  const em=(b,fi)=>{const got=!!(S.badges&&S.badges[b.id]),col=got?`var(${tone[fi%tone.length]})`:'var(--line)';
+    return `<div class="em${got?' got':''}" title="${esc(b.d)}"><span class="emh">
+      <svg class="emf" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 4l40 23v46L50 96 10 73V27z" style="fill:var(--bg);stroke:${col}" stroke-width="5"${got?'':' stroke-dasharray="8 6"'}/></svg>
+      <svg class="ems" viewBox="0 0 24 24" fill="none" style="stroke:${got?col:'var(--ink3)'}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${BSYM[b.id]||''}</svg></span>
+      <b>${esc(b.n)}</b><span class="sr">${got?'Earned.':'Not earned yet.'} ${esc(b.d)}</span></div>`;};
+  return shell(`<h1>Your badges</h1>
+  <p class="lede">You have earned ${earnedCount()} of ${BADGES.length}. Each badge rewards real work.</p>
+  <div class="emgrid">${FAMS.map((f,fi)=>`<section class="card" style="margin:0"><div class="eyebrow">${f}</div>
+    <div class="emrow">${BADGES.filter(b=>b.f===f).map(b=>em(b,fi)).join('')}</div></section>`).join('')}</div>`,
+  {crumb:'Your badges',wide:true});
+}
 function vBadges(){
+  if(b2bOn())return vBadgesB2B();
   const tone=['--tile-sky','--tile-coral','--tile-lilac','--tile-mint'];
   return shell(`<h1>Your badges</h1>
   <p class="lede">You have earned ${earnedCount()} of ${BADGES.length}. Each badge rewards real work.</p>
@@ -2016,7 +2134,7 @@ function vPortfolio(){
   if(V.pf)return vPortfolioSkill();
   const ids=portfolioSkills();
   if(!ids.length)return shell(`<h1>Your portfolio</h1>
-    <p class="lede">Everything you build here is kept, so you can look back and see how your work changed.</p>
+    <p class="lede">Everything you build here is kept, so you can look back and see how your work changed.${b2bOn()?' Your company never sees it.':''}</p>
     <div class="card"><p>Nothing in it yet. Hand in your first assignment and it appears here.</p>
     <div class="row"><button class="btn go full" onclick="go(4)">Practise on real tasks</button></div></div>`,
     {crumb:'Portfolio'});
@@ -2033,7 +2151,7 @@ function vPortfolio(){
       ${first&&last&&rs.length>1?`<span class="sub" style="margin-top:9px">From ${shortDate(first.t)} to ${shortDate(last.t)}</span>`:''}
     </button>`;}).join('');
   return shell(`<h1>Your portfolio</h1>
-  <p class="lede">Everything you made, kept in order. Open a skill to see how your work changed over time.</p>
+  <p class="lede">Everything you made, kept in order. Open a skill to see how your work changed over time.${b2bOn()?' Your company never sees it.':''}</p>
   <div class="card flat" style="background:var(--indigo-l)">
     <h3>This is yours</h3>
     <p class="muted" style="margin:6px 0 0">Nobody reviews it and nobody scores it. It is here so you can find your work again, see your own progress, and show it if you ever want to.</p></div>
@@ -2067,7 +2185,7 @@ function vPortfolioSkill(){
     <span class="${lvc((S.scan[id]&&S.scan[id].confirmed)||0)}">${LV[(S.scan[id]&&S.scan[id].confirmed)||0]}</span></div>
   ${up.passed?`<div class="card warm"><h3>${ic('star',18)} Level earned, ${LV[up.at]}</h3>
     <p class="muted" style="margin:6px 0 8px">Confirmed on ${shortDate(up.t)}.</p>
-    <div class="why"><b>What you made</b>${esc(up.ev||'')}</div>${up.grew?`<div class="why"><b>What changed</b>${esc(up.grew)}</div>`:''}</div>`:''}
+    ${up.prompt?`<div class="why"><b>The prompt you built</b>${esc(up.prompt)}</div>`:''}<div class="why"><b>What you made</b>${esc(up.ev||'')}</div>${up.grew?`<div class="why"><b>What changed</b>${esc(up.grew)}</div>`:''}</div>`:''}
   ${compare}
   ${entries||'<div class="card"><p class="muted">No assignments handed in for this skill yet.</p></div>'}`,
   {crumb:'Portfolio'});
@@ -2242,9 +2360,10 @@ function vRep(){
       <h3>Describe the real task you have</h3>
       <p class="muted" style="margin:8px 0 12px">Do not solve it yet, and do not explain anything. Just tell your coach what you actually need to get done. It will turn that into a short assignment for you.</p>
       <p class="muted" style="margin:0 0 12px">Your coach builds a practice assignment for the skill you are training. It will give you guidelines to follow.</p>
-      <textarea id="sit" placeholder="${esc(hint(R))}" oninput="V.rep.sit=this.value">${esc(R.sit)}</textarea>${PDW}
+      ${b2bOn()?'<p class="muted" style="margin:0 0 12px">Your company never sees this task or anything you write here.</p>':''}
+      <textarea id="sit" placeholder="${esc(hint(R))}" oninput="V.rep.sit=this.value;limTick('sit')">${esc(R.sit)}</textarea>${pdw()}${limCnt('sit')}
       ${R.err?`<div class="err">${esc(R.err)}</div>`:''}
-      <div class="row"><button class="btn go full" ${R.busy?'disabled':''} onclick="buildBrief()">
+      <div class="row"><button id="buildBtn" class="btn go full" ${R.busy||limOver('sit')?'disabled':''} onclick="buildBrief()">
         ${R.busy?'<span class="spin"></span> Building your assignment':'Build my assignment'}</button></div>
       ${R.ceiling?`<div class="row">${R.brief?`<button class="btn sec full" onclick="V.rep.err='';V.rep.ceiling=false;V.rep.step='do';render()">Back to my assignment</button>`:''}
         <button class="btn sec full" onclick="buildBrief(true)">Start a new one</button></div>`:''}</div>`,
@@ -2263,20 +2382,20 @@ function vRep(){
       <label class="fl" for="f1">1. The prompt you used <span style="font-weight:400;color:var(--ink3)">(optional)</span></label>
       <p class="muted" style="margin:0 0 7px">Leave this empty if you did not use an AI tool.</p>
       <textarea id="f1" style="min-height:80px" placeholder="Paste the exact words you typed"
-        oninput="V.rep.prompt=this.value;syncBox2()">${esc(R.prompt)}</textarea>${PDW}
+        oninput="V.rep.prompt=this.value;syncBox2();limTick('f1')">${esc(R.prompt)}</textarea>${pdw()}${limCnt('f1')}
 
       <label class="fl" style="margin-top:16px" for="f2"><span id="l2">${R.prompt.trim()?box2L[1]:box2L[0]}</span></label>
       <p class="muted" style="margin:0 0 7px" id="h2">${R.prompt.trim()?box2H[1]:box2H[0]}</p>
       <textarea id="f2" style="min-height:90px" placeholder="${R.prompt.trim()?box2P[1]:box2P[0]}"
-        oninput="V.rep.back=this.value;box2Typed(event)">${esc(R.back)}</textarea>${PDW}
+        oninput="V.rep.back=this.value;box2Typed(event);limTick('f2')">${esc(R.back)}</textarea>${pdw()}${limCnt('f2')}
 
       <label class="fl" style="margin-top:16px" for="f3">3. What you did with it, and what you noticed</label>
       <p class="muted" style="margin:0 0 7px">What you changed, checked or sent, and what stood out.</p>
       <textarea id="f3" style="min-height:90px" placeholder="For example, I checked the date on the official site and it was wrong, so I corrected it before sending"
-        oninput="V.rep.did=this.value">${esc(R.did)}</textarea>${PDW}
+        oninput="V.rep.did=this.value;limTick('f3')">${esc(R.did)}</textarea>${pdw()}${limCnt('f3')}
 
       ${R.err?`<div class="err">${esc(R.err)}</div>`:''}
-      <div class="row"><button class="btn go full" ${R.busy?'disabled':''} onclick="submitRep()">
+      <div class="row"><button id="sendBtn" class="btn go full" ${R.busy||limOver('f1','f2','f3')?'disabled':''} onclick="submitRep()">
         ${R.busy?'<span class="spin"></span> Your coach is reading':'Send to my coach'}</button></div></div>`,
     {crumb:'Practice assignment'});}
 
@@ -2284,9 +2403,9 @@ function vRep(){
     <div class="coach pop"><h4>Your coach</h4>${esc(R.coach)}</div>
     <div class="card"><label class="fl" for="rf">${esc(R.brief.reflect||'What did you notice?')}</label>
       <textarea id="rf" style="min-height:90px" placeholder="One or two lines"
-        oninput="V.rep.reflect=this.value">${esc(R.reflect)}</textarea>${PDW}
+        oninput="V.rep.reflect=this.value;limTick('rf')">${esc(R.reflect)}</textarea>${pdw()}${limCnt('rf')}
       <p class="muted" style="margin-top:8px">Kept as evidence. It is never graded.</p>
-      <div class="row"><button class="btn go full" onclick="logRep()">Hand in this assignment</button></div></div>`,
+      <div class="row"><button id="handBtn" class="btn go full" ${limOver('rf')?'disabled':''} onclick="logRep()">Hand in this assignment</button></div></div>`,
     {crumb:'Practice assignment'});
 
   if(R.step==='done'){const due=nextDue(c.id),n=repsFor(c.id).length,st=streak();
@@ -2304,6 +2423,7 @@ function vRep(){
 }
 async function buildBrief(fresh){
   const R=V.rep;
+  if(limOver('sit'))return;
   if(!R.sit||R.sit.trim().length<12){R.err='Please write one full sentence about the real task.';render();return;}
   R.err='';R.ceiling=false;R.busy=true;render();
   try{R.brief=await claude({purpose:'brief',actId:R.a.id,compId:R.c.id,tgt:R.tgt,sit:R.sit.trim(),assignmentKey:`${R.a.id}:${R.c.id}:${R.tgt}`,fresh:fresh===true},true);R.step='do';}
@@ -2312,6 +2432,7 @@ async function buildBrief(fresh){
 }
 async function submitRep(){
   const R=V.rep;
+  if(limOver('f1','f2','f3'))return;
   if(R.prompt.trim()&&R.back.trim().length<40){
     R.err='You used a prompt, so please paste the real answer in box 2. Your coach needs the actual wording to give useful feedback.';render();return;}
   if((R.back+R.did).trim().length<15){
@@ -2323,6 +2444,7 @@ async function submitRep(){
 }
 function logRep(){
   const R=V.rep,now=Date.now();
+  if(limOver('rf'))return;
   if(!S.flags)S.flags={};
   const due=nextDue(R.c.id);
   if(due&&now>=due.getTime())S.flags.cameBack=true;
@@ -2400,7 +2522,7 @@ function openAreaLevelUp(d){ if(S.stage!==5)NAV.push(S.stage); S.stage=5; V={lvA
 function effortXP(){ return (S.reps?S.reps.length:0)*15 + Object.keys(S.rung||{}).filter(k=>S.rung[k]&&S.rung[k].passed).length*50; }
 function openRung(cid){
   const c=byId[cid],cur=S.scan[cid].confirmed||0,tgt=nextLv(cid);
-  V.ru={cid,c,tgt,forms:pickForms(cid,tgt),ix:0,got:[],step:'a',pick:null,shown:false,cond:[],ev:'',grew:'',err:''};
+  V.ru={cid,c,tgt,forms:pickForms(cid,tgt),ix:0,got:[],step:'a',pick:null,shown:false,cond:[],ev:'',grew:'',prompt:'',err:''};
   render();
 }
 function vRungRun(){
@@ -2430,6 +2552,7 @@ function vRungRun(){
     <div class="row"><button class="btn go full" onclick="V.ru=null;go(4)">Do another assignment</button></div></div>`,
     {crumb:'Level up test'});
 
+  if(R.step==='b'&&b2bOn())return vRungPart2B2B(R,head);
   if(R.step==='b'){const cond=COND[R.tgt]||COND[2];
     return shell(`${head}
     <div class="card"><span class="chip t">Part 1 is clear</span>
@@ -2446,10 +2569,10 @@ function vRungRun(){
         <li>Where it lives now, or who received it</li>
       </ul>
       <textarea id="ev" style="min-height:100px" placeholder="For example: My weekly team update used to take an hour. I built a prompt that turns my rough notes into our standard format, saved it in my notes app, and Monday's update went out to the team using it."
-        oninput="V.ru.ev=this.value;ruSync()">${esc(R.ev)}</textarea>${PDW}
+        oninput="V.ru.ev=this.value;ruSync()">${esc(R.ev)}</textarea>${pdw()}
       <p class="muted" style="margin:8px 0 0">Later you may want to show this, or simply find it again.</p>
       <label class="fl" style="margin-top:16px" for="grew">What changed in how you work? Optional, one line.</label>
-      <input id="grew" type="text" value="${esc(R.grew||'')}" placeholder="For example: I reuse this now instead of rewriting it each week." oninput="V.ru.grew=this.value">${PDW}
+      <input id="grew" type="text" value="${esc(R.grew||'')}" placeholder="For example: I reuse this now instead of rewriting it each week." oninput="V.ru.grew=this.value">${pdw()}
       <p id="ruHint" class="muted" style="margin:6px 0 0">${ruHintText()}</p>
       <div class="row"><button id="ruConfirm" class="btn go full" ${ruReady()?'':'disabled'} onclick="ruCertify()">Confirm and claim the level</button></div>
       <p class="muted" style="margin-top:12px">Nobody checks this. The level is yours. An honest one is worth more than a high one, because only an honest one tells you what to practise next.</p></div>`,
@@ -2461,10 +2584,38 @@ function vRungRun(){
       <h2 style="margin-top:4px">You reached ${LV[R.tgt]}</h2>
       <p style="margin:8px 0 0">You answered a question you had never seen, and you confirmed a real task against fixed points. ${esc(c.n)} now sits at ${LV[R.tgt]}.</p>
       ${rw&&rw.phase?`<p style="margin-top:10px;font-weight:600">${esc(rw.phase)}</p>`:''}</div>
-    <p class="muted">This level is advisory. It moves as you practise.</p>
+    <p class="muted">${b2bOn()?'This level is advice, not a qualification. Your company sees it only inside an average.':'This level is advisory. It moves as you practise.'}</p>
     <div class="row"><button class="btn go full" onclick="V.ru=null;go(6)">See your progress</button></div>
     <div class="row"><button class="btn sec full" onclick="V.ru=null;render()">Another level up</button></div>`,
     {crumb:'Level up test'});}
+}
+/* B2B16. Fields first, then the learner confirms the statements. The prompt is
+   optional, because not every skill is practised with an AI tool. */
+const NUMW=['no','one','two','three','four','five','six'];
+function vRungPart2B2B(R,head){
+  const cond=COND[R.tgt]||COND[2],n=NUMW[cond.length]||String(cond.length);
+  return shell(`${head}
+    <div class="card"><span class="chip t">Part 1 is clear</span>
+      <h3 style="margin-top:14px">Part 2. Do it for real</h3>
+      <p style="margin-top:8px">Do one real task from your work. Then describe it below and confirm it yourself.</p>
+      <label class="fl" style="margin-top:16px" for="rup">The prompt you built <span style="font-weight:400;color:var(--ink3)">(optional)</span></label>
+      <p class="muted" style="margin:0 0 7px">Leave this empty if you did not use an AI tool.</p>
+      <textarea id="rup" style="min-height:90px" placeholder="Paste the exact words you typed"
+        oninput="V.ru.prompt=this.value;limTick('rup')">${esc(R.prompt)}</textarea>${pdw()}${limCnt('rup')}
+      <label class="fl" style="margin-top:16px" for="ev">What you did with the result</label>
+      <p class="muted" style="margin:0 0 7px">Say what the task was, what you produced and where it is now. It is never graded.</p>
+      <textarea id="ev" style="min-height:100px" placeholder="For example: I built a prompt for our weekly update, used it on Monday and sent the update to the team."
+        oninput="V.ru.ev=this.value;limTick('ev')">${esc(R.ev)}</textarea>${pdw()}${limCnt('ev')}
+      <h3 style="margin-top:22px">Confirm it yourself</h3>
+      <p style="margin-top:8px">To wrap up this test, go through all ${n} statements. Tick each one that is true of what you did. You need all ${n} to claim the level.</p>
+      ${cond.map((x,i)=>`<label class="chk ${R.cond[i]?'on':''}">
+        <input type="checkbox" ${R.cond[i]?'checked':''} onchange="V.ru.cond[${i}]=this.checked;render()">
+        <span><b style="font-weight:600">${esc(x[0])}</b><br><span class="muted">${esc(x[1])}</span></span></label>`).join('')}
+      ${R.err?`<div class="err">${esc(R.err)}</div>`:''}
+      <p id="ruHint" class="muted" style="margin:12px 0 0">${ruHintText()}</p>
+      <div class="row"><button id="ruConfirm" class="btn go full" ${ruReady()?'':'disabled'} onclick="ruCertify()">Finish the test</button></div>
+      <p class="muted" style="margin-top:12px">Nobody checks this. The level is yours. An honest one is worth more than a high one, because only an honest one tells you what to practise next.</p></div>`,
+    {crumb:'Level up test'});
 }
 function ruAnswer(){
   const R=V.ru,it=itemsOf(R.cid,R.tgt,R.forms[R.ix]);
@@ -2483,7 +2634,7 @@ function ruNext(){
 function ruReady(){
   const R=V.ru; if(!R)return false;
   const cond=COND[R.tgt]||COND[2];
-  return cond.every((_,i)=>R.cond[i]) && (R.ev||'').trim().length>=25;
+  return cond.every((_,i)=>R.cond[i]) && (R.ev||'').trim().length>=25 && !limOver('rup','ev');
 }
 function ruHintText(){
   const R=V.ru; if(!R)return '';
@@ -2491,6 +2642,7 @@ function ruHintText(){
   const need=cond.filter((_,i)=>!R.cond[i]).length;
   if(need>0)return `Tick every point above. ${need} still ${need>1?'need':'needs'} confirming.`;
   if((R.ev||'').trim().length<25)return 'Add your evidence, one or two sentences.';
+  if(limOver('rup','ev'))return 'Shorten your text to fit the limit.';
   return 'All set. You can claim the level.';
 }
 function ruSync(){
@@ -2501,9 +2653,10 @@ function ruCertify(){
   const R=V.ru,cond=COND[R.tgt]||COND[2];
   if(!cond.every((_,i)=>R.cond[i])){R.err='Every point must be true. If one is not, do the task again. That is the point of the level.';render();return;}
   if(!R.ev||R.ev.trim().length<25){R.err='Please cover all three points, so your evidence can be found and understood later.';render();return;}
+  if(limOver('rup','ev'))return;
   const before=S.scan[R.cid].confirmed||0;
   S.scan[R.cid].confirmed=R.tgt;
-  const st=rungState(R.cid);st.passed=true;st.at=R.tgt;st.t=Date.now();st.ev=R.ev;st.grew=R.grew||'';
+  const st=rungState(R.cid);st.passed=true;st.at=R.tgt;st.t=Date.now();st.ev=R.ev;st.grew=R.grew||'';if(R.prompt&&R.prompt.trim())st.prompt=R.prompt;
   const rw={c:R.cid,lv:R.tgt,t:Date.now()},d=byId[R.cid].d,dl=domLevel(d);
   if(dl&&dl>=R.tgt&&dl>before)rw.phase=`${DATA.doms[d]} has moved up to ${LV[dl]}.`;
   S.rewards.push(rw);R.step='done';R.err='';checkBadges();save();render();
@@ -2590,7 +2743,7 @@ function exportLog(){
       sit:r.sit,prompt:r.prompt,back:r.back,did:r.did,reflect:r.reflect,coach:r.coach});});
   Object.keys(S.rung||{}).filter(k=>S.rung[k]&&S.rung[k].passed&&byId[k]).sort((a,b)=>(S.rung[a].t||0)-(S.rung[b].t||0)).forEach(k=>{
     const r=S.rung[k],c=byId[k];
-    row({type:T('Level up'),skill:c.n,area:DATA.doms[c.d],earned:lv(r.at),date:r.t?day(r.t):'',ev:r.ev,grew:r.grew});});
+    row({type:T('Level up'),skill:c.n,area:DATA.doms[c.d],earned:lv(r.at),date:r.t?day(r.t):'',prompt:r.prompt,ev:r.ev,grew:r.grew});});
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const b=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}),u=URL.createObjectURL(b);
   const a=document.createElement('a');a.href=u;a.download='brigvanti-record.csv';a.click();URL.revokeObjectURL(u);
@@ -2625,6 +2778,7 @@ function exportPortfolioDoc(){
     return `<article class="piece">
       <div class="ph"><h2>${skill}</h2><span class="lv">Level up &middot; ${lvl}</span></div>
       <div class="meta">${area?area+' &middot; ':''}${date}</div>
+      ${block('Your prompt',r.prompt)}
       ${block('What you made',r.ev)}
       ${block('What changed in how you work',r.grew)}
     </article>`;}).join('');
@@ -2681,7 +2835,7 @@ function vAccount(){
   const modeLbl={work:'At work',personal:'In my own life',both:'Work and life'}[S.mode]||'Not set';
   const focusSub=S.role?esc(S.role):modeLbl;
   const nameRow=V.editName
-    ?`<div class="srow edit"><label class="sr" for="anm">Your name</label><input id="anm" value="${esc(S.name)}" placeholder="Your name" oninput="S.name=this.value" onkeydown="if(event.key==='Enter')saveName()"><button class="iconbtn" onclick="saveName()" aria-label="Save">${ic('check',16)}</button></div>${PDW_NAME}`
+    ?`<div class="srow edit"><label class="sr" for="anm">Your name</label><input id="anm" value="${esc(S.name)}" placeholder="Your name" oninput="S.name=this.value" onkeydown="if(event.key==='Enter')saveName()"><button class="iconbtn" onclick="saveName()" aria-label="Save">${ic('check',16)}</button></div>${pdwName()}`
     :`<button class="srow" onclick="V.editName=true;render()"><span>Your name</span><span class="v">${esc(S.name||'Not set')} ${ic('pencil',14)}</span></button>`;
   const pwRow=co?b2bPasswordRow():isG
     ?`<div class="srow"><span>Sign in</span><span class="v">Google</span></div>`
