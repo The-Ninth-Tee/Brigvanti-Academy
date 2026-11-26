@@ -4,7 +4,8 @@
 //   orgs/{orgId}                  name, tenantId, domains, departments, seats, contractStart, contractEnd, founding, source,
 //                                 signIn ('microsoft' | 'google' | 'emailLink' | 'saml' | 'oidc'), microsoftTenantId (with 'microsoft')
 //                                 seatgate (gcp/seatgate) refuses every sign-up in the tenant until signIn is set.
-//   orgs/{orgId}/members/{seatId} email, department, status, uid, invitedAt, firstSignInAt, endedAt, deleteAfter
+//   orgs/{orgId}/members/{seatId} email, department, status, uid, invitedAt, firstSignInAt, endedAt, deleteAfter,
+//                                 outOfAverages, outOfAveragesAt   (D8: set by support after an objection; set only by the owner tool)
 //   entitlements/{uid}            product 'b2b', orgId, tenantId, validUntil   (read by the coach gate)
 //   orgs/{orgId}/admins/{adminId} email, uid, addedAt, firstSignInAt   (an admin needs no seat; adminId is seatId(email))
 //   orgs/{orgId}/reports/unseated people: sign-ins without a seat, shown to the admin in Seats
@@ -74,7 +75,70 @@ export function planMerge(org, members, from, into) {
   return { departments: org.departments.filter((d) => d !== a), moved, into: b, people: size(a) + size(b) };
 }
 
-export const contractActive = (org, now) => now >= org.contractStart && now < org.contractEnd;
+// Renaming keeps every person in place under the new name.
+export function planRename(org, members, from, to) {
+  const a = departmentOf(org, from);
+  if (!a) return { error: 'unknown_department' };
+  const c = cleanDepartments([to]);
+  if (c.error) return { error: c.error === 'empty' ? 'name_missing' : c.error };
+  const b = c.departments[0];
+  if (b.toLowerCase() !== a.toLowerCase() && departmentOf(org, b)) return { error: 'duplicate', name: b };
+  return {
+    departments: org.departments.map((d) => (d === a ? b : d)),
+    moved: members.filter((m) => m.department === a).map((m) => ({ ...m, department: b })),
+  };
+}
+
+// A department goes only when nobody with a seat is in it. Merge moves people first.
+export function planRemoveDepartment(org, members, name) {
+  const a = departmentOf(org, name);
+  if (!a) return { error: 'unknown_department' };
+  if (members.some((m) => (m.status === 'invited' || m.status === 'active') && m.department === a)) return { error: 'not_empty' };
+  return { departments: org.departments.filter((d) => d !== a) };
+}
+
+// A seat list from the admin (D12): work email and main department, with or without a header row.
+// Accepts comma, semicolon (Dutch Excel) or tab, quoted cells and a byte order mark.
+export const CSV_MAX_CHARS = 200000;
+export const CSV_MAX_ROWS = 1000;
+const cells = (line, sep) => {
+  const out = [];
+  let cur = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (q) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (ch === '"') q = false;
+      else cur += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === sep) { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out.map((c) => c.trim());
+};
+export function parseSeatCsv(text) {
+  const s = String(text || '').replace(/^﻿/, '');
+  if (s.length > CSV_MAX_CHARS) return { error: 'file_too_large' };
+  const lines = s.split(/\r\n|\n|\r/).map((l, i) => ({ n: i + 1, l })).filter((x) => x.l.trim());
+  if (!lines.length) return { error: 'empty' };
+  const first = lines[0].l;
+  const sep = ['\t', ';', ','].map((c) => [c, first.split(c).length]).sort((a, b) => b[1] - a[1])[0][0];
+  let emailCol = 0, deptCol = 1, start = 0;
+  const head = cells(first, sep).map((c) => c.toLowerCase());
+  if (!head.some((c) => c.includes('@'))) {
+    emailCol = head.findIndex((c) => /e-?mail/.test(c));
+    deptCol = head.findIndex((c) => /department|afdeling/.test(c));
+    if (emailCol < 0 || deptCol < 0) return { error: 'header_not_found' };
+    start = 1;
+  }
+  const rows = lines.slice(start).map((x) => { const c = cells(x.l, sep); return { line: x.n, email: c[emailCol] || '', department: c[deptCol] || '' }; });
+  if (!rows.length) return { error: 'empty' };
+  if (rows.length > CSV_MAX_ROWS) return { error: 'too_many_rows' };
+  return { rows };
+}
+
+export const contractActive =(org, now) => now >= org.contractStart && now < org.contractEnd;
 export const tenantMatches = (token, org) => !!(token && token.firebase && org && token.firebase.tenant === org.tenantId);
 
 // A seat counts against the contract until it is removed or ended.
@@ -87,17 +151,23 @@ export function planInvites(org, members, list, now) {
   const add = [], refused = [];
   for (const row of list) {
     const email = normEmail(row.email);
-    if (!EMAIL.test(email)) { refused.push({ email, reason: 'invalid_email' }); continue; }
-    if (!(org.departments || []).length) { refused.push({ email, reason: 'no_departments_set' }); continue; }
+    const no = (reason) => refused.push(row.line ? { line: row.line, email, reason } : { email, reason });
+    if (!EMAIL.test(email)) { no('invalid_email'); continue; }
+    if (!(org.departments || []).length) { no('no_departments_set'); continue; }
     const department = departmentOf(org, row.department);
-    if (!department) { refused.push({ email, reason: 'unknown_department' }); continue; }
-    if (!org.domains.includes(emailDomain(email))) { refused.push({ email, reason: 'wrong_domain' }); continue; }
+    if (!department) { no('unknown_department'); continue; }
+    if (!org.domains.includes(emailDomain(email))) { no('wrong_domain'); continue; }
     const id = seatId(email);
     const had = taken.get(id);
-    if (had && holdsSeat(had)) { refused.push({ email, reason: 'already_has_seat' }); continue; }
-    if (used >= org.seats) { refused.push({ email, reason: 'no_seats_left' }); continue; }
-    if (!contractActive(org, now)) { refused.push({ email, reason: 'contract_not_active' }); continue; }
-    const m = { email, department, status: 'invited', uid: null, invitedAt: now, firstSignInAt: null, endedAt: null, deleteAfter: null };
+    if (had && holdsSeat(had)) { no('already_has_seat'); continue; }
+    if (used >= org.seats) { no('no_seats_left'); continue; }
+    if (!contractActive(org, now)) { no('contract_not_active'); continue; }
+    if (had && had.status === 'deleting') { no('seat_ending'); continue; }
+    // A seat given back within the 30 read-only days keeps the account, so the person loses nothing.
+    const m = had && had.status === 'ended' && had.uid
+      ? { ...had, department, status: 'active', endedAt: null, deleteAfter: null }
+      : { email, department, status: 'invited', uid: null, invitedAt: now, firstSignInAt: null, endedAt: null, deleteAfter: null };
+    delete m.seatId;
     add.push({ seatId: id, member: m });
     taken.set(id, m);
     used++;
@@ -169,6 +239,7 @@ export function firestoreOrgStore(db) {
       const q = await db.collection('orgs').where('tenantId', '==', tenantId).limit(2).get();
       return q.size === 1 ? { orgId: q.docs[0].id, ...q.docs[0].data() } : null;
     },
+    admins: async (id) => (await org(id).collection('admins').get()).docs.map((d) => ({ adminId: d.id, ...d.data() })),
     admin: async (id, aid) => { const s = await org(id).collection('admins').doc(aid).get(); return s.exists ? { adminId: aid, ...s.data() } : null; },
     setAdmin: (id, aid, a) => org(id).collection('admins').doc(aid).set(a, { merge: true }),
     deleteAdmin: (id, aid) => org(id).collection('admins').doc(aid).delete(),

@@ -13,6 +13,7 @@ import { runSeatEnd, DATA_ORDER, UNSEATED_DAYS } from '../netlify/lib/b2b-seat-e
 import { tenantOf, companyVerifier } from '../netlify/lib/b2b-auth.mjs';
 import { createB2bAccountDelete } from '../netlify/lib/b2b-account-delete.mjs';
 import { createB2bAdmin } from '../netlify/lib/b2b-admin.mjs';
+import { createB2bCompany, COMPANY_ACTIONS } from '../netlify/lib/b2b-company.mjs';
 import * as G from '../gcp/seatgate/core.mjs';
 import { createB2bSigninLink, planLinkMail, overLimit } from '../netlify/lib/b2b-signin-link.mjs';
 import { resolvePlan, resolveSignInPlan } from '../netlify/lib/coach-caps.mjs';
@@ -723,6 +724,324 @@ check('the sign-in link email exists in English and Dutch and escapes the compan
   assert.equal(nl.lang, 'nl');
   assert.equal(nl.subject, 'Je inloglink voor Brigvanti');
   assert.equal(planLinkMail('fr', 'X', 'https://l', 'https://a').lang, 'en');
+});
+
+// D4: active from scans, level-ups and assignments; inactive for 30 days; monthly trend (decided 24 Nov 2026)
+const act = (o = {}) => ({
+  scan: { 'D1.1': { done: true, confirmed: 2, log: (o.scan || []).map((t) => ({ item: 'x', ok: true, t })) }, 'D2.1': { done: true, confirmed: 2, log: (o.up || []).map((t) => ({ item: 'y', ok: true, up: true, t })) } },
+  reps: (o.reps || []).map((t) => ({ c: 'D1.1', t })),
+});
+function activity(people, extra = [], now = NOW) {
+  const members = [], summaries = {};
+  people.forEach((p, i) => {
+    const uid = 'a' + i;
+    members.push({ email: `a${i}@northwind.example`, department: p.dept || 'Sales', status: 'active', uid, firstSignInAt: NOW - 90 * O.DAY, ...(p.member || {}) });
+    summaries[uid] = learnerSummary(act(p));
+  });
+  return companyStats({ org: { ...ORG, seats: 200 }, members: members.concat(extra), summaries, now });
+}
+const n = (k, p) => Array.from({ length: k }, () => p);
+
+check('D4: a learner summary records activity from scan answers, level-up answers and hand-ins', () => {
+  const s = learnerSummary(act({ scan: [NOV], up: [NOW - O.DAY], reps: [NOV - 40 * O.DAY] }));
+  assert.deepEqual(s.active, { 202611: true, 202612: true, 202610: true });
+  assert.equal(s.lastActive, NOW - O.DAY);
+  assert.deepEqual(s.handedIn, { 202610: 1 });
+  const skipped = learnerSummary({ scan: { 'D1.1': { done: true, skipped: true, log: [{ t: NOW }] } } });
+  assert.deepEqual(skipped.active, { 202612: true }, 'an answer counts even when the skill ends up skipped');
+  assert.deepEqual(skipped.areas, {});
+  assert.equal(learnerSummary({}).lastActive, null);
+});
+
+check('D4: active this month counts a scan, a level-up or a hand-in, and opening the app alone does not count', () => {
+  const s = activity([...n(4, { scan: [NOW] }), ...n(3, { up: [NOW] }), ...n(3, { reps: [NOW] }), ...n(5, {})]);
+  assert.equal(s.activeThisMonth, 10);
+  assert.deepEqual(s.assignmentsThisMonth, HIDDEN, 'only 3 people handed in');
+  assert.equal(s.inactive30, 5);
+});
+
+check('D4: inactive for 30 days looks back 30 days, not to the start of the month', () => {
+  const s = activity([...n(6, { scan: [NOW - 29 * O.DAY] }), ...n(5, { scan: [NOW - 31 * O.DAY] }), ...n(5, { reps: [NOW] })]);
+  assert.equal(s.inactive30, 5);
+  assert.equal(s.activeThisMonth, 5, 'activity on 16 November is not this month');
+});
+
+check('D4: active and inactive hide when either side is 1 to 4, so neither can be worked out from seats in use', () => {
+  assert.deepEqual(activity([...n(20, { reps: [NOW] }), ...n(3, {})]).inactive30, HIDDEN, '3 inactive');
+  assert.deepEqual(activity([...n(3, { reps: [NOW] }), ...n(20, {})]).inactive30, HIDDEN, '3 recently active');
+  assert.deepEqual(activity([...n(3, { reps: [NOW] }), ...n(20, {})]).activeThisMonth, HIDDEN);
+  assert.deepEqual(activity([...n(8, { reps: [NOW] }), ...n(2, {})]).activeThisMonth, HIDDEN, '2 not active this month');
+  assert.equal(activity(n(10, { reps: [NOW] })).inactive30, 0, 'nobody inactive is shown as 0');
+  assert.equal(activity([...n(10, { reps: [NOW] }), ...n(5, {})]).activeThisMonth, 10);
+  const four = activity(n(4, { reps: [NOW] }));
+  assert.deepEqual([four.activeThisMonth, four.inactive30], [HIDDEN, HIDDEN], 'under 5 in use, everything hides');
+});
+
+check('D4: the monthly trend of active users follows the 5 rule per month', () => {
+  const s = activity([...n(6, { scan: [NOW, NOV] }), ...n(3, { scan: [NOV] })]);
+  const m = Object.fromEntries(s.perMonth.map((x) => [x.month, x.active]));
+  assert.equal(m['202612'], 6);
+  assert.equal(m['202611'], 9);
+  assert.equal(m['202610'], 0);
+  const t = activity([...n(3, { scan: [NOV] }), ...n(6, {})]);
+  assert.deepEqual(t.perMonth.find((x) => x.month === '202611').active, HIDDEN);
+});
+
+check('D8: a seat out of the averages counts as a seat in use and in no other figure', () => {
+  const out = { member: { outOfAverages: true }, reps: [NOW] };
+  const ten = n(10, { reps: [NOW] });
+  const s = activity([...ten.slice(0, 9), out]);
+  assert.equal(s.seats.inUse, 10);
+  assert.deepEqual(s.companyLevel, HIDDEN, '9 learners left with a level');
+  assert.deepEqual(s.areas.D1, HIDDEN);
+  assert.equal(s.activeThisMonth, 9);
+  assert.equal(s.inactive30, 0, 'the objector is not counted as inactive either');
+  assert.deepEqual(activity(ten).companyLevel, { level: 2 });
+  const d = activity([...n(12, { dept: 'Sales', reps: [NOW] }), ...n(10, { dept: 'HR', reps: [NOW] }), { dept: 'HR', ...out }]);
+  assert.deepEqual(d.departments.find((x) => x.name === 'HR'), { name: 'HR', people: 11, level: 2 }, 'the seat counts, the level does not');
+});
+
+// Seat lists from a file (D12)
+check('a seat list parses with or without a header, with comma, semicolon or tab, quotes and a byte order mark', () => {
+  const a = O.parseSeatCsv('﻿E-mail;Afdeling\r\n"pat@northwind.example";"Sales"\r\n\r\nsam@northwind.example;"Customer ""front"" desk"\n');
+  assert.deepEqual(a.rows, [{ line: 2, email: 'pat@northwind.example', department: 'Sales' }, { line: 4, email: 'sam@northwind.example', department: 'Customer "front" desk' }]);
+  assert.deepEqual(O.parseSeatCsv('pat@northwind.example,Sales').rows, [{ line: 1, email: 'pat@northwind.example', department: 'Sales' }]);
+  assert.deepEqual(O.parseSeatCsv('Department\tWork email\nSales\tpat@northwind.example').rows, [{ line: 2, email: 'pat@northwind.example', department: 'Sales' }]);
+  assert.equal(O.parseSeatCsv('name,role\nPat,Boss').error, 'header_not_found');
+  assert.equal(O.parseSeatCsv(' \n ').error, 'empty');
+  assert.equal(O.parseSeatCsv('email,department').error, 'empty');
+  assert.equal(O.parseSeatCsv('x'.repeat(O.CSV_MAX_CHARS + 1)).error, 'file_too_large');
+  assert.equal(O.parseSeatCsv(Array.from({ length: O.CSV_MAX_ROWS + 1 }, (_, i) => `p${i}@northwind.example,Sales`).join('\n')).error, 'too_many_rows');
+});
+
+check('a seat given back within the 30 read-only days keeps the account; a seat being deleted cannot be given', () => {
+  const ended = { seatId: O.seatId('pat@northwind.example'), email: 'pat@northwind.example', department: 'Sales', status: 'ended', uid: 'u-pat', firstSignInAt: T0, endedAt: T0 + 5, deleteAfter: T0 + 5 + 30 * O.DAY, outOfAverages: true };
+  const r = O.planInvites(ORG, [ended], [{ email: 'pat@northwind.example', department: 'HR' }], T0 + 10);
+  assert.deepEqual(r.add[0].member, { email: 'pat@northwind.example', department: 'HR', status: 'active', uid: 'u-pat', firstSignInAt: T0, endedAt: null, deleteAfter: null, outOfAverages: true });
+  assert.equal(O.planInvites(ORG, [{ ...ended, status: 'deleting' }], [{ email: 'pat@northwind.example', department: 'HR' }], T0 + 10).refused[0].reason, 'seat_ending');
+});
+
+check('departments rename with everyone in place, and go only when empty', () => {
+  const org = { ...ORG, departments: ['Sales', 'HR'] };
+  const ms = [{ seatId: 's1', email: 'a@northwind.example', department: 'HR', status: 'active' }, { seatId: 's2', email: 'b@northwind.example', department: 'Sales', status: 'ended' }];
+  const r = O.planRename(org, ms, 'hr', ' People  & Culture ');
+  assert.deepEqual(r.departments, ['Sales', 'People & Culture']);
+  assert.deepEqual(r.moved.map((m) => [m.seatId, m.department]), [['s1', 'People & Culture']]);
+  assert.equal(O.planRename(org, ms, 'HR', 'sales').error, 'duplicate');
+  assert.deepEqual(O.planRename(org, ms, 'HR', 'hr').departments, ['Sales', 'hr'], 'a change of case is a rename');
+  assert.equal(O.planRename(org, ms, 'IT', 'Ops').error, 'unknown_department');
+  assert.equal(O.planRename(org, ms, 'HR', '  ').error, 'name_missing');
+  assert.equal(O.planRemoveDepartment(org, ms, 'HR').error, 'not_empty');
+  assert.deepEqual(O.planRemoveDepartment(org, ms, 'Sales').departments, ['HR'], 'an ended seat does not hold a department');
+});
+
+// The company dashboard function (B5), behind the admin gate
+const BOSS = O.seatId('boss@northwind.example');
+function companyHarness({ org = { ...ORG, seats: 5, departments: ['Sales', 'HR', 'Finance'], signIn: 'emailLink' }, members = [], admins, unseated = null, blobs = {} } = {}) {
+  const db = {
+    org, log: [], ents: {},
+    members: Object.fromEntries(members.map((m) => [m.seatId, { ...m }])),
+    admins: admins || { [BOSS]: { email: 'boss@northwind.example', uid: 'adm', addedAt: T0, firstSignInAt: T0 } },
+    unseated,
+  };
+  const store = {
+    orgByTenant: async (t) => (t === org.tenantId ? { ...db.org } : null),
+    admin: async (o, id) => (db.admins[id] ? { adminId: id, ...db.admins[id] } : null),
+    admins: async () => Object.entries(db.admins).map(([adminId, a]) => ({ adminId, ...a })),
+    setAdmin: async (o, id, a) => { db.log.push(['setAdmin', id]); db.admins[id] = { ...db.admins[id], ...a }; },
+    deleteAdmin: async (o, id) => { db.log.push(['deleteAdmin', id]); delete db.admins[id]; },
+    members: async () => Object.entries(db.members).map(([seatId, m]) => ({ ...m, seatId })),
+    member: async (o, id) => (db.members[id] ? { ...db.members[id], seatId: id } : null),
+    setMember: async (o, id, m) => { db.log.push(['setMember', id]); const { seatId: _, ...rest } = m; db.members[id] = { ...db.members[id], ...rest }; },
+    setEntitlement: async (uid, e) => { db.log.push(['setEntitlement', uid]); db.ents[uid] = e; },
+    setDepartments: async (o, d) => { db.log.push(['setDepartments']); db.org = { ...db.org, departments: d }; },
+    summaries: async (uids) => { db.log.push(['summaries', uids.join(',')]); return Object.fromEntries(uids.filter((u) => blobs[u]).map((u) => [u, learnerSummary(blobs[u])])); },
+    unseated: async () => db.unseated,
+    setUnseated: async (o, r) => { db.log.push(['setUnseated']); db.unseated = r; },
+    deleteSignIn: async (t, uid) => db.log.push(['deleteSignIn', t, uid]),
+    deleteData: async (p, uid) => db.log.push(['deleteData', p, uid]),
+  };
+  const users = {
+    boss: { uid: 'adm', email: 'boss@northwind.example', firebase: { tenant: ORG.tenantId } },
+    staff: { uid: 'u-a', email: 'a@northwind.example', firebase: { tenant: ORG.tenantId } },
+    consumer: { uid: 'c1', email: 'boss@northwind.example', firebase: {} },
+  };
+  const verify = async (t) => { if (!users[t]) throw new Error('bad'); return users[t]; };
+  const handler = createB2bCompany({ verify, store, now: () => T0 + 1 });
+  const call = async (action, body = {}, who = 'boss') => { const r = await handler(req(who, { action, ...body })); return { status: r.status, body: await r.json() }; };
+  return { db, handler, call };
+}
+const mem = (email, extra = {}) => ({ seatId: O.seatId(email), email, department: 'Sales', status: 'active', uid: 'u-' + email.split('@')[0], invitedAt: T0, firstSignInAt: T0, endedAt: null, deleteAfter: null, ...extra });
+
+check('every company action needs a signed-in admin of that company', async () => {
+  const h = companyHarness();
+  for (const a of COMPANY_ACTIONS) {
+    assert.equal((await h.call(a, {}, 'staff')).status, 403, a);
+    assert.equal((await h.call(a, {}, 'consumer')).status, 403, a);
+    assert.equal((await h.call(a, {}, 'nonsense')).status, 401, a);
+  }
+  assert.equal((await h.handler(new Request('https://x/', { method: 'GET' }))).status, 405);
+  assert.deepEqual(h.db.log.filter((l) => l[0] !== 'setAdmin'), [], 'nothing read or written for a refused call');
+});
+
+check('a company call refuses an unknown action, bad JSON and a body that is too large', async () => {
+  const h = companyHarness();
+  assert.equal((await h.call('constructor')).body.code, 'unknown_action');
+  assert.equal((await h.call('nope')).status, 400);
+  const raw = (body) => h.handler(new Request('https://x/', { method: 'POST', headers: { authorization: 'Bearer boss' }, body }));
+  assert.equal((await raw('{')).status, 400);
+  assert.equal((await raw(JSON.stringify({ action: 'uploadPreview', csv: 'x'.repeat(260000) }))).status, 413);
+});
+
+check('the wiring: b2b-company checks company tokens inside the tenant', () => {
+  const s = read('netlify/functions/b2b-company.mjs');
+  assert.ok(/verify:\s*companyVerifier\(adminAuth\)/.test(s));
+  assert.ok(/createB2bCompany\(/.test(s));
+});
+
+check('overview returns the company card and the totals, and never reads the state of a seat out of the averages', async () => {
+  const people = Array.from({ length: 10 }, (_, i) => mem(`p${i}@northwind.example`));
+  const out = mem('q@northwind.example', { outOfAverages: true });
+  const blobs = Object.fromEntries([...people, out].map((m) => [m.uid, act({ reps: [T0] })]));
+  const h = companyHarness({ org: { ...ORG, seats: 50, departments: ['Sales'] }, members: [...people, out, mem('i@northwind.example', { status: 'invited', uid: null, firstSignInAt: null })], blobs });
+  const r = await h.call('overview');
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.company, { name: ORG.name, seats: 50, contractStart: ORG.contractStart, contractEnd: ORG.contractEnd, domains: ORG.domains, signIn: null, departments: ['Sales'] });
+  assert.deepEqual(r.body.stats.seats, { bought: 50, assigned: 12, inUse: 11 });
+  assert.deepEqual(r.body.stats.companyLevel, { level: 2 });
+  assert.equal(r.body.stats.activeThisMonth, 10);
+  assert.ok(!h.db.log.find((l) => l[0] === 'summaries')[1].includes(out.uid));
+  assert.ok(!/@|u-p|uid|email/.test(JSON.stringify(r.body.stats)), 'nothing per person');
+});
+
+check('the seat list shows email and department only, and an invite looks the same as a used seat', async () => {
+  const h = companyHarness({ members: [mem('pat@northwind.example'), mem('ivy@northwind.example', { status: 'invited', uid: null, firstSignInAt: null, department: 'HR' }), mem('old@northwind.example', { status: 'ended' })] });
+  const r = (await h.call('seats')).body;
+  assert.deepEqual(r.seats, [{ id: O.seatId('ivy@northwind.example'), email: 'ivy@northwind.example', department: 'HR' }, { id: O.seatId('pat@northwind.example'), email: 'pat@northwind.example', department: 'Sales' }]);
+  assert.deepEqual([r.bought, r.left, r.seatEnds, r.readOnlyDays], [5, 3, ORG.contractEnd, 30]);
+  assert.ok(!/firstSignInAt|uid|status|invited|active/.test(JSON.stringify(r)));
+});
+
+check('add one: a seat is added with the same refusals as the planner', async () => {
+  const h = companyHarness({ members: [mem('pat@northwind.example')] });
+  const ok = await h.call('seatAdd', { email: ' Sam@Northwind.example ', department: 'hr' });
+  assert.deepEqual(ok.body, { added: { email: 'sam@northwind.example', department: 'HR' }, left: 3 });
+  assert.equal(h.db.members[O.seatId('sam@northwind.example')].status, 'invited');
+  assert.equal((await h.call('seatAdd', { email: 'pat@northwind.example', department: 'Sales' })).body.code, 'already_has_seat');
+  assert.equal((await h.call('seatAdd', { email: 'x@gmail.com', department: 'Sales' })).body.code, 'wrong_domain');
+  assert.equal((await h.call('seatAdd', { email: 'y@northwind.example', department: 'Ops' })).body.code, 'unknown_department');
+  await h.call('seatAdd', { email: 'c@northwind.example', department: 'Sales' });
+  await h.call('seatAdd', { email: 'd@northwind.example', department: 'Sales' });
+  assert.equal((await h.call('seatAdd', { email: 'e@northwind.example', department: 'Sales' })).body.left, 0);
+  assert.equal((await h.call('seatAdd', { email: 'f@northwind.example', department: 'Sales' })).body.code, 'no_seats_left');
+});
+
+check('upload: the preview writes nothing and names each refused line; the commit plans again against the seats as they are', async () => {
+  const h = companyHarness({ members: [mem('pat@northwind.example')] });
+  const csv = 'email;department\npat@northwind.example;Sales\nsam@northwind.example;HR\nkim@gmail.com;HR\nlee@northwind.example;Marketing\nmo@northwind.example;Finance\n';
+  const p = await h.call('uploadPreview', { csv });
+  assert.deepEqual(p.body.accepted, [{ email: 'sam@northwind.example', department: 'HR' }, { email: 'mo@northwind.example', department: 'Finance' }]);
+  assert.deepEqual(p.body.refused, [{ line: 2, email: 'pat@northwind.example', reason: 'already_has_seat' }, { line: 4, email: 'kim@gmail.com', reason: 'wrong_domain' }, { line: 5, email: 'lee@northwind.example', reason: 'unknown_department' }]);
+  assert.equal(p.body.left, 2);
+  assert.deepEqual(h.db.log, [], 'a preview writes nothing');
+  await h.call('seatAdd', { email: 'mo@northwind.example', department: 'Finance' });
+  const c = await h.call('uploadCommit', { csv });
+  assert.equal(c.body.added, 1);
+  assert.ok(c.body.refused.some((x) => x.line === 6 && x.reason === 'already_has_seat'), 'the seat added after the preview is not added twice');
+  assert.equal((await h.call('uploadPreview', { csv: 'name,role\nPat,Boss' })).body.code, 'header_not_found');
+});
+
+check('remove a seat: the coach stops at once, and an invite and a used seat get the same answer', async () => {
+  const pat = mem('pat@northwind.example'), ivy = mem('ivy@northwind.example', { status: 'invited', uid: null, firstSignInAt: null });
+  const h = companyHarness({ members: [pat, ivy] });
+  const a = await h.call('seatRemove', { id: pat.seatId });
+  const b = await h.call('seatRemove', { id: ivy.seatId });
+  assert.deepEqual(a.body, b.body);
+  assert.deepEqual(a.body, { removed: true, readOnlyDays: 30 });
+  assert.equal(h.db.members[pat.seatId].status, 'ended');
+  assert.equal(h.db.members[pat.seatId].deleteAfter, T0 + 1 + 30 * O.DAY);
+  assert.equal(h.db.ents[pat.uid].validUntil, T0 + 1, 'the coach stops now');
+  assert.equal(h.db.members[ivy.seatId].status, 'removed');
+  assert.equal((await h.call('seatRemove', { id: pat.seatId })).body.code, 'no_seat');
+  assert.equal((await h.call('seatRemove', { id: 'nope' })).body.code, 'no_seat');
+  const back = await h.call('seatAdd', { email: 'pat@northwind.example', department: 'Sales' });
+  assert.equal(back.status, 200);
+  assert.equal(h.db.members[pat.seatId].status, 'active', 'given back within 30 days');
+  assert.equal(h.db.ents[pat.uid].validUntil, ORG.contractEnd);
+});
+
+const report = (people) => ({ updatedAt: T0, total: people.length, people: people.map(([uid, email, matchesInvite = false]) => ({ uid, email, firstSignInAt: T0 - O.DAY, removeAfter: T0 + 6 * O.DAY, matchesInvite })) });
+
+check('sign-ins without a seat: the list shows email and dates, never the account id', async () => {
+  const h = companyHarness({ unseated: report([['x1', 'x1@northwind.example']]) });
+  const r = (await h.call('unseated')).body;
+  assert.deepEqual(r, { people: [{ email: 'x1@northwind.example', firstSignInAt: T0 - O.DAY, removeAfter: T0 + 6 * O.DAY, matchesInvite: false }], total: 1, updatedAt: T0 });
+  assert.deepEqual((await companyHarness().call('unseated')).body, { people: [], total: 0, updatedAt: null });
+});
+
+check('give a seat binds the sign-in at once, so the seat end job keeps it, and uses a waiting invite for the same email', async () => {
+  const h = companyHarness({ unseated: report([['x1', 'x1@northwind.example'], ['x2', 'x2@northwind.example', true], ['x3', 'x3@gmail.com']]), members: [mem('x2@northwind.example', { status: 'invited', uid: null, firstSignInAt: null, department: 'HR' })] });
+  const a = await h.call('unseatedGive', { email: 'X1@northwind.example', department: 'Sales' });
+  assert.deepEqual(a.body, { given: true, email: 'x1@northwind.example', department: 'Sales' });
+  const m = h.db.members[O.seatId('x1@northwind.example')];
+  assert.deepEqual([m.status, m.uid, m.firstSignInAt], ['active', 'x1', T0 - O.DAY]);
+  assert.equal(h.db.ents.x1.product, 'b2b');
+  const b = await h.call('unseatedGive', { email: 'x2@northwind.example' });
+  assert.equal(b.body.department, 'HR', 'the invite keeps its department');
+  assert.equal(h.db.members[O.seatId('x2@northwind.example')].uid, 'x2');
+  assert.equal((await h.call('seats')).body.left, 3, 'the invite and the sign-in share one seat');
+  assert.equal((await h.call('unseatedGive', { email: 'x3@gmail.com', department: 'Sales' })).body.code, 'wrong_domain');
+  assert.deepEqual(h.db.unseated.people.map((p) => p.email), ['x3@gmail.com']);
+  assert.equal(h.db.unseated.total, 1);
+  assert.equal((await h.call('unseatedGive', { email: 'x1@northwind.example', department: 'Sales' })).body.code, 'not_found');
+  const full = companyHarness({ org: { ...ORG, seats: 0, departments: ['Sales'] }, unseated: report([['x1', 'x1@northwind.example']]) });
+  assert.equal((await full.call('unseatedGive', { email: 'x1@northwind.example', department: 'Sales' })).body.code, 'no_seats_left');
+});
+
+check('remove now deletes the sign-in and its data, but only for a sign-in still without a seat or admin record', async () => {
+  const h = companyHarness({ unseated: report([['x1', 'x1@northwind.example'], ['x2', 'x2@northwind.example']]) });
+  assert.deepEqual((await h.call('unseatedRemove', { email: 'x1@northwind.example' })).body, { removed: true });
+  assert.deepEqual(h.db.log.filter((l) => l[0].startsWith('delete')), [['deleteSignIn', ORG.tenantId, 'x1'], ...DATA_ORDER.map((p) => ['deleteData', p, 'x1'])]);
+  assert.deepEqual(h.db.unseated.people.map((p) => p.email), ['x2@northwind.example']);
+  await h.call('adminAdd', { email: 'x2@northwind.example' });
+  assert.equal((await h.call('unseatedRemove', { email: 'x2@northwind.example' })).body.code, 'not_unseated');
+  assert.equal((await h.call('unseatedRemove', { email: 'nobody@northwind.example' })).body.code, 'not_found');
+  assert.equal(h.db.log.filter((l) => l[0] === 'deleteSignIn').length, 1);
+});
+
+check('departments: list with seat counts, add, rename, merge and remove through the planners', async () => {
+  const people = [...Array.from({ length: 4 }, (_, i) => mem(`h${i}@northwind.example`, { department: 'HR' })), ...Array.from({ length: 3 }, (_, i) => mem(`f${i}@northwind.example`, { department: 'Finance' })), mem('s@northwind.example', { department: 'Sales', status: 'ended' })];
+  const h = companyHarness({ members: people });
+  assert.deepEqual((await h.call('departments')).body.departments, [{ name: 'Sales', people: 0 }, { name: 'HR', people: 4 }, { name: 'Finance', people: 3 }]);
+  assert.deepEqual((await h.call('departmentsAdd', { names: ['IT', 'Ops'] })).body.departments, ['Sales', 'HR', 'Finance', 'IT', 'Ops']);
+  assert.equal((await h.call('departmentsAdd', { name: 'it' })).body.code, 'duplicate');
+  assert.equal((await h.call('departmentsAdd', { name: 'x'.repeat(61) })).body.code, 'name_too_long');
+  assert.deepEqual((await h.call('departmentRename', { from: 'HR', to: 'People' })).body.departments, ['Sales', 'People', 'Finance', 'IT', 'Ops']);
+  assert.equal(h.db.members[O.seatId('h0@northwind.example')].department, 'People');
+  const m = await h.call('departmentMerge', { from: 'Finance', into: 'People' });
+  assert.deepEqual(m.body, { departments: ['Sales', 'People', 'IT', 'Ops'], into: 'People', people: 7 });
+  assert.equal(h.db.members[O.seatId('f0@northwind.example')].department, 'People');
+  assert.equal((await h.call('departmentRemove', { name: 'People' })).body.code, 'not_empty');
+  assert.deepEqual((await h.call('departmentRemove', { name: 'Sales' })).body.departments, ['People', 'IT', 'Ops']);
+  const big = companyHarness({ members: [...Array.from({ length: 10 }, (_, i) => mem(`b${i}@northwind.example`, { department: 'Sales' })), mem('h@northwind.example', { department: 'HR' })] });
+  assert.equal((await big.call('departmentMerge', { from: 'HR', into: 'Sales' })).body.code, 'hidden_into_shown');
+});
+
+check('admins: list with "you", add on the company domain only, and an admin cannot remove themselves', async () => {
+  const h = companyHarness();
+  assert.equal((await h.call('adminAdd', { email: 'it@northwind.example' })).body.added, 'it@northwind.example');
+  assert.equal((await h.call('adminAdd', { email: 'IT@northwind.example' })).body.code, 'already_admin');
+  assert.equal((await h.call('adminAdd', { email: 'it@gmail.com' })).body.code, 'wrong_domain');
+  assert.deepEqual((await h.call('admins')).body.admins, [{ email: 'boss@northwind.example', you: true }, { email: 'it@northwind.example', you: false }]);
+  assert.equal((await h.call('adminRemove', { email: 'Boss@northwind.example' })).body.code, 'cannot_remove_self');
+  assert.equal((await h.call('adminRemove', { email: 'nobody@northwind.example' })).body.code, 'not_admin');
+  assert.deepEqual((await h.call('adminRemove', { email: 'it@northwind.example' })).body, { removed: 'it@northwind.example' });
+  assert.equal(Object.keys(h.db.admins).length, 1);
+});
+
+check('the admin check still answers the same after moving into the shared gate', async () => {
+  const s = read('netlify/lib/b2b-admin.mjs');
+  assert.ok(/export function adminGate/.test(s) && /createB2bAdmin/.test(s));
 });
 
 let failed = 0;
