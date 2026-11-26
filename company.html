@@ -26,7 +26,7 @@
   --bg:#0B0B14; --card:#15151F; --soft:#1E1E2B; --line:#2E2E40;
   --lime:#C6F432; --lime-h:#DDFB7A; --on-lime:#0B0B14;
   --violet:#7357F6; --violet-t:#B3A1FF; --violet-l:#221C45; --lilac:#DCD3FF;
-  --amber:#FBBF24; --rose:#FF8A8A;
+  --sky:#C7E3FF; --coral:#FFC9B8; --amber:#FBBF24; --rose:#FF8A8A;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
   --display:"Bricolage Grotesque",var(--sans);
   color-scheme:dark;
@@ -36,35 +36,148 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans)
 a{color:var(--violet-t);font-weight:700;text-decoration:none}
 a:hover{text-decoration:underline}
 :focus-visible{outline:2px solid var(--violet-t);outline-offset:2px}
+h1{margin:0 0 8px;font-family:var(--display);font-weight:800;font-size:44px;line-height:1.05;letter-spacing:-.02em}
+h2{margin:0 0 6px;font-family:var(--display);font-weight:800;font-size:22px;line-height:1.2}
+p{margin:0 0 16px;color:var(--ink2)}
+.eyebrow{margin:0 0 6px;font-size:13px;font-weight:800;letter-spacing:.06em;color:var(--violet-t);text-transform:uppercase}
+.lead{margin:0 0 28px;font-size:17px;line-height:1.45;max-width:760px}
+.small{font-size:14px;line-height:1.45}
+.muted{color:var(--ink3)}
+.back{display:inline-block;margin-bottom:14px;color:var(--lime);font-size:15px;background:none;border:0;padding:0;font-weight:700;cursor:pointer;font-family:inherit}
+
+/* Sign-in panel */
 .wrap{min-height:100vh;display:grid;place-items:center;padding:40px 16px}
 .panel{width:100%;max-width:460px;background:var(--card);border:1.5px solid var(--line);border-radius:20px;padding:32px 28px}
+.panel h1{font-size:32px;line-height:1.1}
 .brand{display:flex;align-items:center;gap:10px;margin-bottom:4px}
 .brand img{width:40px;height:40px;border-radius:12px;display:block}
 .brand b{font-family:var(--display);font-weight:800;font-size:22px}
 .sub{margin:0 0 28px 50px;font-size:13px;color:var(--ink3)}
-.eyebrow{margin:0 0 6px;font-size:13px;font-weight:800;letter-spacing:.06em;color:var(--violet-t);text-transform:uppercase}
-h1{margin:0 0 8px;font-family:var(--display);font-weight:800;font-size:32px;line-height:1.1;letter-spacing:-.02em}
-p{margin:0 0 16px;color:var(--ink2)}
-.back{display:inline-block;margin-bottom:14px;color:var(--lime);font-size:15px;background:none;border:0;padding:0;font-weight:700;cursor:pointer;font-family:inherit}
-.btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:48px;padding:0 24px;border:0;border-radius:999px;background:var(--lime);color:var(--on-lime);font:inherit;font-weight:800;font-size:16px;cursor:pointer}
-.btn:hover{background:var(--lime-h)}
-.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--violet-t)}
+.spin{color:var(--ink3);text-align:center;padding:40px 0}
+
+/* Controls */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:48px;padding:0 24px;border:0;border-radius:999px;background:var(--lime);color:var(--on-lime);font:inherit;font-weight:800;font-size:16px;cursor:pointer;text-decoration:none}
+.btn:hover{background:var(--lime-h);text-decoration:none}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--violet-t);font-weight:700}
 .btn.ghost:hover{background:var(--violet-l)}
-.btn[disabled]{opacity:.6;cursor:default}
-.btn + .btn{margin-top:12px}
+.btn.danger{background:var(--rose);color:#0B0B14}
+.btn[disabled]{opacity:.55;cursor:default}
+.btn.block{display:flex;width:100%}
+.btn.block + .btn.block{margin-top:12px}
+.link{background:none;border:0;padding:0;font:inherit;font-weight:700;font-size:14px;color:var(--violet-t);cursor:pointer}
+.link:hover{text-decoration:underline}
+.link[disabled]{color:var(--ink3);cursor:default;text-decoration:none}
 label{display:block;font-size:14px;font-weight:700;margin-bottom:6px}
-input{width:100%;height:48px;background:var(--bg);border:1.5px solid var(--line);border-radius:14px;padding:0 14px;font:inherit;font-size:16px;color:var(--ink)}
-input:focus{border-color:var(--violet-t);outline:none}
-.warn{margin:8px 0 18px;font-size:13px;color:var(--amber)}
+input[type=email],input[type=text],select{width:100%;height:48px;background:var(--bg);border:1.5px solid var(--line);border-radius:14px;padding:0 14px;font:inherit;font-size:16px;color:var(--ink)}
+input:focus,select:focus{border-color:var(--violet-t);outline:none}
+.warn{margin:8px 0 0;font-size:13px;color:var(--amber)}
+.row-form{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}
+.row-form .grow{flex:1 1 220px;min-width:0}
 .msg{margin:16px 0 0;padding:12px 14px;border-radius:14px;font-size:14px;background:var(--violet-l);color:var(--lilac)}
 .msg.err{background:#2E1518;color:var(--rose)}
 .msg:empty{display:none}
 .note{margin:24px 0 0;padding-top:16px;border-top:1.5px solid var(--line);font-size:13px;color:var(--ink3)}
-.spin{color:var(--ink3);text-align:center}
+
+/* Dashboard shell */
+.shell{display:flex;min-height:100vh}
+.side{width:256px;flex:none;background:var(--card);border-right:1.5px solid var(--line);padding:24px 16px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+.side .brand{padding:0 8px}
+.side .sub{margin:0 0 24px;padding:0 8px 0 58px}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav button{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 12px;border:0;border-radius:12px;background:transparent;font:inherit;font-size:15px;font-weight:500;color:var(--ink2);cursor:pointer;text-align:left}
+.nav button::before{content:"";width:8px;height:8px;border-radius:50%;flex:none}
+.nav button:hover{background:var(--soft)}
+.nav button[aria-current=page]{font-weight:700;color:var(--ink);background:var(--violet-l)}
+.nav button[aria-current=page]::before{background:var(--lime)}
+.nav button[disabled]{color:var(--ink3);cursor:default;background:transparent}
+.spacer{flex:1;min-height:24px}
+.card-co{background:var(--soft);border-radius:16px;padding:14px;margin-bottom:12px}
+.card-co b{display:block;font-size:14px}
+.card-co p{margin:6px 0 0;font-size:13px}
+.privacy{background:var(--violet-l);border-radius:16px;padding:14px;margin-bottom:12px;font-size:13px;line-height:1.45;color:var(--lilac)}
+.logout{display:block;min-height:40px;padding:0 12px;color:var(--ink2);font:inherit;font-size:14px;background:none;border:0;text-align:left;cursor:pointer}
+.main{flex:1;min-width:0;padding:40px 56px 64px}
+
+.grid2{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:24px;align-items:start}
+.stack{display:flex;flex-direction:column;gap:24px;min-width:0}
+.box{background:var(--card);border:1.5px solid var(--line);border-radius:20px;padding:24px;min-width:0}
+.box.soft{background:var(--violet-l);border-color:var(--violet-l);color:var(--lilac)}
+.box.soft p{color:var(--lilac)}
+.box.soft h2{color:var(--ink)}
+.box.hi{border-color:var(--violet)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px}
+.tile{border-radius:20px;padding:20px;color:#0B0B14}
+.tile b{display:block;font-family:var(--display);font-weight:800;font-size:36px;line-height:1.15}
+.tile .t{display:block;font-size:15px;font-weight:700}
+.tile .s{font-size:13px}
+.t-lime{background:var(--lime)} .t-sky{background:var(--sky)} .t-coral{background:var(--coral)} .t-lilac{background:var(--lilac)}
+.lines > div{display:grid;gap:14px;align-items:center;min-height:52px;border-top:1.5px solid var(--line);font-size:15px;padding:6px 0}
+.lines .head{min-height:36px;font-size:12px;font-weight:800;letter-spacing:.06em;color:var(--ink3);border-top:0}
+.cols-area{grid-template-columns:minmax(0,220px) minmax(0,1fr) 110px}
+.cols-dept{grid-template-columns:minmax(0,220px) 110px minmax(0,1fr) 120px}
+.cols-seat{grid-template-columns:minmax(0,1fr) minmax(0,200px) 90px}
+.cols-uns{grid-template-columns:minmax(0,1fr) 150px 150px}
+.cols-kv{grid-template-columns:minmax(0,1fr) auto}
+.cols-set{grid-template-columns:minmax(0,1fr) 100px auto}
+.cols-bad{grid-template-columns:56px minmax(0,1fr) minmax(0,1.2fr)}
+.cols-good{grid-template-columns:minmax(0,1fr) minmax(0,200px)}
+.wrapword{overflow-wrap:anywhere}
+.bar{height:12px;border-radius:6px;background:var(--soft)}
+.bar i{display:block;height:12px;border-radius:6px;background:var(--violet)}
+.chip{justify-self:end;border-radius:999px;padding:4px 12px;font-size:13px;font-weight:700;background:var(--violet);color:#fff;white-space:nowrap}
+.chip.none{background:var(--soft);color:var(--ink2)}
+.hid{font-size:14px;color:var(--ink3)}
+.right{justify-self:end;display:flex;gap:16px;flex-wrap:wrap;justify-content:flex-end}
+.cols{display:flex;gap:10px;height:200px;align-items:flex-end}
+.cols > div{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px}
+.cols .v{font-size:12px;color:var(--ink2)}
+.cols .c{width:100%;border-radius:8px 8px 0 0;background:var(--violet);min-height:2px}
+.cols .c.now{background:var(--lime)}
+.cols .c.hidden{background:repeating-linear-gradient(45deg,var(--soft) 0 6px,var(--line) 6px 12px);height:40px}
+.cols .m{font-size:13px;color:var(--ink3)}
+.inline{background:var(--soft);border-radius:16px;padding:16px;margin:8px 0 12px}
+.inline p{margin:0 0 12px}
+.inline .acts{display:flex;gap:12px;flex-wrap:wrap}
+.drop{border:1.5px dashed var(--violet);border-radius:16px;padding:32px 24px;display:flex;flex-direction:column;align-items:center;gap:12px;background:#11111A;text-align:center}
+.vh{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);border:0}
+.sample{font-family:ui-monospace,Menlo,Consolas,monospace}
+.steps > div{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-top:1.5px solid var(--line)}
+.num{flex:none;width:32px;height:32px;border-radius:10px;background:var(--lilac);color:#0B0B14;display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:15px}
+.num.off{background:var(--soft);color:var(--ink2)}
+.flash{background:var(--card);border:1.5px solid var(--lime);border-radius:20px;padding:24px;margin-bottom:24px}
+.invite{width:100%;min-height:300px;background:var(--bg);border:1.5px solid var(--line);border-radius:14px;padding:14px;font:inherit;font-size:14px;line-height:1.5;color:var(--ink);resize:vertical}
+details summary{cursor:pointer;font-weight:700;color:var(--violet-t)}
+dl{margin:0;display:grid;grid-template-columns:130px minmax(0,1fr);row-gap:10px;column-gap:12px;font-size:15px}
+dt{color:var(--ink3)} dd{margin:0;overflow-wrap:anywhere}
+
+@media (max-width: 960px){
+  .shell{flex-direction:column}
+  .side{width:auto;height:auto;position:static;border-right:0;border-bottom:1.5px solid var(--line);padding:16px}
+  .side .sub{margin-bottom:12px}
+  .nav{flex-direction:row;flex-wrap:wrap}
+  .spacer,.privacy{display:none}
+  .card-co{margin:12px 0 0}
+  .main{padding:24px 16px 48px}
+  h1{font-size:34px}
+  .grid2{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width: 600px){
+  .cols-area{grid-template-columns:minmax(0,1fr) 100px}
+  .cols-area .bar{grid-column:1 / -1;order:3}
+  .cols-dept{grid-template-columns:minmax(0,1fr) auto}
+  .cols-dept .bar,.cols-dept .hid{grid-column:1 / -1}
+  .cols-seat,.cols-uns,.cols-bad,.cols-good,.cols-set{grid-template-columns:minmax(0,1fr)}
+  .lines .head{display:none}
+  .right{justify-self:start;justify-content:flex-start}
+  .chip{justify-self:start}
+  .cols{gap:6px}
+  dl{grid-template-columns:minmax(0,1fr)}
+  dd{margin-bottom:8px}
+}
 </style>
 </head>
 <body>
-<div class="wrap"><main class="panel" id="app" aria-live="polite"><p class="spin">Loading…</p></main></div>
+<div id="app" aria-live="polite"><div class="wrap"><main class="panel"><p class="spin">Loading…</p></main></div></div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
@@ -91,29 +204,54 @@ const store = {
 const TENANT_RE = /^[A-Za-z0-9-]{1,128}$/;
 const fromUrl = new URLSearchParams(location.search).get('b2b');
 const TENANT = TENANT_RE.test(fromUrl || '') ? fromUrl : (TENANT_RE.test(store.get(KEY_TENANT) || '') ? store.get(KEY_TENANT) : null);
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const S = { company: null, view: 'loading', msg: '', err: false, busy: false, admin: null };
+const AREAS = { D1: 'Foundations', D2: 'Prompting & interaction', D3: 'Tools & productivity', D4: 'Data literacy', D5: 'Automation & building', D6: 'Responsible use', D7: 'Leading & enabling others' };
+const LEVELS = ['No level yet', 'Aware', 'Explorer', 'Integrator', 'Creator'];
+const SIGNIN = { microsoft: 'Microsoft, with your company account', google: 'Google, with your company account', emailLink: 'A sign-in link to your work email', saml: 'Your company login', oidc: 'Your company login' };
+const SCREENS = { overview: 'Overview', departments: 'Departments', report: 'Article 4 report', seats: 'Seats', settings: 'Company settings' };
+
+const S = {
+  company: null, admin: null, view: 'loading', screen: null, depth: 0,
+  msg: '', err: false, busy: false,
+  overview: null, seats: null, unseated: null, depts: null, admins: null,
+  setupList: [], upload: null, flash: null, open: null, rev: null, notice: null,
+};
+// Changes carry the version this page last saw, so a change made on an older view is refused (409).
+const MUTATIONS = new Set(['seatAdd', 'uploadCommit', 'seatRemove', 'unseatedGive', 'unseatedRemove',
+  'departmentsAdd', 'departmentRename', 'departmentMerge', 'departmentRemove', 'adminAdd', 'adminRemove']);
+const CHANGED = 'Another admin changed something a moment ago. This page now shows the latest version. Check it and try again.';
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const fmtDate = (t) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+const fmtShort = (t) => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+const fmtNum = (n) => Number(n).toLocaleString('en-GB');
+const monthName = (k) => new Date(Date.UTC(+k.slice(0, 4), +k.slice(4) - 1, 1)).toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' });
+const isHidden = (v) => v && typeof v === 'object' && v.hidden;
+const SUPPORT = '<a href="mailto:support@theninthtee.eu">support@theninthtee.eu</a>';
+const WARN_EMAIL = '<p class="warn">Enter a work email only. Do not enter any other personal details.</p>';
+const WARN_DEPT = '<p class="warn">Enter a department name only. Do not enter names of people.</p>';
+const learnerLink = () => location.origin + '/?b2b=' + encodeURIComponent(TENANT);
+
+/* ---------- Sign-in (PR 2) ---------- */
 
 const HEAD = () => `<div class="brand"><img src="/Icons/app-icon-192.png" alt=""><b>Brigvanti</b></div><p class="sub">Company dashboard</p>`;
-const BACK = '<button class="back" type="button" data-go="signin">‹ Back</button>';
+const BACK_SIGNIN = '<button class="back" type="button" data-go-view="signin">‹ Back</button>';
 const MSG = () => `<p class="msg${S.err ? ' err' : ''}" id="msg" role="${S.err ? 'alert' : 'status'}">${esc(S.msg)}</p>`;
-const SUPPORT = '<a href="mailto:support@theninthtee.eu">support@theninthtee.eu</a>';
 
 function methodBlock(){
   const m = S.company.signIn;
-  if (m === 'microsoft') return `<button class="btn" type="button" data-act="microsoft">Sign in with Microsoft</button>`;
-  if (m === 'google') return `<button class="btn" type="button" data-act="google">Sign in with Google</button>`;
+  if (m === 'microsoft') return `<button class="btn block" type="button" data-act="microsoft">Sign in with Microsoft</button>`;
+  if (m === 'google') return `<button class="btn block" type="button" data-act="google">Sign in with Google</button>`;
   if (m === 'emailLink') return `<form id="linkForm" novalidate>
       <label for="email">Work email</label>
       <input id="email" type="email" autocomplete="email" inputmode="email" maxlength="254" required>
-      <p class="warn">Enter your work email only. Do not enter any other personal details.</p>
-      <button class="btn" type="submit"${S.busy ? ' disabled' : ''}>Send sign-in link</button></form>`;
+      ${WARN_EMAIL}
+      <button class="btn block" type="submit" style="margin-top:18px">Send sign-in link</button></form>`;
   return `<p>Your company signs in through its own login system. That sign-in is not ready here yet. Email ${SUPPORT} for help.</p>`;
 }
 
-const VIEWS = {
+const PANEL_VIEWS = {
   loading: () => '<p class="spin">Loading…</p>',
   noLink: () => `${HEAD()}<h1>Open your company link</h1>
     <p>Open the dashboard through the link from your Brigvanti welcome email or your intranet. That link tells us which company you belong to.</p>
@@ -124,37 +262,33 @@ const VIEWS = {
     <p>Sign in to manage seats and departments and to see your company totals.</p>
     ${methodBlock()}${MSG()}
     <p class="note">You see totals and averages only. You never see anyone's answers, work or level.</p>`,
-  sent: () => `${HEAD()}${BACK}<h1>Check your email</h1>
+  sent: () => `${HEAD()}${BACK_SIGNIN}<h1>Check your email</h1>
     <p>If this address is an admin for ${esc(S.company.name)}, a sign-in link is on its way. Open it on this device. The link works once.</p>
-    <button class="btn ghost" type="button" data-go="signin">Use another email</button>`,
-  confirm: () => `${HEAD()}${BACK}<h1>Confirm your work email</h1>
+    <button class="btn ghost block" type="button" data-go-view="signin">Use another email</button>`,
+  confirm: () => `${HEAD()}${BACK_SIGNIN}<h1>Confirm your work email</h1>
     <p>You opened the link on another device or browser. Enter the work email the link was sent to.</p>
     <form id="confirmForm" novalidate>
       <label for="email">Work email</label>
       <input id="email" type="email" autocomplete="email" inputmode="email" maxlength="254" required>
-      <p class="warn">Enter your work email only. Do not enter any other personal details.</p>
-      <button class="btn" type="submit"${S.busy ? ' disabled' : ''}>Sign in</button></form>${MSG()}`,
+      ${WARN_EMAIL}
+      <button class="btn block" type="submit" style="margin-top:18px">Sign in</button></form>${MSG()}`,
   expired: () => `${HEAD()}<h1>This link no longer works</h1>
     <p>A sign-in link works once and expires after a while. Ask for a new one.</p>
-    <button class="btn" type="button" data-go="signin">Send a new link</button>`,
+    <button class="btn block" type="button" data-go-view="signin">Send a new link</button>`,
   notAdmin: () => `${HEAD()}<h1>No admin access</h1>
     <p>This account is not an admin for ${esc(S.company ? S.company.name : 'this company')}. Ask an admin of your company to add you in Company settings.</p>
-    <button class="btn ghost" type="button" data-act="logout">Log out</button>`,
-  // Placeholder until PR 3 adds the dashboard screens.
-  ready: () => `${HEAD()}<p class="eyebrow">Signed in</p><h1>${esc(S.admin.name)}</h1>
-    <p>You are signed in as an admin. The dashboard screens follow in the next update.</p>
-    <button class="btn ghost" type="button" data-act="logout">Log out</button>`,
+    <button class="btn ghost block" type="button" data-act="logout">Log out</button>`,
 };
 
-function show(view, msg = '', err = false){
+function showPanel(view, msg = '', err = false){
   const changed = view !== S.view;
-  S.view = view; S.msg = msg; S.err = err;
-  $('app').innerHTML = VIEWS[view]();
+  S.view = view; S.msg = msg; S.err = err; S.screen = null;
+  $('app').innerHTML = `<div class="wrap"><main class="panel">${PANEL_VIEWS[view]()}</main></div>`;
   if (changed) window.scrollTo(0, 0);
   const email = $('email');
   if (email) email.focus();
 }
-// Updates the message in place, so a typed email keeps its focus and value.
+// Updates the message in place, so typed text keeps its focus and value.
 function note(msg, err = false){
   S.msg = msg; S.err = err;
   const m = $('msg');
@@ -162,7 +296,7 @@ function note(msg, err = false){
 }
 function busy(on){
   S.busy = on;
-  document.querySelectorAll('#app button').forEach((b) => { b.disabled = on; });
+  document.querySelectorAll('#app button[type=submit], #app [data-act]').forEach((b) => { b.disabled = on; });
 }
 
 function authMessage(e){
@@ -176,6 +310,7 @@ function authMessage(e){
   return 'Sign-in failed. Please try again.';
 }
 const linkGone = (e) => ['auth/invalid-action-code', 'auth/expired-action-code'].includes(e && e.code);
+const cleanUrl = () => history.replaceState(history.state, '', location.pathname + '?b2b=' + encodeURIComponent(TENANT));
 
 async function oauth(kind){
   const provider = kind === 'microsoft' ? new OAuthProvider('microsoft.com') : new GoogleAuthProvider();
@@ -188,7 +323,7 @@ async function oauth(kind){
 }
 
 async function sendLink(email){
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { note('Enter a valid work email.', true); return; }
+  if (!EMAIL_RE.test(email)) { note('Enter a valid work email.', true); return; }
   busy(true); note('');
   try {
     const r = await fetch('/.netlify/functions/b2b-signin-link', {
@@ -199,7 +334,7 @@ async function sendLink(email){
     if (!r.ok) throw new Error('send ' + r.status);
     store.set(KEY_EMAIL, email);
     S.busy = false;
-    show('sent');
+    showPanel('sent');
   } catch (e) {
     busy(false); note('The link could not be sent. Please try again.', true);
   }
@@ -210,55 +345,564 @@ async function finishLink(email){
   try {
     await signInWithEmailLink(auth, email, location.href);
     store.del(KEY_EMAIL);
-    history.replaceState(null, '', location.pathname + '?b2b=' + encodeURIComponent(TENANT));
+    cleanUrl();
   } catch (e) {
     busy(false);
-    if (linkGone(e)) { history.replaceState(null, '', location.pathname + '?b2b=' + encodeURIComponent(TENANT)); show('expired'); return; }
-    if (S.view === 'confirm') note(authMessage(e), true); else show('signin', authMessage(e), true);
+    if (linkGone(e)) { cleanUrl(); showPanel('expired'); return; }
+    if (S.view === 'confirm') note(authMessage(e), true); else showPanel('signin', authMessage(e), true);
   }
 }
 
 async function checkAdmin(user){
-  show('loading');
+  showPanel('loading');
   try {
     const r = await fetch('/.netlify/functions/b2b-admin', { method: 'POST', headers: { authorization: 'Bearer ' + (await user.getIdToken()) } });
-    if (r.status === 403 || r.status === 401) { show('notAdmin'); return; }
+    if (r.status === 403 || r.status === 401) { showPanel('notAdmin'); return; }
     if (!r.ok) throw new Error('admin ' + r.status);
     S.admin = await r.json();
-    show('ready');
+    await startDashboard();
   } catch (e) {
-    show('signin', 'We could not check your access. Please try again.', true);
+    showPanel('signin', 'We could not check your access. Please try again.', true);
   }
 }
 
-document.addEventListener('click', async (ev) => {
-  const go = ev.target.closest('[data-go]'), act = ev.target.closest('[data-act]');
-  if (go) { S.busy = false; show(go.dataset.go); return; }
-  if (!act || S.busy) return;
-  const a = act.dataset.act;
-  if (a === 'microsoft' || a === 'google') oauth(a);
-  if (a === 'logout') { await signOut(auth); S.admin = null; show(S.company ? 'signin' : 'noLink'); }
+/* ---------- Company API (PR 1) ---------- */
+
+const REASONS = {
+  invalid_email: () => 'Not a valid email address',
+  no_departments_set: () => 'Set up your departments first',
+  unknown_department: (r) => r && r.department ? `Department "${r.department}" is not in your list` : 'Department is not in your list',
+  wrong_domain: () => `Not ${S.overview ? S.overview.company.domains.map((d) => 'a ' + d).join(' or ') : 'a company'} address`,
+  already_has_seat: () => 'Already has a seat',
+  no_seats_left: () => 'No seats left',
+  contract_not_active: () => 'Your contract is not running',
+  seat_ending: () => 'This account is being deleted. Try again tomorrow.',
+};
+const reason = (code, row) => (REASONS[code] ? REASONS[code](row) : 'Cannot be added');
+const ERRORS = {
+  ...Object.fromEntries(Object.keys(REASONS).map((k) => [k, reason(k) + '.'])),
+  file_too_large: 'The file is too large. Split it into files of up to 1,000 rows.',
+  too_many_rows: 'The file has more than 1,000 rows. Split it into smaller files.',
+  header_not_found: 'We could not find the email and department columns. Use the headers "email" and "department", or leave out the header row.',
+  empty: 'The file has no rows.',
+  duplicate: 'That department already exists.',
+  name_too_long: 'Use a department name of at most 60 characters.',
+  name_missing: 'Enter a department name.',
+  too_many: 'You can have at most 50 departments.',
+  not_empty: 'Move everyone out of this department first. Merge moves them for you.',
+  hidden_into_shown: 'A department under 10 people merges only with another department under 10.',
+  same_department: 'Choose two different departments.',
+  unknown_department: 'That department no longer exists. Reload the page.',
+  already_admin: 'This person is already an admin.',
+  cannot_remove_self: 'You cannot remove yourself. Ask another admin.',
+  not_admin: 'This person is not an admin.',
+  no_seat: 'This seat was already removed.',
+  not_found: 'This sign-in is no longer on the list.',
+  not_unseated: 'This person has a seat or admin access now.',
+  too_large: 'The file is too large.',
+};
+const errorText = (code) => ERRORS[code] || 'Something went wrong. Try again.';
+
+async function api(action, body = {}){
+  const user = auth.currentUser;
+  if (!user) { showPanel('signin'); throw new Error('signed out'); }
+  const r = await fetch('/.netlify/functions/b2b-company', {
+    method: 'POST',
+    headers: { authorization: 'Bearer ' + (await user.getIdToken()), 'content-type': 'application/json' },
+    body: JSON.stringify({ action, ...body, ...(MUTATIONS.has(action) && S.rev != null ? { rev: S.rev } : {}) }),
+  });
+  if (r.status === 401 || r.status === 403) { showPanel('notAdmin'); throw new Error('no access'); }
+  let data = {};
+  try { data = await r.json(); } catch (e) {}
+  if (Number.isInteger(data.rev)) S.rev = data.rev;
+  return { ok: r.ok, status: r.status, data };
+}
+
+/* ---------- Dashboard ---------- */
+
+async function startDashboard(){
+  S.view = 'dash';
+  const r = await api('overview');
+  if (!r.ok) throw new Error('overview');
+  S.overview = r.data;
+  const first = S.overview.company.departments.length ? 'overview' : 'setup';
+  history.replaceState({ screen: first, depth: 0 }, '', location.pathname + '?b2b=' + encodeURIComponent(TENANT));
+  S.depth = 0;
+  await enter(first);
+}
+
+const NEEDS = {
+  overview: ['overview'], departments: ['overview'], report: ['overview'],
+  seats: ['overview', 'seats', 'unseated'], upload: ['overview', 'seats'], check: [],
+  settings: ['overview', 'depts', 'admins'], setup: ['overview'],
+};
+async function load(what){
+  const map = { overview: 'overview', seats: 'seats', unseated: 'unseated', depts: 'departments', admins: 'admins' };
+  const out = await Promise.all(what.map((k) => api(map[k])));
+  out.forEach((r, i) => { if (r.ok) S[what[i]] = r.data; });
+}
+
+async function enter(screen, opts = {}){
+  if (opts.push) { S.depth += 1; history.pushState({ screen, depth: S.depth }, '', location.href); }
+  const changed = screen !== S.screen;
+  if (changed) S.notice = null;
+  S.screen = screen; S.open = null;
+  if (changed) renderShell(true);
+  try { await load(NEEDS[screen] || []); }
+  catch (e) { return; }
+  if (S.screen !== screen) return;
+  renderShell(changed);
+}
+const go = (screen) => enter(screen, { push: true });
+
+function back(){
+  if (S.depth > 0) history.back();
+  else if (S.screen !== 'overview' && S.screen !== 'setup') go('overview');
+}
+window.addEventListener('popstate', (ev) => {
+  if (S.view !== 'dash' || !ev.state) return;
+  S.depth = ev.state.depth || 0;
+  enter(ev.state.screen);
 });
-document.addEventListener('submit', (ev) => {
-  ev.preventDefault();
+
+function sidebar(){
+  const c = S.overview ? S.overview.company : null;
+  const setup = S.screen === 'setup' || (c && !c.departments.length);
+  const nav = setup
+    ? `<button type="button" aria-current="page">Set up your company</button>` + Object.values(SCREENS).map((t) => `<button type="button" disabled>${t}</button>`).join('')
+    : Object.entries(SCREENS).map(([k, t]) => `<button type="button" data-nav="${k}"${navActive(k) ? ' aria-current="page"' : ''}>${t}</button>`).join('');
+  return `<aside class="side"><div class="brand"><img src="/Icons/app-icon-192.png" alt=""><b>Brigvanti</b></div><p class="sub">Company dashboard</p>
+    <nav class="nav" aria-label="Dashboard">${nav}</nav>
+    ${setup ? '<p class="small muted" style="margin:10px 0 0;padding:0 12px">The rest opens once your departments are saved.</p>' : ''}
+    <div class="spacer"></div>
+    ${c ? `<div class="card-co"><b>${esc(c.name)}</b><p>${fmtNum(c.seats)} seats, contract until ${fmtDate(c.contractEnd)}</p></div>` : ''}
+    <div class="privacy">You see totals and averages only. No figure shows for a department under 10 people, or any other group under 5.</div>
+    <button class="logout" type="button" data-act="logout">Log out</button></aside>`;
+}
+const navActive = (k) => S.screen === k || (k === 'seats' && (S.screen === 'upload' || S.screen === 'check'));
+
+function renderShell(screenChanged){
+  const y = window.scrollY;
+  $('app').innerHTML = `<div class="shell">${sidebar()}<main class="main" id="main">${screenHtml()}</main></div>`;
+  if (screenChanged) window.scrollTo(0, 0); else window.scrollTo(0, y);
+}
+// Re-renders the current screen without moving the page.
+const refresh = () => renderShell(false);
+
+function topOf(eyebrow, title, lead){
+  const showBack = S.depth > 0 || (S.screen !== 'overview' && S.screen !== 'setup');
+  return `${showBack ? '<button class="back" type="button" data-act="back">‹ Back</button>' : ''}
+    ${S.notice ? `<p class="msg err" role="alert" style="margin:0 0 20px">${esc(S.notice)}</p>` : ''}
+    <p class="eyebrow">${esc(eyebrow)}</p><h1>${esc(title)}</h1>${lead ? `<p class="lead">${lead}</p>` : ''}`;
+}
+function screenHtml(){
+  if (!S.overview) return '<p class="spin">Loading…</p>';
+  return ({ overview: vOverview, departments: vDepartments, report: vReport, seats: vSeats, upload: vUpload, check: vCheck, settings: vSettings, setup: vSetup }[S.screen] || vOverview)();
+}
+
+const shown = (v, fmt = fmtNum) => (isHidden(v) ? null : fmt(v));
+function tile(cls, value, title, sub){
+  return `<div class="tile ${cls}"><b>${value == null ? 'Hidden' : value}</b><span class="t">${title}</span><span class="s">${value == null ? 'Hidden, so nobody can be singled out' : sub}</span></div>`;
+}
+function levelLine(name, v, cols = 'cols-area'){
+  if (isHidden(v)) return `<div class="${cols}"><span>${esc(name)}</span><span class="hid" style="grid-column:span 2">Hidden. Fewer than 10 people with a level.</span></div>`;
+  return `<div class="${cols}"><span>${esc(name)}</span><div class="bar"><i style="width:${Math.max(4, v.level * 25)}%"></i></div><span class="chip${v.level ? '' : ' none'}">${LEVELS[v.level]}</span></div>`;
+}
+function columns(list, key, nowKey){
+  const vals = list.map((m) => (isHidden(m[key]) ? null : m[key]));
+  const max = Math.max(1, ...vals.filter((v) => v != null));
+  return `<div class="cols">${list.map((m, i) => {
+    const v = vals[i];
+    return `<div><span class="v">${v == null ? 'Hidden' : fmtNum(v)}</span><div class="c${v == null ? ' hidden' : m.month === nowKey ? ' now' : ''}" style="${v == null ? '' : `height:${Math.round((v / max) * 150) + 2}px`}"></div><span class="m">${monthName(m.month)}</span></div>`;
+  }).join('')}</div>`;
+}
+const ADVISORY = '<p class="small muted" style="margin:18px 0 0;max-width:820px">Levels are advisory and come from each person’s own scan and practice. They are not an assessment and must not be used for decisions about individuals.</p>';
+
+function vOverview(){
+  const { company: c, stats: s } = S.overview;
+  const inUse = shown(s.seats.inUse);
+  const nowKey = s.perMonth[s.perMonth.length - 1].month;
+  const startKey = new Date(c.contractStart).toISOString().slice(0, 7).replace('-', '');
+  const months = s.perMonth.filter((m) => m.month >= startKey);
+  return `${topOf('Company dashboard', c.name, 'Totals and averages only. Levels are advisory, never an assessment of anyone.')}
+  <div class="tiles">
+    <div class="tile t-lime"><b>${inUse == null ? 'Hidden' : `${inUse} of ${fmtNum(s.seats.bought)}`}</b><span class="t">seats in use</span><span class="s">Signed in at least once</span></div>
+    ${tile('t-sky', shown(s.activeThisMonth), 'active this month', 'Did a scan, a level-up or handed in work')}
+    ${tile('t-lilac', shown(s.inactive30), 'inactive for 30 days', 'Seats in use with no activity')}
+    ${tile('t-coral', shown(s.assignmentsThisMonth), 'assignments', 'This month, all staff')}
+    <div class="tile t-lilac"><b>${isHidden(s.companyLevel) ? 'Hidden' : LEVELS[s.companyLevel.level]}</b><span class="t">company level</span><span class="s">${isHidden(s.companyLevel) ? 'Fewer than 10 people with a level' : 'Average, advisory'}</span></div>
+  </div>
+  <div class="grid2">
+    <section class="box"><h2>Average level per area</h2><p class="small muted" style="margin:0 0 8px">Everyone with a seat who scanned the area</p>
+      <div class="lines">${Object.entries(AREAS).map(([id, name]) => levelLine(name, s.areas[id] || { hidden: true })).join('')}</div></section>
+    <div class="stack">
+      <section class="box"><h2>Active people per month</h2><p class="small muted" style="margin:0 0 14px">People who did a scan, a level-up or handed in work</p>${columns(months, 'active', nowKey)}</section>
+      <section class="box"><h2>Assignments per month</h2><p class="small muted" style="margin:0 0 14px">Totals for the whole company</p>${columns(months, 'assignments', nowKey)}</section>
+    </div>
+  </div>${ADVISORY}`;
+}
+
+function vDepartments(){
+  const s = S.overview.stats;
+  const body = isHidden(s.companyLevel)
+    ? '<p style="margin:0">Department figures show once your company level shows, from 10 people with a level. Then a department shows from 10 people with a seat.</p>'
+    : `<div class="lines">${s.departments.map((d) => d.hidden
+        ? `<div class="cols-dept"><span>${esc(d.name)}</span><span class="hid" style="grid-column:span 3">Hidden. A figure here could point to someone.</span></div>`
+        : `<div class="cols-dept"><span>${esc(d.name)}</span><span class="muted">${fmtNum(d.people)} people</span><div class="bar"><i style="width:${Math.max(4, d.level * 25)}%"></i></div><span class="chip${d.level ? '' : ' none'}">${LEVELS[d.level]}</span></div>`).join('') || '<p style="margin:0">No departments yet.</p>'}</div>`;
+  return `${topOf('Departments', 'Average level per department', 'A department shows only with at least 10 people. Smaller departments stay hidden.')}
+  <section class="box">${body}</section>${ADVISORY}`;
+}
+
+function vReport(){
+  const { company: c, stats: s } = S.overview;
+  const p = s.period || {};
+  const row = (k, v) => `<div class="cols-kv"><span>${k}</span><span class="small" style="color:var(--ink2);text-align:right">${v}</span></div>`;
+  return `${topOf('Article 4 report', 'Evidence of AI literacy measures', 'A summary of the training your staff had access to and used. It holds no personal data.')}
+  <div class="grid2">
+    <section class="box"><h2>This report contains</h2><div class="lines">
+      ${row('Period', `${fmtDate(c.contractStart)} to ${fmtDate(s.asOf)}`)}
+      ${row('Staff with a seat', fmtNum(s.seats.assigned))}
+      ${row('Staff who started training', shown(s.seats.inUse) ?? 'Hidden, fewer than 5')}
+      ${row('Assignments handed in', shown(p.assignments) ?? 'Hidden, fewer than 5 people')}
+      ${row('Areas covered', `${p.areasCovered || 0} of 7 areas`)}
+      ${row('Average level, advisory', isHidden(s.companyLevel) ? 'Hidden, fewer than 10 people' : LEVELS[s.companyLevel.level])}
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:20px"><button class="btn" type="button" disabled>Download report as PDF</button><span class="small muted">Coming soon</span></div></section>
+    <section class="box"><h2>Good to know</h2>
+      <p>Article 4 of the EU AI Act asks you to take measures for AI literacy. This report shows the measures and their use.</p>
+      <p>An area counts as covered when at least 5 people scanned it. Levels come from each person’s own scan.</p>
+      <p style="margin:0">It does not certify anyone. This report is not legal advice. Check with your own legal advisor.</p></section>
+  </div>`;
+}
+
+/* Seats */
+function deptOptions(selected){
+  return S.overview.company.departments.map((d) => `<option${d === selected ? ' selected' : ''}>${esc(d)}</option>`).join('');
+}
+function inviteText(){
+  const c = S.overview.company;
+  const how = c.signIn === 'emailLink'
+    ? 'Open the link and enter your work email. You get an email with a sign-in link.'
+    : c.signIn === 'microsoft' ? 'Open the link and sign in with your Microsoft work account.'
+    : c.signIn === 'google' ? 'Open the link and sign in with your Google work account.'
+    : 'Open the link and sign in with your work account.';
+  return `Subject: Your seat in Brigvanti, for learning to work with AI
+
+Hi,
+
+${c.name} gives you a seat in Brigvanti. Brigvanti helps you learn to use AI well in your own work.
+
+How it works:
+- Brigvanti has seven areas, from the basics of AI to using it responsibly. You pick one area to start with.
+- A short scan shows where you stand in that area. You do not need to scan all seven at once.
+- After that one scan you can start practising in that area. You add other areas when you are ready.
+- You practise on a real task from your own work, step by step.
+- An AI coach gives you feedback on what you made. It advises, it does not grade you.
+
+Your answers, your work and your level stay private. ${c.name} sees only totals and averages for the whole company, never anything about you.
+
+${how}
+${learnerLink()}
+
+Questions about Brigvanti? Email support@theninthtee.eu.`;
+}
+function inviteBox(open){
+  return `<details${open ? ' open' : ''} style="margin-top:16px"><summary>Invite text for your people</summary>
+    <p class="small" style="margin:12px 0">Send this from your own email, from HR or a manager people know. An email from inside your company gets read. Adjust it as you like.</p>
+    <label for="inviteText" class="vh">Invite text</label>
+    <textarea id="inviteText" class="invite" readonly>${esc(inviteText())}</textarea>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:12px"><button class="btn" type="button" data-act="copyInvite">Copy text</button><span class="small muted" id="copyNote" role="status"></span></div>
+  </details>`;
+}
+function flashHtml(){
+  const f = S.flash;
+  if (!f) return '';
+  const refused = f.refused && f.refused.length
+    ? `<p style="margin:12px 0 6px">${f.refused.length} could not be added:</p><div class="lines">${f.refused.map((r) => `<div class="cols-bad"><span class="muted">${r.line ? 'Row ' + r.line : ''}</span><span class="wrapword">${esc(r.email)}</span><span style="color:var(--coral)">${esc(reason(r.reason, r))}</span></div>`).join('')}</div>` : '';
+  return `<section class="flash" role="status"><h2>${f.added === 1 ? '1 person added' : `${fmtNum(f.added)} people added`}</h2>
+    <p style="margin:0">${f.added ? 'They can now sign in through your company link. Send them the invite below.' : 'Nobody was added.'}</p>${refused}
+    ${f.added ? inviteBox(true) : ''}</section>`;
+}
+function vSeats(){
+  const c = S.overview.company, list = S.seats ? S.seats.seats : [];
+  const left = S.seats ? S.seats.left : 0;
+  const rows = list.map((m) => {
+    const confirm = S.open && S.open.kind === 'remove' && S.open.id === m.id;
+    return `<div class="cols-seat"><span class="wrapword">${esc(m.email)}</span><span class="muted">${esc(m.department)}</span><span class="right"><button class="link" type="button" data-remove="${esc(m.id)}">Remove</button></span></div>${confirm ? `
+      <div class="inline" role="group" aria-label="Remove ${esc(m.email)}"><p><b>Remove the seat of ${esc(m.email)}?</b></p>
+        <p class="small">Their coach stops at once. If they signed in, they can still read and download their own work for 30 days. Then their account is deleted. Within those 30 days you can give the seat back and nothing is lost.</p>
+        <div class="acts"><button class="btn danger" type="button" data-act="confirmRemove">Remove seat</button><button class="btn ghost" type="button" data-act="cancel">Cancel</button></div></div>` : ''}`;
+  }).join('');
+  const addOpen = S.open && S.open.kind === 'add';
+  const uns = S.unseated && S.unseated.people.length ? `
+    <section class="box" style="margin-bottom:24px;border-color:var(--amber)"><h2>Sign-ins without a seat</h2>
+      <p class="small">These people signed in through your company link without a seat. Without one, they are removed 7 days after they signed in.</p>
+      <div class="lines"><div class="cols-uns head"><span>WORK EMAIL</span><span>SIGNED IN</span><span>REMOVED ON</span></div>
+      ${S.unseated.people.map((p) => {
+        const give = S.open && S.open.kind === 'give' && S.open.email === p.email;
+        const del = S.open && S.open.kind === 'removeNow' && S.open.email === p.email;
+        return `<div class="cols-uns"><span class="wrapword">${esc(p.email)}${p.matchesInvite ? ' <span class="small muted">(invited)</span>' : ''}</span><span class="muted">${fmtShort(p.firstSignInAt)}</span><span class="muted">${fmtShort(p.removeAfter)}</span></div>
+        <div style="display:flex;gap:16px;padding:0 0 12px"><button class="link" type="button" data-give="${esc(p.email)}">Give a seat</button><button class="link" type="button" data-removenow="${esc(p.email)}">Remove now</button></div>
+        ${give ? `<form class="inline" id="giveForm" data-email="${esc(p.email)}"><label for="giveDept">Main department</label><div class="row-form"><div class="grow"><select id="giveDept">${deptOptions()}</select></div><button class="btn" type="submit">Give a seat</button><button class="btn ghost" type="button" data-act="cancel">Cancel</button></div><p class="msg err" id="msg"></p></form>` : ''}
+        ${del ? `<div class="inline"><p><b>Remove ${esc(p.email)} now?</b></p><p class="small">Their sign-in and anything they did are deleted now. This cannot be undone.</p><div class="acts"><button class="btn danger" type="button" data-act="confirmRemoveNow">Remove now</button><button class="btn ghost" type="button" data-act="cancel">Cancel</button></div><p class="msg err" id="msg"></p></div>` : ''}`;
+      }).join('')}</div></section>` : '';
+  return `${topOf('Seats', 'Seats', `${fmtNum(c.seats)} seats in your contract, ${fmtNum(left)} left. Seats run until ${fmtDate(c.contractEnd)}.`)}
+  ${flashHtml()}${uns}
+  <div class="grid2">
+    <section class="box"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px"><h2 style="margin:0">People with a seat</h2>
+      <div style="display:flex;gap:12px;flex-wrap:wrap"><button class="btn" type="button" data-nav="upload" data-push="1">Upload a list</button><button class="btn ghost" type="button" data-act="openAdd">Add one</button></div></div>
+      ${addOpen ? `<form class="inline" id="addForm" novalidate><div class="row-form"><div class="grow"><label for="addEmail">Work email</label><input id="addEmail" type="email" autocomplete="off" maxlength="254" required>${WARN_EMAIL}</div>
+        <div class="grow"><label for="addDept">Main department</label><select id="addDept">${deptOptions()}</select></div></div>
+        <div class="acts" style="margin-top:14px"><button class="btn" type="submit">Add</button><button class="btn ghost" type="button" data-act="cancel">Cancel</button></div><p class="msg err" id="msg"></p></form>` : ''}
+      <div class="lines"><div class="cols-seat head"><span>WORK EMAIL</span><span>MAIN DEPARTMENT</span><span></span></div>${rows || '<p style="margin:12px 0 0">Nobody has a seat yet.</p>'}</div>
+      <p class="small muted" style="margin:14px 0 0">${fmtNum(list.length)} ${list.length === 1 ? 'person' : 'people'}</p></section>
+    <div class="stack"><section class="box"><h2>What this list shows</h2><p style="margin:0">Who has a seat and their main department. It never shows who signed in, what they did or their level. Each person counts in one department: the one they mainly work in.</p>
+      ${S.flash && S.flash.added ? '' : inviteBox(false)}</section></div>
+  </div>`;
+}
+
+/* Upload, DS8 */
+function vUpload(){
+  const c = S.overview.company;
+  const step = (n, t, d) => `<div><span class="num">${n}</span><div><b style="display:block;font-size:15px">${t}</b><span class="small" style="color:var(--ink2)">${d}</span></div></div>`;
+  return `${topOf('Seats', 'Upload a list', 'Add many people at once from a spreadsheet. You check the list before anyone is added.')}
+  <div class="grid2"><div class="stack">
+    <section class="box"><h2>Choose your file</h2><p class="small">Save your spreadsheet as a CSV file. Comma or semicolon both work.</p>
+      <div class="drop"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#B3A1FF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 18v-6M9 15l3-3 3 3"/></svg>
+        <label for="seatFile" class="btn" style="margin:0">Choose a file</label><input id="seatFile" class="vh" type="file" accept=".csv,text/csv,text/plain">
+        <span class="small muted">CSV file, up to 1,000 rows</span></div><p class="msg" id="msg"></p></section>
+    <section class="box"><h2>What the file needs</h2><p class="small">Two columns: work email and main department. A header row is optional.</p>
+      <div class="lines sample"><div class="cols-good head"><span>WORK EMAIL</span><span>MAIN DEPARTMENT</span></div>
+      <div class="cols-good"><span>name@${esc(c.domains[0] || 'yourcompany.com')}</span><span class="muted">${esc(c.departments[0] || 'Sales')}</span></div></div>
+      <p class="warn" style="margin-top:14px">Put only work email and main department in the file. Do not add names, roles or any other details.</p></section></div>
+    <div class="stack"><section class="box"><h2>How it works</h2><div class="steps">${step(1, 'Choose a file', 'Your list stays on this page until you confirm.')}${step(2, 'Check the list', 'You see who can be added, who cannot, and why.')}${step(3, 'Add people', 'Nobody is added until you confirm. Then you send them the invite text.')}</div></section>
+      <section class="box"><h2>Your departments</h2><p class="small">Each department in the file must match one of yours. Capitals do not matter.</p><p style="margin:0;color:var(--ink)">${c.departments.map(esc).join(', ')}</p>
+        <p class="small" style="margin:12px 0 0">A department is missing? Add it in <button class="link" type="button" data-nav="settings" data-push="1">Company settings</button> first.</p></section>
+      <section class="box soft"><p style="margin:0">${fmtNum(S.seats ? S.seats.left : 0)} seats left of ${fmtNum(c.seats)}.</p></section></div></div>`;
+}
+
+function vCheck(){
+  const u = S.upload;
+  if (!u) return vUpload();
+  const p = u.preview, after = p.left;
+  const bad = p.refused.map((r) => `<div class="cols-bad"><span class="muted">${r.line}</span><span class="wrapword">${esc(r.email)}</span><span style="color:var(--coral)">${esc(reason(r.reason, r))}</span></div>`).join('');
+  const goodAll = S.open && S.open.kind === 'allGood';
+  const good = (goodAll ? p.accepted : p.accepted.slice(0, 5)).map((a) => `<div class="cols-good"><span class="wrapword">${esc(a.email)}</span><span class="muted">${esc(a.department)}</span></div>`).join('');
+  const n = p.accepted.length;
+  return `${topOf('Seats', 'Check the list', `${esc(u.name)} has ${fmtNum(n + p.refused.length)} rows. Nobody is added until you confirm.`)}
+  <div class="tiles" style="max-width:900px">
+    <div class="tile t-lime"><b>${fmtNum(n)}</b><span class="t">can be added</span></div>
+    <div class="tile t-coral"><b>${fmtNum(p.refused.length)}</b><span class="t">cannot be added</span></div>
+    <div class="tile t-sky"><b>${fmtNum(after)}</b><span class="t">seats left after this</span></div></div>
+  <div class="grid2"><div class="stack">
+    ${p.refused.length ? `<section class="box"><h2>Cannot be added</h2><p class="small">Fix these rows in your file and upload it again, or add them one by one later.</p>
+      <div class="lines"><div class="cols-bad head"><span>ROW</span><span>WORK EMAIL</span><span>WHY NOT</span></div>${bad}</div></section>` : ''}
+    <section class="box"><h2>Can be added</h2>${n ? `<div class="lines"><div class="cols-good head"><span>WORK EMAIL</span><span>MAIN DEPARTMENT</span></div>${good}</div>
+      ${n > 5 ? `<p class="small muted" style="margin:14px 0 0">Showing ${goodAll ? n : 5} of ${fmtNum(n)}. ${goodAll ? '' : '<button class="link" type="button" data-act="allGood">Show all</button>'}</p>` : ''}` : '<p style="margin:0">Nobody in this file can be added.</p>'}</section></div>
+    <div class="stack"><section class="box"><h2>Ready to add</h2>
+      <p>${n ? `${fmtNum(n)} ${n === 1 ? 'person gets' : 'people get'} a seat. They sign in through your company link.${p.refused.length ? ` The ${p.refused.length} ${p.refused.length === 1 ? 'row' : 'rows'} that cannot be added stay out.` : ''}` : 'Fix the file and choose it again.'}</p>
+      ${n ? `<button class="btn block" type="button" data-act="commit">Add ${fmtNum(n)} ${n === 1 ? 'person' : 'people'}</button>` : ''}
+      <button class="btn ghost block" type="button" data-act="back">Choose another file</button><p class="msg err" id="msg"></p></section>
+      <section class="box soft"><h2>Good to know</h2><p>We check the list again when you confirm. If someone got a seat in the meantime, or the seats ran out, those rows stay out and we tell you.</p>
+        <p style="margin:0">This list shows who gets a seat. It never shows who signed in, what they did or their level.</p></section></div></div>`;
+}
+
+/* Company settings */
+function vSettings(){
+  const c = S.overview.company, s = S.overview.stats;
+  const depts = S.depts ? S.depts.departments : c.departments.map((name) => ({ name, people: 0 }));
+  const small = depts.filter((d) => d.people > 0 && d.people < 10).sort((a, b) => a.people - b.people);
+  const advice = small.length >= 2 ? `<div class="inline" style="background:var(--violet-l);display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+      <p style="margin:0;color:var(--lilac)">${esc(small[0].name)} and ${esc(small[1].name)} each have fewer than 10 people, so their averages stay hidden. Merge them to see one average.</p>
+      <button class="btn ghost" type="button" data-merge-pair="${esc(small[0].name)}" data-into="${esc(small[1].name)}">Merge ${esc(small[0].name)} and ${esc(small[1].name)}</button></div>` : '';
+  const row = (d) => {
+    const o = S.open && S.open.name === d.name ? S.open : null;
+    const others = depts.filter((x) => x.name !== d.name);
+    return `<div class="cols-set"><span>${esc(d.name)}</span><span class="muted">${fmtNum(d.people)} ${d.people === 1 ? 'person' : 'people'}</span>
+      <span class="right"><button class="link" type="button" data-rename="${esc(d.name)}">Rename</button>${others.length ? `<button class="link" type="button" data-merge="${esc(d.name)}">Merge</button>` : ''}<button class="link" type="button" data-deldept="${esc(d.name)}"${d.people ? ' disabled title="Move everyone out first"' : ''}>Remove</button></span></div>
+      ${o && o.kind === 'rename' ? `<form class="inline" id="renameForm" data-name="${esc(d.name)}" novalidate><label for="renameTo">New name for ${esc(d.name)}</label><div class="row-form"><div class="grow"><input id="renameTo" type="text" maxlength="60" value="${esc(d.name)}">${WARN_DEPT}</div><button class="btn" type="submit">Rename</button><button class="btn ghost" type="button" data-act="cancel">Cancel</button></div><p class="msg err" id="msg"></p></form>` : ''}
+      ${o && o.kind === 'merge' ? `<form class="inline" id="mergeForm" data-name="${esc(d.name)}"><label for="mergeInto">Move everyone in ${esc(d.name)} to</label><div class="row-form"><div class="grow"><select id="mergeInto">${others.map((x) => `<option>${esc(x.name)}</option>`).join('')}</select></div><button class="btn" type="submit">Merge</button><button class="btn ghost" type="button" data-act="cancel">Cancel</button></div><p class="small" style="margin:10px 0 0">${esc(d.name)} disappears after the merge.</p><p class="msg err" id="msg"></p></form>` : ''}
+      ${o && o.kind === 'deldept' ? `<div class="inline"><p><b>Remove ${esc(d.name)}?</b></p><div class="acts"><button class="btn danger" type="button" data-act="confirmDelDept">Remove</button><button class="btn ghost" type="button" data-act="cancel">Cancel</button></div><p class="msg err" id="msg"></p></div>` : ''}`;
+  };
+  const admins = S.admins ? S.admins.admins : [];
+  const inUse = shown(s.seats.inUse);
+  return `${topOf('Company settings', 'Company settings', 'You manage your departments and admins here. Brigvanti sets up your contract and your company login.')}
+  <div class="grid2">
+    <section class="box"><h2>Departments</h2><p class="small">Each person counts in one department: the one they mainly work in. An average per department shows from 10 people with a seat.</p>${advice}
+      <div class="lines">${depts.map(row).join('')}</div>
+      <form id="addDeptForm" novalidate style="border-top:1.5px solid var(--line);padding-top:16px"><label for="newDept">Add a department</label><div class="row-form"><div class="grow"><input id="newDept" type="text" maxlength="60" placeholder="For example: Planning">${WARN_DEPT}</div><button class="btn" type="submit">Add department</button></div><p class="msg err" id="msgDept"></p></form>
+      <p class="small muted" style="margin:10px 0 0">You can remove a department only when nobody is in it. Merge moves everyone to another department. A department under 10 people merges only with another department under 10, so no hidden group can be worked out from a figure you already saw.</p></section>
+    <div class="stack">
+      <section class="box"><h2>Your company</h2><dl style="margin-top:12px">
+        <dt>Name</dt><dd>${esc(c.name)}</dd>
+        <dt>Email domain</dt><dd>${c.domains.map(esc).join(', ')}</dd>
+        <dt>Seats</dt><dd>${fmtNum(c.seats)}${inUse == null ? '' : `, of which ${inUse} in use`}</dd>
+        <dt>Contract</dt><dd>Until ${fmtDate(c.contractEnd)}</dd>
+        <dt>Sign-in</dt><dd>${esc(SIGNIN[c.signIn] || 'Set up by Brigvanti')}</dd></dl>
+        <p class="small" style="margin:14px 0 0">To change these, email ${SUPPORT}.</p></section>
+      <section class="box"><h2>Admins</h2><div class="lines">${admins.map((a) => {
+          const conf = S.open && S.open.kind === 'delAdmin' && S.open.email === a.email;
+          return `<div class="cols-kv"><span class="wrapword">${esc(a.email)}</span>${a.you ? '<span class="small muted">You</span>' : `<button class="link" type="button" data-deladmin="${esc(a.email)}">Remove</button>`}</div>
+          ${conf ? `<div class="inline"><p><b>Remove ${esc(a.email)} as admin?</b></p><p class="small">They lose access to this dashboard. A seat they hold stays.</p><div class="acts"><button class="btn danger" type="button" data-act="confirmDelAdmin">Remove admin</button><button class="btn ghost" type="button" data-act="cancel">Cancel</button></div><p class="msg err" id="msg"></p></div>` : ''}`;
+        }).join('')}</div>
+        <form id="addAdminForm" novalidate style="border-top:1.5px solid var(--line);padding-top:16px"><label for="newAdmin">Add an admin</label><div class="row-form"><div class="grow"><input id="newAdmin" type="email" autocomplete="off" maxlength="254" placeholder="Work email">${WARN_EMAIL}</div><button class="btn" type="submit">Add admin</button></div><p class="msg err" id="msgAdmin"></p></form>
+        <p class="small" style="margin:12px 0 0">Admins manage seats and departments and see totals and averages. They never see anyone's answers, work or level.</p></section>
+    </div></div>`;
+}
+
+/* First setup, B2B28 */
+function vSetup(){
+  const c = S.overview.company;
+  const list = S.setupList;
+  return `${topOf('Welcome', 'Set up your company', 'Two steps before your people can start. First your departments, then your invites.')}
+  <div class="grid2"><div class="stack">
+    <section class="box hi"><div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><span class="num">1</span><h2 style="margin:0">Your departments</h2></div>
+      <p>Add the departments of your company. Each person you invite gets one of these: the one they mainly work in.</p>
+      <div class="lines">${list.map((d, i) => `<div class="cols-kv"><span>${esc(d)}</span><button class="link" type="button" data-setupdel="${i}">Remove</button></div>`).join('')}</div>
+      <form id="setupAddForm" novalidate style="border-top:1.5px solid var(--line);padding-top:16px"><label for="setupDept">Add a department</label><div class="row-form"><div class="grow"><input id="setupDept" type="text" maxlength="60" placeholder="For example: Finance">${WARN_DEPT}</div><button class="btn ghost" type="submit">Add</button></div></form>
+      <button class="btn" type="button" data-act="saveSetup" style="margin-top:20px"${list.length ? '' : ' disabled'}>Save departments</button><p class="msg err" id="msg"></p></section>
+    <section class="box" style="opacity:.72"><div style="display:flex;align-items:center;gap:12px;margin-bottom:8px"><span class="num off">2</span><h2 style="margin:0">Invite your people</h2></div>
+      <p style="margin:0">This opens once you have saved at least one department.</p></section></div>
+    <div class="stack"><section class="box"><h2>Why departments</h2><p>Your dashboard shows an average level per department from 10 people with a seat. A smaller department stays hidden, so nobody can be singled out.</p>
+      <p style="margin:0">Use the departments your people know. You can rename or merge them later in Company settings.</p></section>
+      <section class="box soft"><h2>What you will see</h2><p style="margin:0">Totals and averages only. You never see anyone's answers, work or level.</p></section></div></div>`;
+}
+
+/* ---------- Actions ---------- */
+
+function fieldError(id, text){
+  const m = $(id);
+  if (m) { m.textContent = text; m.className = 'msg err'; m.setAttribute('role', 'alert'); }
+}
+async function run(action, body, after, msgId = 'msg'){
   if (S.busy) return;
-  const email = ($('email').value || '').trim().toLowerCase();
-  if (ev.target.id === 'linkForm') sendLink(email);
-  if (ev.target.id === 'confirmForm') {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { note('Enter a valid work email.', true); return; }
-    finishLink(email);
+  busy(true);
+  try {
+    const r = await api(action, body);
+    busy(false);
+    if (r.status === 409) { S.notice = CHANGED; await enter(S.screen); return; }
+    if (!r.ok) { fieldError(msgId, errorText(r.data.code)); return; }
+    S.notice = null;
+    await after(r.data);
+  } catch (e) { busy(false); }
+}
+
+async function readFile(file){
+  if (!file) return;
+  if (file.size > 200000) { fieldError('msg', ERRORS.file_too_large); return; }
+  const text = await file.text();
+  await run('uploadPreview', { csv: text }, async (data) => {
+    S.upload = { name: file.name, csv: text, preview: data };
+    go('check');
+  });
+}
+
+document.addEventListener('change', (ev) => {
+  if (ev.target.id === 'seatFile') readFile(ev.target.files && ev.target.files[0]);
+});
+
+document.addEventListener('click', async (ev) => {
+  const t = ev.target.closest('button,[data-nav]');
+  if (!t || t.disabled) return;
+  const d = t.dataset;
+  if (d.goView) { S.busy = false; showPanel(d.goView); return; }
+  if (d.nav) { if (d.nav === 'seats') S.flash = null; go(d.nav); return; }
+  if (d.remove) { S.open = { kind: 'remove', id: d.remove }; refresh(); return; }
+  if (d.give) { S.open = { kind: 'give', email: d.give }; refresh(); return; }
+  if (d.removenow) { S.open = { kind: 'removeNow', email: d.removenow }; refresh(); return; }
+  if (d.rename) { S.open = { kind: 'rename', name: d.rename }; refresh(); const i = $('renameTo'); if (i) { i.focus(); i.select(); } return; }
+  if (d.merge) { S.open = { kind: 'merge', name: d.merge }; refresh(); return; }
+  if (d.deldept) { S.open = { kind: 'deldept', name: d.deldept }; refresh(); return; }
+  if (d.deladmin) { S.open = { kind: 'delAdmin', email: d.deladmin }; refresh(); return; }
+  if (d.mergePair) { await run('departmentMerge', { from: d.mergePair, into: d.into }, () => enter('settings'), 'msgDept'); return; }
+  if (d.setupdel) { S.setupList.splice(+d.setupdel, 1); refresh(); return; }
+  const a = d.act;
+  if (!a || (S.busy && a !== 'cancel')) return;
+  if (a === 'microsoft' || a === 'google') return oauth(a);
+  if (a === 'logout') { await signOut(auth); S.admin = null; S.overview = null; S.view = 'loading'; showPanel(S.company ? 'signin' : 'noLink'); return; }
+  if (a === 'back') return back();
+  if (a === 'cancel') { S.open = null; refresh(); return; }
+  if (a === 'openAdd') { S.open = { kind: 'add' }; refresh(); const i = $('addEmail'); if (i) i.focus(); return; }
+  if (a === 'allGood') { S.open = { kind: 'allGood' }; refresh(); return; }
+  if (a === 'copyInvite') {
+    const ta = $('inviteText');
+    try { await navigator.clipboard.writeText(ta.value); }
+    catch (e) { ta.select(); document.execCommand && document.execCommand('copy'); }
+    const n = $('copyNote'); if (n) n.textContent = 'Copied. Paste it into your own email.';
+    return;
+  }
+  if (a === 'confirmRemove') return run('seatRemove', { id: S.open.id }, () => { S.open = null; return enter('seats'); });
+  if (a === 'confirmRemoveNow') return run('unseatedRemove', { email: S.open.email }, () => { S.open = null; return enter('seats'); });
+  if (a === 'confirmDelDept') return run('departmentRemove', { name: S.open.name }, (x) => { S.overview.company.departments = x.departments; S.open = null; return enter('settings'); });
+  if (a === 'confirmDelAdmin') return run('adminRemove', { email: S.open.email }, () => { S.open = null; return enter('settings'); });
+  if (a === 'commit') {
+    return run('uploadCommit', { csv: S.upload.csv }, (x) => {
+      S.flash = { added: x.added, refused: x.refused };
+      S.upload = null;
+      history.replaceState({ screen: 'seats', depth: S.depth }, '', location.href);
+      return enter('seats');
+    });
+  }
+  if (a === 'saveSetup') {
+    return run('departmentsAdd', { names: S.setupList }, (x) => {
+      S.overview.company.departments = x.departments;
+      S.setupList = [];
+      history.replaceState({ screen: 'seats', depth: 0 }, '', location.href);
+      S.depth = 0;
+      return enter('seats');
+    });
   }
 });
 
+document.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  if (S.busy) return;
+  const f = ev.target, val = (id) => ($(id) ? $(id).value.trim() : '');
+  if (f.id === 'linkForm') return sendLink(val('email').toLowerCase());
+  if (f.id === 'confirmForm') {
+    const email = val('email').toLowerCase();
+    if (!EMAIL_RE.test(email)) { note('Enter a valid work email.', true); return; }
+    return finishLink(email);
+  }
+  if (f.id === 'addForm') {
+    const email = val('addEmail').toLowerCase();
+    if (!EMAIL_RE.test(email)) { fieldError('msg', 'Enter a valid work email.'); return; }
+    return run('seatAdd', { email, department: val('addDept') }, (x) => { S.flash = { added: 1, refused: [] }; S.open = null; return enter('seats'); });
+  }
+  if (f.id === 'giveForm') return run('unseatedGive', { email: f.dataset.email, department: val('giveDept') }, () => { S.open = null; S.flash = { added: 1, refused: [] }; return enter('seats'); });
+  if (f.id === 'renameForm') return run('departmentRename', { from: f.dataset.name, to: val('renameTo') }, (x) => { S.overview.company.departments = x.departments; S.open = null; return enter('settings'); });
+  if (f.id === 'mergeForm') return run('departmentMerge', { from: f.dataset.name, into: val('mergeInto') }, (x) => { S.overview.company.departments = x.departments; S.open = null; return enter('settings'); });
+  if (f.id === 'addDeptForm') {
+    const name = val('newDept');
+    if (!name) { fieldError('msgDept', ERRORS.name_missing); return; }
+    return run('departmentsAdd', { name }, (x) => { S.overview.company.departments = x.departments; return enter('settings'); }, 'msgDept');
+  }
+  if (f.id === 'addAdminForm') {
+    const email = val('newAdmin').toLowerCase();
+    if (!EMAIL_RE.test(email)) { fieldError('msgAdmin', 'Enter a valid work email.'); return; }
+    return run('adminAdd', { email }, () => enter('settings'), 'msgAdmin');
+  }
+  if (f.id === 'setupAddForm') {
+    const name = val('setupDept').replace(/\s+/g, ' ');
+    if (!name) return;
+    if (S.setupList.some((x) => x.toLowerCase() === name.toLowerCase())) { fieldError('msg', ERRORS.duplicate); return; }
+    S.setupList.push(name.slice(0, 60));
+    refresh();
+    const i = $('setupDept'); if (i) i.focus();
+  }
+});
+
+/* ---------- Start ---------- */
+
 async function start(){
-  if (!TENANT) { show('noLink'); return; }
+  if (!TENANT) { showPanel('noLink'); return; }
   try {
     const r = await fetch('/.netlify/functions/b2b-company-info?tenant=' + encodeURIComponent(TENANT));
-    if (r.status === 404) { store.del(KEY_TENANT); show('unknown'); return; }
+    if (r.status === 404) { store.del(KEY_TENANT); showPanel('unknown'); return; }
     if (!r.ok) throw new Error('info ' + r.status);
     S.company = await r.json();
   } catch (e) {
-    show('unknown');
+    showPanel('unknown');
     return;
   }
   store.set(KEY_TENANT, TENANT);
@@ -267,13 +911,13 @@ async function start(){
 
   if (isSignInWithEmailLink(auth, location.href)) {
     const saved = store.get(KEY_EMAIL);
-    if (saved) await finishLink(saved); else show('confirm');
+    if (saved) await finishLink(saved); else showPanel('confirm');
   } else {
-    try { await getRedirectResult(auth); } catch (e) { show('signin', authMessage(e), true); }
+    try { await getRedirectResult(auth); } catch (e) { showPanel('signin', authMessage(e), true); }
   }
 
   onAuthStateChanged(auth, async (user) => {
-    if (!user) { if (S.view === 'loading' || S.view === 'ready' || S.view === 'notAdmin') show('signin'); return; }
+    if (!user) { if (S.view === 'loading' || S.view === 'dash' || S.view === 'notAdmin') showPanel('signin'); return; }
     if (user.tenantId !== TENANT) { await signOut(auth); return; }
     checkAdmin(user);
   });

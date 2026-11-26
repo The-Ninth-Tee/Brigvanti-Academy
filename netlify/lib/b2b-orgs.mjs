@@ -151,7 +151,7 @@ export function planInvites(org, members, list, now) {
   const add = [], refused = [];
   for (const row of list) {
     const email = normEmail(row.email);
-    const no = (reason) => refused.push(row.line ? { line: row.line, email, reason } : { email, reason });
+    const no = (reason) => refused.push(row.line ? { line: row.line, email, reason, ...(reason === 'unknown_department' ? { department: String(row.department || '').trim().slice(0, 60) } : {}) } : { email, reason });
     if (!EMAIL.test(email)) { no('invalid_email'); continue; }
     if (!(org.departments || []).length) { no('no_departments_set'); continue; }
     const department = departmentOf(org, row.department);

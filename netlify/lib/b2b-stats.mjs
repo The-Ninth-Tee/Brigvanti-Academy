@@ -58,7 +58,7 @@ const count = (n, population) => (population < MIN_GROUP || small(n) ? HIDDEN : 
 // A count whose complement can be worked out from a shown total: the rest must not be 1 to 4 either.
 const split = (n, population) => (population < MIN_GROUP || small(n) || small(population - n) ? HIDDEN : n);
 
-export function companyStats({ org, members, summaries, now, months = 6, selfReported = true }) {
+export function companyStats({ org, members, summaries, now, months = 6, selfReported = true, since = null }) {
   const seats = members.filter(holdsSeat);
   const inUse = seats.filter((m) => m.firstSignInAt);
   // Objectors (D8) keep their seat, but nothing they did or know reaches a figure.
@@ -116,6 +116,16 @@ export function companyStats({ org, members, summaries, now, months = 6, selfRep
   if (companyLevel.hidden) for (const d of dept) d.show = false;
   const departments = dept.map((d) => (d.show ? { name: d.name, people: d.people, level: d.level } : { name: d.name, ...HIDDEN }));
 
+  // Totals since the contract start, for the Article 4 report. Assignments count whole months.
+  let period = null;
+  if (Number.isFinite(since)) {
+    const from = monthKey(since);
+    const per = learners.map((l) => Object.entries(l.handedIn).filter(([k]) => k >= from).reduce((a, [, n]) => a + n, 0));
+    const who = per.filter((n) => n > 0);
+    const areasCovered = areaIds.filter((a) => learners.filter((l) => l.areas[a] != null).length >= MIN_GROUP).length;
+    period = { from: since, to: now, assignments: who.length < MIN_GROUP ? HIDDEN : who.reduce((a, b) => a + b, 0), areasCovered };
+  }
+
   return {
     orgId: org.orgId,
     asOf: now,
@@ -128,5 +138,6 @@ export function companyStats({ org, members, summaries, now, months = 6, selfRep
     companyLevel,
     areas,
     departments,
+    period,
   };
 }
