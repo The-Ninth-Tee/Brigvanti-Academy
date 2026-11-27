@@ -19,6 +19,8 @@ import * as G from '../gcp/seatgate/core.mjs';
 import { createB2bSigninLink, planLinkMail, overLimit } from '../netlify/lib/b2b-signin-link.mjs';
 import { resolvePlan, resolveSignInPlan } from '../netlify/lib/coach-caps.mjs';
 import { createB2bActivate } from '../netlify/lib/b2b-activate.mjs';
+import * as TC from './b2b-test-company-core.mjs';
+import { runInNewContext } from 'node:vm';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
@@ -1286,6 +1288,156 @@ check('the learner app activates the seat after a company sign-in, behind the B2
   const s = read('index.html');
   assert.ok(s.includes("/.netlify/functions/b2b-activate"), 'index.html calls b2b-activate');
   assert.ok(/if\(TENANT\)/.test(s), 'the company route runs only with a company link');
+});
+
+// ---------- step 4: the test company tool ----------
+const TC_NOW = Date.UTC(2026, 10, 27, 12);
+const tcComps = (() => { const sb = { window: {} }; runInNewContext(read('content/brigvanti-content.js'), sb); return sb.window.BRIG_CONTENT.comps; })();
+const tcOrg = (k, extra = {}) => ({ ...TC.planCompany({ preset: TC.PRESETS[k], tenantId: 'Test-' + k, domain: 'theninthtee.eu', adminEmail: 'robbie@theninthtee.eu', msTenantId: 'ABC-123', now: TC_NOW }).org, ...extra });
+
+check('test company: each tenant has one sign-in method, enumeration protection and an 8 character password minimum', () => {
+  const a = TC.tenantOptions(TC.PRESETS.a), b = TC.tenantOptions(TC.PRESETS.b);
+  assert.deepEqual(a.emailSignInConfig, { enabled: true, passwordRequired: false });
+  assert.deepEqual(b.emailSignInConfig, { enabled: false });
+  for (const t of [a, b]) {
+    assert.equal(t.emailPrivacyConfig.enableImprovedEmailPrivacy, true);
+    assert.deepEqual(t.passwordPolicyConfig, { enforcementState: 'ENFORCE', constraints: { minLength: 8 } });
+    assert.ok(/^[A-Za-z][A-Za-z0-9-]{3,19}$/.test(t.displayName), 'tenant display name rule');
+  }
+});
+
+check('test company: the record is a valid company marked test, with no departments, so First setup runs', () => {
+  const p = TC.planCompany({ preset: TC.PRESETS.b, tenantId: 't1', domain: 'TheNinthTee.onmicrosoft.com', adminEmail: 'Robbie@theninthtee.onmicrosoft.com', msTenantId: ' ABC-123 ', now: TC_NOW });
+  assert.equal(p.error, undefined);
+  assert.equal(p.org.test, true);
+  assert.equal(p.org.orgId, 'test-b-50');
+  assert.deepEqual(p.org.departments, []);
+  assert.deepEqual(p.org.domains, ['theninthtee.onmicrosoft.com']);
+  assert.equal(p.org.signIn, 'microsoft');
+  assert.equal(p.org.microsoftTenantId, 'abc-123');
+  assert.equal(p.org.contractEnd - p.org.contractStart, 365 * O.DAY);
+  assert.deepEqual(O.validateOrg(p.org), []);
+  assert.equal(p.adminId, O.adminId('robbie@theninthtee.onmicrosoft.com'));
+  assert.equal(p.admin.uid, null);
+  assert.equal(tcOrg('a').signIn, 'emailLink');
+  assert.equal(tcOrg('a').microsoftTenantId, undefined);
+});
+
+check('test company: create refuses a bad domain, an admin outside the domain and Microsoft without its tenant ID', () => {
+  const base = { preset: TC.PRESETS.a, tenantId: 't', domain: 'theninthtee.eu', adminEmail: 'r@theninthtee.eu', now: TC_NOW };
+  assert.equal(TC.planCompany({ ...base, domain: 'not a domain' }).error, 'domain');
+  assert.equal(TC.planCompany({ ...base, adminEmail: 'r@gmail.com' }).error, 'admin_wrong_domain');
+  assert.equal(TC.planCompany({ ...base, preset: TC.PRESETS.b }).error, 'ms_tenant');
+});
+
+check('test company: seeding refuses a real company, a company without departments and more learners than free seats', () => {
+  const real = { ...tcOrg('a', { departments: ['Ops'] }), test: false };
+  assert.equal(TC.planSeed({ org: real, members: [], comps: tcComps, count: 5, now: TC_NOW }).error, 'not_a_test_company');
+  assert.equal(TC.planSeed({ org: { ...real, test: true, orgId: 'northwind' }, members: [], comps: tcComps, count: 5, now: TC_NOW }).error, 'not_a_test_company');
+  assert.equal(TC.planSeed({ org: tcOrg('a'), members: [], comps: tcComps, count: 5, now: TC_NOW }).error, 'no_departments');
+  const mine = Array.from({ length: 12 }, (_, i) => ({ email: `p${i}@theninthtee.eu`, status: 'invited' }));
+  const r = TC.planSeed({ org: tcOrg('a', { departments: ['Ops'] }), members: mine, comps: tcComps, count: 10, now: TC_NOW });
+  assert.equal(r.error, 'no_seats_left');
+  assert.equal(r.free, 8);
+});
+
+check('test company: fake learners can never be real sign-ins, and the sweep leaves them alone', () => {
+  const { seeds } = TC.planSeed({ org: tcOrg('b', { departments: ['A', 'B', 'C', 'D'] }), members: [], comps: tcComps, count: 36, now: TC_NOW });
+  assert.equal(seeds.length, 36);
+  for (const s of seeds) {
+    assert.ok(TC.isSeedUid(s.uid) && /\.invalid$/.test(s.member.email) && s.member.seeded === true && s.user.seeded === true);
+    assert.equal(s.seatId, O.seatId(s.member.email));
+    assert.equal(s.entitlement.product, 'b2b');
+    assert.equal(s.entitlement.orgId, 'test-b-50');
+    const tok = { uid: s.uid, email: s.member.email, firebase: { tenant: 'Test-b' } };
+    assert.equal(O.activate(tcOrg('b'), { ...s.member, uid: 'other' }, tok, TC_NOW).error, 'seat_bound');
+  }
+  assert.equal(new Set(seeds.map((s) => s.uid)).size, 36);
+});
+
+check('test company: seeding is repeatable', () => {
+  const run = () => TC.planSeed({ org: tcOrg('a', { departments: ['Ops', 'Sales'] }), members: [], comps: tcComps, count: 10, now: TC_NOW }).seeds.map((s) => s.user.blob).join();
+  assert.equal(run(), run());
+});
+
+check('test company: company A seeds show the company level, the active pair and one department', () => {
+  const org = tcOrg('a', { departments: ['Operations', 'Sales'] });
+  const { seeds } = TC.planSeed({ org, members: [], comps: tcComps, count: TC.PRESETS.a.seed, now: TC_NOW });
+  const members = seeds.map((s) => ({ seatId: s.seatId, ...s.member }));
+  const summaries = Object.fromEntries(seeds.map((s) => [s.uid, learnerSummary(JSON.parse(s.user.blob))]));
+  const st = companyStats({ org, members, summaries, now: TC_NOW });
+  assert.ok(!st.companyLevel.hidden, 'company level shows from 10');
+  assert.ok(!st.activeThisMonth.hidden && st.activeThisMonth === 10, 'active this month');
+  assert.equal(st.inactive30, 0);
+  assert.ok(!st.departments.find((d) => d.name === 'Operations').hidden, 'a department of 10 shows');
+  assert.ok(!st.assignmentsThisMonth.hidden);
+});
+
+check('test company: company B seeds show departments of 10 and hide a small one, with quiet learners counted', () => {
+  const org = tcOrg('b', { departments: ['Finance', 'HR', 'Operations', 'Sales'] });
+  const { seeds } = TC.planSeed({ org, members: [], comps: tcComps, count: TC.PRESETS.b.seed, now: TC_NOW });
+  const members = seeds.map((s) => ({ seatId: s.seatId, ...s.member }));
+  const summaries = Object.fromEntries(seeds.map((s) => [s.uid, learnerSummary(JSON.parse(s.user.blob))]));
+  const st = companyStats({ org, members, summaries, now: TC_NOW });
+  assert.ok(!st.companyLevel.hidden);
+  assert.equal(st.inactive30, 7, 'one in five quiet');
+  assert.equal(st.activeThisMonth, 29);
+  const shown = st.departments.filter((d) => !d.hidden).map((d) => d.name);
+  const hidden = st.departments.filter((d) => d.hidden).map((d) => d.name);
+  assert.ok(shown.length >= 1 && hidden.includes('Sales'), `shown ${shown}, hidden ${hidden}`);
+  for (const a of Object.values(st.areas)) assert.ok(a.hidden || a.level, 'area figures are named levels');
+});
+
+check('test company: on the first of a month every active learner still falls in that month', () => {
+  const now = Date.UTC(2026, 11, 1, 0, 20);
+  const org = tcOrg('a', { departments: ['Ops'] });
+  const { seeds } = TC.planSeed({ org, members: [], comps: tcComps, count: 10, now });
+  const st = companyStats({ org, members: seeds.map((s) => s.member), summaries: Object.fromEntries(seeds.map((s) => [s.uid, learnerSummary(JSON.parse(s.user.blob))])), now });
+  assert.equal(st.activeThisMonth, 10);
+});
+
+check('test company: a reseed replaces the fake learners and never touches a real seat', async () => {
+  const org = tcOrg('a', { departments: ['Ops'] });
+  const old = TC.planSeed({ org, members: [], comps: tcComps, count: 3, now: TC_NOW }).seeds.map((s) => ({ seatId: s.seatId, ...s.member }));
+  const real = { seatId: 'r1', email: 'robbie@theninthtee.eu', status: 'active', uid: 'realuid' };
+  const plan = TC.planSeed({ org, members: [...old, real], comps: tcComps, count: 4, now: TC_NOW });
+  assert.equal(plan.replaced, 3);
+  const log = [];
+  const st = { deleteData: async (p, u) => log.push(['del', p, u]), deleteMember: async (o, s) => log.push(['delm', s]),
+    setUser: async (u) => log.push(['user', u]), setEntitlement: async (u) => log.push(['ent', u]), setMember: async (o, s) => log.push(['mem', s]) };
+  await TC.runSeed(st, plan, org, [...old, real]);
+  assert.ok(!log.some((x) => x.includes('realuid') || x.includes('r1')), 'real seat untouched');
+  assert.equal(log.filter((x) => x[0] === 'delm').length, 3);
+  for (const s of plan.seeds) {
+    const i = (k) => log.findIndex((x) => x[0] === k && x[1] === (k === 'mem' ? s.seatId : s.uid));
+    assert.ok(i('user') < i('mem') && i('ent') < i('mem'), 'the seat is written last');
+  }
+});
+
+check('test company: remove refuses anything not marked test, and deletes sign-ins first and the record last', async () => {
+  assert.equal(TC.planRemove({ ...tcOrg('a'), test: false }, [], [], []).error, 'not_a_test_company');
+  assert.equal(TC.planRemove({ ...tcOrg('a'), orgId: 'northwind' }, [], [], []).error, 'not_a_test_company');
+  const org = tcOrg('a');
+  const members = [{ seatId: 's1', uid: 'u1', seeded: false }, { seatId: 's2', uid: 'seed-test-a-20-01', seeded: true }, { seatId: 's3', uid: null }];
+  const plan = TC.planRemove(org, members, [{ uid: 'adm' }, { uid: null }], [{ uid: 'u1' }, { uid: 'adm' }, { uid: 'stray' }]);
+  assert.deepEqual(plan.accounts.sort(), ['adm', 'seed-test-a-20-01', 'stray', 'u1']);
+  assert.equal(plan.seats, 3);
+  assert.equal(plan.seeded, 1);
+  const log = [];
+  await TC.runRemove({ deleteSignIn: async (t, u) => log.push('signin:' + u), deleteData: async (p, u) => log.push(`${p}:${u}`),
+    deleteTenant: async () => log.push('tenant'), deleteOrg: async () => log.push('org') }, plan);
+  assert.equal(log.at(-1), 'org');
+  assert.equal(log.at(-2), 'tenant');
+  assert.ok(log.lastIndexOf(log.find((x) => x.startsWith('signin:'))) < log.findIndex((x) => x.startsWith('users:')));
+  for (const u of plan.accounts) for (const path of DATA_ORDER) assert.ok(log.includes(`${path}:${u}`), `${path}:${u}`);
+});
+
+check('test company tool: runs only in the live or the test project, and never passes the Microsoft secret on the command line', () => {
+  const src = read('tool/b2b-test-company.mjs');
+  assert.ok(/const DATABASES = \{ 'brigvanti-academy': 'brigvanti', 'brigvanti-tenant-proof': '\(default\)' \}/.test(src));
+  assert.ok(src.includes('process.env.MS_CLIENT_SECRET') || src.includes('MS_CLIENT_SECRET: clientSecret'));
+  assert.ok(!/opt\('ms-(client|secret)/.test(src));
+  assert.ok(/if \(!flag\('yes'\)\)/.test(src), 'remove is a dry run without --yes');
 });
 
 let failed = 0;
