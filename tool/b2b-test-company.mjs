@@ -2,7 +2,8 @@
 //   node tool/b2b-test-company.mjs create a --domain <domain> --admin <email>
 //   node tool/b2b-test-company.mjs create b --domain <domain> --admin <email> --ms-tenant <id>
 //        needs MS_CLIENT_ID and MS_CLIENT_SECRET in the environment, never on the command line
-//   node tool/b2b-test-company.mjs seed   a|b [--count n]   fake learners with levels, replaces earlier ones
+//   node tool/b2b-test-company.mjs seed   a|b [--count n] [--departments "A,B"]   fake learners with levels, replaces earlier ones.
+//        --departments sets the list only while the company has none, for a run without the dashboard.
 //   node tool/b2b-test-company.mjs remove a|b [--yes]       without --yes it only shows what would go
 //   node tool/b2b-test-company.mjs list
 // Credentials: GOOGLE_APPLICATION_CREDENTIALS (a key file), FIREBASE_SERVICE_ACCOUNT, or the three
@@ -14,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { cleanDepartments } from '../netlify/lib/b2b-orgs.mjs';
 import * as T from './b2b-test-company-core.mjs';
 
 const DATABASES = { 'brigvanti-academy': 'brigvanti', 'brigvanti-tenant-proof': '(default)' };
@@ -122,6 +124,14 @@ if (cmd === 'create') {
 if (cmd === 'seed') {
   const org = await store.getOrg(preset.orgId);
   if (!org) stop(`${preset.orgId} does not exist.`);
+  if (opt('departments')) {
+    if ((org.departments || []).length) stop('Refused: the company already has departments. Leave out --departments.');
+    const c = cleanDepartments(opt('departments').split(','));
+    if (c.error) stop(`Refused: departments ${c.error}.`);
+    if (!T.isTestOrg(org)) stop('Refused: this company is not marked as a test company.');
+    await db.doc(`orgs/${org.orgId}`).set({ departments: c.departments }, { merge: true });
+    org.departments = c.departments;
+  }
   const members = await store.members(org.orgId);
   const count = opt('count') ? Number(opt('count')) : preset.seed;
   const plan = T.planSeed({ org, members, comps: comps(), count, now: Date.now() });
